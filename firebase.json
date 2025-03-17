@@ -1,0 +1,34 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "geofence-23924",
+          "appId": "1:615271668557:android:e934e35a4392e85ff2f504",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "geofence-23924",
+          "configurations": {
+            "android": "1:615271668557:android:e934e35a4392e85ff2f504",
+            "ios": "1:615271668557:ios:76e2663e52f0f7f1f2f504",
+            "web": "1:615271668557:web:2e9304293638ccddf2f504"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "source": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "frameworksBackend": {
+      "region": "us-east1"
+    }
+  }
+}

@@ -1,0 +1,1 @@
+ C:\\GIT\\GeoFence\\.dart_tool\\flutter_build\\09537a7252bb0093d706fcccf376553d\\native_assets.yaml: 
