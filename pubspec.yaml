@@ -46,6 +46,9 @@ dependencies:
   firebase_storage: ^12.4.4
   image_picker: ^1.1.2
   google_sign_in: ^6.2.2
+  provider: ^6.0.5
+  flutter_tts: ^4.2.2
+
 
 dev_dependencies:
   flutter_test:
@@ -57,6 +60,14 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/AppLogo.png"  # Path to your logo
+  adaptive_icon_foreground: "assets/AppLogo.png"  # Optional for Android adaptive icon
+  adaptive_icon_background: "assets/AppLogo.png"  # Optional for Android adaptive icon
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -78,7 +89,10 @@ flutter:
     - assets/facebook_icon.png
     - assets/sync.png
     - assets/warning.png
-  #   - images/a_dot_ham.jpeg
+    - assets/settings.png
+    - assets/bakkie.jpg
+    - assets/fuelGuage.jpg
+    - assets/report.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -91,16 +105,14 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
+  fonts:
+     - family: BookAntique
+       fonts:
+         - asset: assets/fonts/bkant.ttf
+     - family: Poppins
+       fonts:
+         - asset: assets/fonts/Poppins-Regular.ttf
+         - asset: assets/fonts/Poppins-Bold.ttf
   #         weight: 700
   #
   # For details regarding fonts from package dependencies,

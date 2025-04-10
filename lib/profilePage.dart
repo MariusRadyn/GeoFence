@@ -2,13 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/signupPage.dart';
-
+import 'package:provider/provider.dart';
 import 'firebase.dart';
 import 'homePage.dart';
-// import 'package:teamplayerwebapp/theme/theme_manager.dart';
-// import 'package:teamplayerwebapp/utils/globalData.dart';
-// import 'package:teamplayerwebapp/utils/helpers.dart';
-// import 'package:teamplayerwebapp/utils/firebase.dart';
 
 class profilePage extends StatefulWidget {
   const profilePage({super.key});
@@ -25,6 +21,8 @@ class _profilePageState extends State<profilePage> {
 
   @override
   Widget build(BuildContext context) {
+    UserData _userData = Provider.of<UserData>(context, listen: false);
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Profile'),
@@ -36,14 +34,14 @@ class _profilePageState extends State<profilePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               // Email Address
-              textInputWidget(
+              MyTextFormField(
                 controller: _usernameControl,
                 hintText: "Username",
                 width: 300,
               ),
               SizedBox(height: 20),
               // Password
-              textInputWidget(
+              MyTextFormField(
                 controller: _emailControl,
                 hintText: "Email",
                 isPasswordField: true,
@@ -72,7 +70,7 @@ class _profilePageState extends State<profilePage> {
                             ),
                           ),
                           onPressed: () {
-                            login();
+                            login(_userData);
                           },
                         ),
                       ]),
@@ -108,19 +106,14 @@ class _profilePageState extends State<profilePage> {
     );
   }
 
-  void login() async {
+  void login(UserData _userData) async {
     FirebaseAuthService _auth = FirebaseAuthService();
 
-    String email = _emailControl.text;
-    String password = _pwControl.text;
 
     try {
-      User? user = await _auth.fireAuthSignIn(email, password);
+      //User? user = await _auth.fireAuthSignIn(context, _emailControl.text, _pwControl.text);
 
-      if (user != null) {
-        userData.userID = user.uid;
-        userData.email = user.email;
-        userData.isLoggedIn = true;
+      if (_userData != null && _userData.isLoggedIn) {
 
         print('User logged in');
 
@@ -130,12 +123,8 @@ class _profilePageState extends State<profilePage> {
               builder: (context) => HomePage(),
             ));
       } else {
-        print(userData.errorMsg);
-        MyMessageBox(
-                header: "Login Error",
-                message: userData.errorMsg,
-                image: "assets/images/warning.png")
-            .dialogBuilder(context);
+        print(_userData.errorMsg);
+        MyMessageBox(context, _userData.errorMsg);
       }
     } catch (e) {
       print('Error: $e');

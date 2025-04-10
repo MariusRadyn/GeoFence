@@ -6,38 +6,53 @@ import 'package:geofence/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart';
 
+const double DRAW_WIDTH = 60;
 
-class GeoFenceScreen extends StatefulWidget {
-  const GeoFenceScreen({Key? key}) : super(key: key);
+class GeoFencePage extends StatefulWidget {
+  const GeoFencePage({super.key});
 
   @override
-  _GeoFenceScreenState createState() => _GeoFenceScreenState();
+  _GeoFencePageState createState() => _GeoFencePageState();
 }
 
-class _GeoFenceScreenState extends State<GeoFenceScreen> {
+class _GeoFencePageState extends State<GeoFencePage> {
   GoogleMapController? _mapController;
   final Set<Marker> _markers = {};
   final Set<Polygon> _polygons = {};
-  Set<Marker> _geoMarkers = {};
+  final Set<Marker> _geoMarkers = {};
   final List<LatLng> _currentPolygonPoints = [];
   final TextEditingController _geoFenceNameController = TextEditingController();
   bool _isDrawing = false;
   bool _isEditing = false;
+  bool _isSaving = false;
   String? _editingFenceId;
   bool _isLoading = false;
   int _polygonIdCounter = 0;
-  LatLng currentLocation = LatLng(-29.6, 30.3);
+  LatLng _currentLocation = const LatLng(-29.6, 30.3);
+  bool isGeoFenceSet = false;
+  int _currentIndex = 0;
+  bool _isStreetView = false;
+  bool _isDrawerVisible = true;
+  bool _isBotScrolDrawerVisible = false;
+  int _fencePntr = 0;
+  String _appBarTitle = "GeoFence";
 
-  final CameraPosition _initialPosition = const CameraPosition(
-    target: LatLng(-29.0, 24.0), // Default to South Africa
-    zoom: 6.0,
-  );
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // Drawer Pointers
+  int _drawerPntr = 0;
+  static int _showMainDrawer = 0;
+  static int _showAddMarkerDrawer = 1;
+  static int _showDeleteMarkerDrawer = 2;
+  static int _showEditFenceDrawer = 3;
 
   @override
   void initState() {
     super.initState();
-    _loadGeoFences();
+    _loadGeoFences(context);
     _getLocation();
   }
 
@@ -47,13 +62,18 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
     _mapController?.dispose();
     super.dispose();
   }
+  Future<Position>? currentPosition;
 
+  final CameraPosition _initialPosition = const CameraPosition(
+    target: LatLng(-29.0, 24.0), // Default to South Africa
+    zoom: 6.0,
+  );
   Future<void> _getLocation() async {
     writeLog('GetLocation');
     Position pos = await determinePosition();
 
     setState(() {
-      currentLocation = LatLng(pos.latitude, pos.longitude);
+      _currentLocation = LatLng(pos.latitude, pos.longitude);
       GlobalSnackBar.show('Got Location');
 
       _geoMarkers.add(
@@ -66,18 +86,20 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
 
     if(_mapController != null) {
         _mapController?.animateCamera
-          (CameraUpdate.newLatLngZoom(currentLocation!, 16),
+          (CameraUpdate.newLatLngZoom(_currentLocation!, 18),
         );
     }
   }
+  Future<void> _loadGeoFences(BuildContext context) async {
+    final _userData = Provider.of<UserData>(context, listen: false);
 
-  Future<void> _loadGeoFences() async {
     setState(() {
       _isLoading = true;
+      _polygons.clear();
+      _markers.clear();
     });
-
     try {
-      final userId = userData.userID;// firebaseAuthService. _auth.currentUser!.uid;
+      final userId = _userData.userID;// firebaseAuthService. _auth.currentUser!.uid;
       final geoFencesSnapshot = await firestore
           .collection('users')
           .doc(userId)
@@ -93,14 +115,17 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
 
           if (polygonPoints.length >= 3) {
             final polygonId = 'polygon_${_polygonIdCounter++}';
+            final markerId = 'marker_${_polygonIdCounter++}';
 
             setState(() {
               // Add marker for the label
               _markers.add(
                 Marker(
-                  markerId: MarkerId('marker_$polygonId'),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta),
+                  markerId: MarkerId(markerId),
                   position: _calculateCentroid(polygonPoints),
                   infoWindow: InfoWindow(title: data['name']),
+                  onTap: ()=> _onMarkerTap(polygonId, doc.id, data['name'], polygonPoints),
                 ),
               );
 
@@ -111,9 +136,8 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
                   points: polygonPoints,
                   strokeWidth: 2,
                   strokeColor: Colors.blue,
-                  fillColor: Colors.blue.withOpacity(0.3),
+                  fillColor: Colors.blue.withOpacity(0.2),
                   consumeTapEvents: true,
-                  onTap: () => _showPolygonOptions(polygonId, doc.id, data['name'], polygonPoints),
                 ),
               );
             });
@@ -139,7 +163,6 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
       });
     }
   }
-
   LatLng _calculateCentroid(List<LatLng> points) {
     double latitude = 0;
     double longitude = 0;
@@ -151,8 +174,9 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
 
     return LatLng(latitude / points.length, longitude / points.length);
   }
-
   void _onMapTap(LatLng position) {
+    print('On map Tap');
+
     if (!_isDrawing) return;
 
     setState(() {
@@ -183,7 +207,44 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
       }
     });
   }
+  void _onMarkerTap(String polygonId, String firestoreId, String name, List<LatLng> points) {
+    print('On Marker Tap: $name');
 
+    setState(() {
+      _isBotScrolDrawerVisible = true;
+      _drawerPntr = _showEditFenceDrawer;
+      fenceData.polygonId = polygonId;
+      fenceData.firestoreId = firestoreId;
+      fenceData.name = name;
+      fenceData.points = points;
+      _appBarTitle = 'Fence: $name';
+    });
+  }
+  void _nextFence() {
+    if (_markers.length == 0) return;
+
+    setState(() {
+      if (_fencePntr == _markers.length)
+        _fencePntr = 0;
+      else
+        _fencePntr++;
+
+      int _ptr = 0;
+
+      for (Marker mark in _markers) {
+        if (_ptr == _fencePntr) {
+          _mapController?.animateCamera(
+            CameraUpdate.newLatLng(LatLng(mark.position.latitude, mark.position.longitude)),
+          );
+          print(mark.infoWindow.title);
+          return;
+        }
+        else{
+          _ptr++;
+        }
+      }
+    });
+  }
   void _startDrawing() {
     setState(() {
       _isDrawing = true;
@@ -197,15 +258,16 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Tap on the map to add points to your geo fence')),
+      const SnackBar(
+        content: Text('Tap on the map to add points to your geo fence'),
+        duration: Duration(seconds:  10),
+        showCloseIcon: true,
+      ),
     );
   }
-
   void _saveGeoFence() async {
     if (_currentPolygonPoints.length < 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least 3 points to create a geo fence')),
-      );
+      MyMessageBox(context, 'You need at least 3 points to create a geofence' );
       return;
     }
 
@@ -233,7 +295,16 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
               }
 
               Navigator.pop(context);
-              await _saveGeoFenceToFirebase(_geoFenceNameController.text);
+              await _saveGeoFenceToFirebase(context, _geoFenceNameController.text);
+              await _loadGeoFences(context);
+
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Saved'),
+                  showCloseIcon: true,
+                ),
+              );
             },
             child: const Text('Save'),
           ),
@@ -241,56 +312,59 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
       ),
     );
   }
+  Future<void> _saveGeoFenceToFirebase(BuildContext context, String name) async {
+    final _userData = Provider.of<UserData>(context, listen: false);
 
-  Future<void> _saveGeoFenceToFirebase(String name) async {
     setState(() {
       _isLoading = true;
+      _isSaving = true;
     });
 
     try {
-      final userId = userData.userID; // _auth.currentUser!.uid;
+      final userId = _userData.userID; // _auth.currentUser!.uid;
       final geoPointsList = _currentPolygonPoints
           .map((point) => GeoPoint(point.latitude, point.longitude))
           .toList();
 
-      // Get the document to update or create new one
-      final docRef = _editingFenceId != null
-          ? firestore.collection('users').doc(userId).collection('geofences').doc(_editingFenceId)
-          : firestore.collection('users').doc(userId).collection('geofences').doc();
+      if (geoPointsList.length == 0){
+        MyMessageBox(context, 'No Geofence points found');
+      }
+      else{
+        // Get the document to update or create new one
+        final docRef = _editingFenceId != null
+            ? firestore.collection('users').doc(userId).collection('geofences').doc(_editingFenceId)
+            : firestore.collection('users').doc(userId).collection('geofences').doc();
 
-      await docRef.set({
-        'name': name,
-        'points': geoPointsList,
-        'createdAt': _editingFenceId != null ? FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+        await docRef.set({
+          'name': name,
+          'points': geoPointsList,
+          'createdAt': _editingFenceId != null ? FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Geo fence "$name" saved successfully')),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Geo fence "$name" saved successfully')),
+        );
 
-      setState(() {
-        _isDrawing = false;
-        _isEditing = false;
-        _editingFenceId = null;
-        _currentPolygonPoints.clear();
-        _markers.removeWhere((marker) => marker.markerId.value.startsWith('point_'));
-        _polygons.removeWhere((polygon) => polygon.polygonId.value == 'drawing_polygon');
-      });
+        setState(() {
+          _isDrawing = false;
+          _isEditing = false;
+          _editingFenceId = null;
+          _currentPolygonPoints.clear();
+          _markers.removeWhere((marker) => marker.markerId.value.startsWith('point_'));
+          _polygons.removeWhere((polygon) => polygon.polygonId.value == 'drawing_polygon');
+        });
+      }
 
-      // Reload all geo fences
-      await _loadGeoFences();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving geo fence: $e')),
-      );
+        MyMessageBox(context, 'Error saving geo fence: $e');
     } finally {
       setState(() {
         _isLoading = false;
+        _isSaving = false;
       });
     }
   }
-
   void _cancelDrawing() {
     setState(() {
       _isDrawing = false;
@@ -301,41 +375,6 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
       _polygons.removeWhere((polygon) => polygon.polygonId.value == 'drawing_polygon');
     });
   }
-
-  void _showPolygonOptions(String polygonId, String firestoreId, String name, List<LatLng> points) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Wrap(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.edit),
-            title: const Text('Edit Geo Fence'),
-            onTap: () {
-              Navigator.pop(context);
-              _editGeoFence(firestoreId, name, points);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete),
-            title: const Text('Delete Geo Fence'),
-            onTap: () {
-              Navigator.pop(context);
-              _deleteGeoFence(firestoreId, name);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.streetview),
-            title: const Text('Switch to Street View'),
-            onTap: () {
-              Navigator.pop(context);
-              _openStreetView(_calculateCentroid(points));
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
   void _editGeoFence(String firestoreId, String name, List<LatLng> points) {
     setState(() {
       _isEditing = true;
@@ -345,7 +384,7 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
       _currentPolygonPoints.addAll(points);
       _geoFenceNameController.text = name;
 
-      _markers.removeWhere((marker) => marker.markerId.value.startsWith('point_'));
+      _markers.removeWhere((marker) => marker.markerId.value.startsWith('marker_'));
       _polygons.removeWhere((polygon) => polygon.polygonId.value == 'drawing_polygon');
 
       // Add markers for each point
@@ -374,12 +413,17 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
       const SnackBar(content: Text('Tap on the map to add or modify points')),
     );
   }
+  Future<void> _deleteGeoFence(BuildContext context, String firestoreId, String name) async {
+    final _userData = Provider.of<UserData>(context, listen: false);
 
-  Future<void> _deleteGeoFence(String firestoreId, String name) async {
+    if(firestoreId == ""){
+      MyMessageBox(context, "Please select a Fence");
+      return;
+    }
     final bool confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete "$name"?'),
+        title: Text('Delete Fence "$name"?'),
         content: const Text('This action cannot be undone.'),
         actions: [
           TextButton(
@@ -400,7 +444,7 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
       });
 
       try {
-        final userId = userData.userID;// _auth.currentUser!.uid;
+        final userId = _userData.userID;// _auth.currentUser!.uid;
         await firestore
             .collection('users')
             .doc(userId)
@@ -409,11 +453,12 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
             .delete();
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Geo fence "$name" deleted successfully')),
+          SnackBar(content: Text('Geofence "$name" deleted')),
         );
 
         // Reload all geo fences
-        await _loadGeoFences();
+        await _loadGeoFences(context);
+
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error deleting geo fence: $e')),
@@ -425,7 +470,6 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
       }
     }
   }
-
   void _openStreetView(LatLng location) async {
     // final url = 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${location.latitude},${location.longitude}';
     // if (await canLaunch(url)) {
@@ -436,54 +480,498 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
     //   );
     // }
   }
+  void _toggleStreetView() {
+    setState(() {
+      _isStreetView = !_isStreetView;
+    });
+  }
+  List<Widget> GetFencePoints() {
+    List<Text> lst = fenceData.points.map((point) {
+      return Text(
+        'Lat: ${point.latitude}, Long: ${point.longitude}',
+        style: const TextStyle(
+            fontSize: 10,
+            color: Colors.blueGrey
+        ),
+      );
+    }).toList();
+
+    return lst;
+  }
+
+
+  // Drawers -------------------------------------------------------------------
+  void _setDrawerPointer(int pntr){
+    setState(() {
+      _drawerPntr = pntr;
+    });
+  }
+  Widget MenuDrawer(){
+    return AnimatedContainer(
+      width: _isDrawerVisible ? DRAW_WIDTH : 0, // Animate width
+      duration: Duration(milliseconds: 300),
+      decoration: const BoxDecoration(
+        color: DRAWER_COLOR,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(10),
+          bottomLeft: Radius.circular(10),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal,
+            blurRadius: 10,
+            spreadRadius: 1,
+            offset: Offset(-5, 0),
+          ),
+        ],
+      ),
+      child: _isDrawerVisible
+          ? Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          const SizedBox(height: 5),
+
+          // Street view
+          MyIcon(
+            text: 'Street View',
+            icon:  Icons.streetview,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: _toggleStreetView,
+          ),
+          const SizedBox(height: 5),
+
+          // Add Fence
+          MyIcon(
+            text: 'Add Fence',
+            icon:  Icons.add,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: () => {
+              _setDrawerPointer(_showAddMarkerDrawer),
+            },
+          ),
+          const SizedBox(height: 5),
+
+          //Next Fence
+          MyIcon(
+            text: 'Next Fence',
+            icon:Icons.navigate_next,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: ()  => {
+              _nextFence(),
+            },
+          ),
+          const SizedBox(height: 5),
+
+          // Refresh
+          MyIcon(
+            text: 'Refresh',
+            icon: Icons.refresh,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: () => {
+              _loadGeoFences(context),
+            },
+          ),
+          const SizedBox(height: 5),
+
+        ],
+      )
+
+      // Drawer Hidden
+          : SizedBox(), // Empty container when hidden
+  );
+}
+  Widget AddMarkerDrawer(){
+    setState(() {
+      _appBarTitle = "Add Fence";
+    });
+    return AnimatedContainer(
+      width: _isDrawerVisible ? DRAW_WIDTH : 0, // Animate width
+      duration: Duration(milliseconds: 300),
+      decoration: const BoxDecoration(
+        color: DRAWER_COLOR,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          bottomLeft: Radius.circular(20),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal,
+            blurRadius: 10,
+            spreadRadius: 1,
+            offset: Offset(-5, 0),
+          ),
+        ],
+      ),
+      child: _isDrawerVisible
+          ? Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+
+        children: [
+          const SizedBox(height: 5),
+
+          // Add
+          MyIcon(
+            text: 'Add',
+            icon:  Icons.add,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: _startDrawing,
+          ),
+          const SizedBox(height: 5),
+
+          //Save
+          MyIcon(
+            text: 'Save',
+            icon: Icons.save,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: () => {
+              _saveGeoFence(),
+              ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            },
+          ),
+          const SizedBox(height: 5),
+
+          // Refresh
+          MyIcon(
+            text: 'Refresh',
+            icon: Icons.refresh,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: () => {
+              _loadGeoFences(context),
+            },
+          ),
+
+          const SizedBox(height: 5),
+
+          // Back
+          MyIcon(
+            text: 'Back',
+            icon:Icons.arrow_back,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: () => {
+              _cancelDrawing(),
+              _setDrawerPointer(_showMainDrawer),
+              ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            },
+          ),
+        ],
+      )
+
+      // Drawer Hidden
+          : SizedBox(), // Empty container when hidden
+    );
+  }
+  Widget EditFenceDrawer(){
+    setState(() {
+      _appBarTitle = "Edit Fence";
+    });
+
+    return AnimatedContainer(
+      width: _isDrawerVisible ? DRAW_WIDTH : 0, // Animate width
+      duration: Duration(milliseconds: 300),
+      decoration: const BoxDecoration(
+        color: DRAWER_COLOR,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          bottomLeft: Radius.circular(20),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal,
+            blurRadius: 10,
+            spreadRadius: 1,
+            offset: Offset(-5, 0),
+          ),
+        ],
+      ),
+      child: _isDrawerVisible
+          ? Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+
+        children: [
+          const SizedBox(height: 5),
+
+          //Edit Fence
+          MyIcon(
+            text: 'Edit Fence',
+            icon:Icons.edit_note,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: () =>{
+              _editGeoFence(fenceData.firestoreId,fenceData.name,fenceData.points),
+            }
+          ),
+          const SizedBox(height: 5),
+
+          // Delete Fence
+          MyIcon(
+            text: 'Delete Fence',
+            icon: Icons.delete,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: () => {
+              _deleteGeoFence(context, fenceData.firestoreId, fenceData.name),
+              ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            },
+          ),
+          const SizedBox(height: 5),
+
+          // Refesh
+          MyIcon(
+            text: 'Refresh',
+            icon: Icons.refresh,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: () => {
+              _loadGeoFences(context),
+            },
+          ),
+          const SizedBox(height: 5),
+
+          // Back
+          MyIcon(
+            text: 'Back',
+            icon:Icons.arrow_back,
+            iconColor: Colors.white,
+            textColor: Colors.white,
+            onTap: () => {
+              _cancelDrawing(),
+              _setDrawerPointer(_showMainDrawer),
+              ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            },
+          ),
+        ],
+      )
+
+      // Drawer Hidden
+          : SizedBox(), // Empty container when hidden
+    );
+  }
+  Widget EditFenceBottomScrollDraw(){
+    double _sheetPosition = 0.25;
+    final double _dragSensitivity = 600;
+    //final DraggableScrollableController _controller = DraggableScrollableController();
+
+    return DraggableScrollableSheet(
+      snap: true,
+      initialChildSize: _sheetPosition,
+      minChildSize: 0.25, // Minimum height
+      maxChildSize: 0.9, // Can be dragged to full screen
+      snapSizes: [0.25, 0.9], // Snap points
+      expand: true,
+      builder: (BuildContext context, ScrollController scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 10,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            children: <Widget>[
+              const SizedBox(height: 15),
+
+              // Scroll Handle
+              Container(
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.blue,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+
+              // Scroll Control (Desktop only)
+              Grabber(
+                isOnDesktopAndWeb: isOnDesktop(),
+
+                onVerticalDragUpdate: (DragUpdateDetails details) {
+                  setState(() {
+                    _sheetPosition -= details.delta.dy / _dragSensitivity;
+                    if (_sheetPosition < 0.25) {
+                      _sheetPosition = 0.25;
+                    }
+                    if (_sheetPosition > 1.0) {
+                      _sheetPosition = 1.0;
+                    }
+                  });
+                },
+              ),
+
+              // Scrollable
+              Flexible(
+                child: ListView(
+                  controller: scrollController,
+                  physics: AlwaysScrollableScrollPhysics(),
+                  children:[
+                    Container(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 10, right: 10),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children:[
+                            SizedBox(height: 2),
+
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${fenceData.name}',
+                                    textAlign: TextAlign.left,
+                                    style: const TextStyle(
+                                        fontSize: 20,
+                                        color: Colors.black
+                                    ),
+                                  ),
+                                ),
+
+                                MyIcon(
+                                  text: 'Edit',
+                                  icon: Icons.edit_note,
+                                  iconColor: Colors.blue,
+                                  textColor: Colors.black,
+                                  iconSize: 20,
+                                  onTap: () => {
+
+                                  },
+                                ),
+
+                                SizedBox(width: 10),
+
+                                MyIcon(
+                                  text: 'Delete',
+                                  icon: Icons.delete_forever,
+                                  iconColor: Colors.red,
+                                  textColor: Colors.black,
+                                  iconSize: 20,
+                                  onTap: () => {
+                                    _deleteGeoFence(
+                                      context,
+                                        fenceData.firestoreId,
+                                        fenceData.name,
+                                    ),
+                                  },
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 5),
+                            const Divider(
+                              thickness: 2,
+                              color: Colors.grey,
+                              endIndent: 10,
+                            ),
+                            const SizedBox(height: 10),
+
+                            const Text(
+                                'Points',
+                              style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8.0),
+                              child: ListView(
+                                shrinkWrap: true,
+                                children: fenceData.points.isEmpty
+                                    ? [Text('No Points')]
+                                    : GetFencePoints()
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+}
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Geo Fence'),
+        foregroundColor: Colors.white,
+        backgroundColor: APP_BAR_COLOR,
+        title: MyAppbarTitle(_appBarTitle),
         actions: [
-          if (_isDrawing && _currentPolygonPoints.length >= 3)
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: _saveGeoFence,
-            ),
-          if (_isDrawing)
-            IconButton(
-              icon: const Icon(Icons.cancel),
-              onPressed: _cancelDrawing,
-            ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          GoogleMap(
-            initialCameraPosition: _initialPosition,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: true,
-            mapType: MapType.normal,
-            markers: _markers,
-            polygons: _polygons,
-            onMapCreated: (controller) {
-              _mapController = controller;
+          IconButton(
+            icon: Icon(Icons.more_horiz),
+            onPressed: () {
+              setState(() {
+                _isDrawerVisible = !_isDrawerVisible;
+              });
             },
-            onTap: _onMapTap,
           ),
-          if (_isLoading)
-            Container(
-              color: Colors.black.withOpacity(0.3),
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
-            ),
         ],
       ),
-      floatingActionButton: !_isDrawing
-          ? FloatingActionButton(
-        onPressed: _startDrawing,
-        child: const Icon(Icons.edit),
-      )
-          : null,
+      body: Row(
+        children:[
+
+          // Map
+          Expanded(
+            child: Stack(
+              children: [
+
+                GoogleMap(
+                  initialCameraPosition: _initialPosition,
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: true,
+                  markers: _markers,
+                  //polylines: _polylines,
+                  polygons: _polygons,
+                  mapType: _isStreetView ? MapType.satellite : MapType.normal,
+                  onMapCreated: (controller) {
+                    _mapController = controller;
+                    for (Marker marker in _markers) {
+                      _mapController?.showMarkerInfoWindow(marker.markerId);
+                    }
+                  },
+                  onTap: _onMapTap,
+                ),
+
+                if(_isBotScrolDrawerVisible)
+                  EditFenceBottomScrollDraw(),
+
+                // Loading
+                if (_isLoading)
+                  Container(
+                    color: Colors.black.withOpacity(0.3),
+                    child: const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          _drawerPntr == _showMainDrawer ? MenuDrawer() : SizedBox(),
+          _drawerPntr == _showAddMarkerDrawer ? AddMarkerDrawer() : SizedBox(),
+          //_drawerPntr == _showEditFenceDrawer ? EditFenceDrawer() : SizedBox(),
+        ],
+      ),
     );
   }
 }

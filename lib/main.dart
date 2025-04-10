@@ -2,9 +2,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/homePage.dart';
+import 'package:geofence/utils.dart';
 import 'firebase_options.dart';
 import 'package:flutter/foundation.dart';
-
+import 'package:provider/provider.dart';
 
 Future<void> main() async {
   try {
@@ -12,7 +13,6 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    // Enable persistence on web platforms
 
     // Web app
     if(kIsWeb){
@@ -20,7 +20,16 @@ Future<void> main() async {
       print("Web App");
     }else print("Android App");
 
-    runApp(MyApp());
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => SettingsProvider()),
+          ChangeNotifierProvider(create: (_) => UserData()),
+        ],
+        child: MyApp(),
+      ),
+    );
+
   }
   catch(e){
     print('Error $e');
@@ -35,15 +44,14 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      color: COLOR_BLACK_LIGHT,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primaryColor: Colors.white,
+        primaryColor: Colors.blueGrey,
       ),
       home: HomePage(),
     );

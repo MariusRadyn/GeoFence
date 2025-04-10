@@ -3,17 +3,15 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as path;
 import 'package:image_picker/image_picker.dart';
 import 'package:geofence/utils.dart';
-
 import 'dart:io' show Platform;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:provider/provider.dart';
 
 FirebaseStorage fireStorageInstance = FirebaseStorage.instance;
 List<Reference> fireAllSongsRef = [];
@@ -239,8 +237,11 @@ Future<void> fireDbCreateUser(User user) async {
 // Firestore Authentication
 // ----------------------------------------------------------------------------
 class FirebaseAuthService {
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  Future<User?> fireAuthCreateUser(String email, String password) async {
+  Future<User?> fireAuthCreateUser(BuildContext context, String email, String password) async {
+    final _userData = Provider.of<UserData>(context, listen: false);
+
     try {
       UserCredential credential = await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -274,27 +275,29 @@ class FirebaseAuthService {
           ///  - Thrown if email/password accounts are not enabled. Enable
           ///    email/password accounts in the Firebase Console, under the Auth tab.
           case 'email-already-in-use':
-            userData.errorMsg = "Email already in use.";
+            _userData.errorMsg = "Email already in use.";
             break;
 
           case 'invalid-email':
-            userData.errorMsg = "Invalid Email.";
+            _userData.errorMsg = "Invalid Email.";
             break;
 
           case 'weak-password':
-            userData.errorMsg =
+            _userData.errorMsg =
                 "Weak Password. Must be at least 6 characters and contain a symbol.";
             break;
 
           default:
-            userData.errorMsg = e.code;
+            _userData.errorMsg = e.code;
         }
       }
       print("Firebase Auth Error: $e");
       return null;
     }
   }
-  Future<User?> fireAuthSignIn(String email, String password) async {
+  Future<User?> fireAuthSignIn(BuildContext context, String email, String password) async {
+    final _userData = Provider.of<UserData>(context, listen: false);
+
     try {
       UserCredential credential = await _auth.signInWithEmailAndPassword(
         email: email,
@@ -336,11 +339,11 @@ class FirebaseAuthService {
           case 'invalid-email':
           case 'wrong-password':
           case 'invalid-credential':
-            userData.errorMsg = "Invalid email or password.";
+            _userData.errorMsg = "Invalid email or password.";
             break;
 
           default:
-            userData.errorMsg = e.code;
+            _userData.errorMsg = e.code;
         }
       }
 
@@ -379,20 +382,6 @@ class FirebaseAuthService {
     }
   }
 
-  Future<UserCredential> xsignInWithGoogle() async {
-    // Create a new provider
-    GoogleAuthProvider googleProvider = GoogleAuthProvider();
-
-    googleProvider
-        .addScope('https://www.googleapis.com/auth/contacts.readonly');
-    googleProvider.setCustomParameters({'login_hint': 'user@example.com'});
-
-    // Once signed in, return the UserCredential
-    return await FirebaseAuth.instance.signInWithPopup(googleProvider);
-
-    // Or use signInWithRedirect
-    // return await FirebaseAuth.instance.signInWithRedirect(googleProvider);
-  }
 
   Future<UserCredential> signInWithGoogle() async {
     if (kIsWeb) {

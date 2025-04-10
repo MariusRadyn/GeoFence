@@ -4,6 +4,7 @@ import 'package:geofence/firebase.dart';
 import 'package:geofence/homePage.dart';
 //import 'package:teamplayerwebapp/theme/theme_manager.dart';
 import 'package:geofence/utils.dart';
+import 'package:provider/provider.dart';
 //import 'package:teamplayerwebapp/utils/helpers.dart';
 
 class signupPage extends StatefulWidget {
@@ -32,6 +33,8 @@ class _signupPageState extends State<signupPage> {
 
   @override
   Widget build(BuildContext context) {
+    UserData _userData = Provider.of<UserData>(context, listen: false);
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Sign Up'),
@@ -43,7 +46,7 @@ class _signupPageState extends State<signupPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               // Email Address
-              textInputWidget(
+              MyTextFormField(
                 controller: _emailController,
                 hintText: "Enter Email Address",
               ),
@@ -51,7 +54,7 @@ class _signupPageState extends State<signupPage> {
               SizedBox(height: 20),
 
               // Password
-              textInputWidget(
+              MyTextFormField(
                 controller: _pwController,
                 hintText: "Password",
                 isPasswordField: true,
@@ -60,7 +63,7 @@ class _signupPageState extends State<signupPage> {
               SizedBox(height: 20),
 
               // Confirm Password
-              textInputWidget(
+              MyTextFormField(
                 controller: _pw2Controller,
                 hintText: "Confirm Password",
                 isPasswordField: true,
@@ -102,7 +105,7 @@ class _signupPageState extends State<signupPage> {
                                               Navigator.of(context).pop,
                                         )));
                               } else {
-                                signUp();
+                                signUp(_userData);
                               }
                             },
                           ),
@@ -117,16 +120,16 @@ class _signupPageState extends State<signupPage> {
     );
   }
 
-  void signUp() async {
+  void signUp(UserData _userData) async {
     String username = _userController.text;
     String email = _emailController.text;
     String password = _pwController.text;
 
-    User? user = await _auth.fireAuthCreateUser(email, password);
+    User? user = await _auth.fireAuthCreateUser(context, email, password);
 
     if (user != null) {
-      userData.userID = user.uid;
-      userData.displayName = username;
+      _userData.userID = user.uid;
+      _userData.displayName = username;
 
       printMsg('User created successfully');
 
