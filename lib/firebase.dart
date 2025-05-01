@@ -378,7 +378,16 @@ class FirebaseAuthService {
     try {
       _auth.currentUser!.updateDisplayName(username);
     } catch (e) {
-      print("Firebase update username Error: $e");
+      printMsg("Firebase update username Error: $e");
+      GlobalMsg.show("Error","Firebase update username: $e");
+    }
+  }
+  void updatePhotoURL(String url) {
+    try {
+      _auth.currentUser!.updatePhotoURL(url);
+    } catch (e) {
+      printMsg("Firebase update URL Error: $e");
+      GlobalMsg.show("Error","Firebase update URL: $e");
     }
   }
 

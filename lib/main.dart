@@ -2,33 +2,38 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/homePage.dart';
+import 'package:geofence/splashScreen.dart';
 import 'package:geofence/utils.dart';
 import 'firebase_options.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'gpsServices.dart';
 
 Future<void> main() async {
   try {
-    WidgetsFlutterBinding.ensureInitialized();
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    //WidgetsFlutterBinding.ensureInitialized();
+    //await Firebase.initializeApp(
+    //  options: DefaultFirebaseOptions.currentPlatform,
+    //);
+
+    //await initializeGpsService();
 
     // Web app
-    if(kIsWeb){
-      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-      print("Web App");
-    }else print("Android App");
+    //if(kIsWeb){
+    //  await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    //  print("Web App");
+    //}else print("Android App");
 
-    runApp(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => SettingsProvider()),
-          ChangeNotifierProvider(create: (_) => UserData()),
-        ],
-        child: MyApp(),
-      ),
-    );
+    runApp(MyApp());
+    // runApp(
+    //   MultiProvider(
+    //     providers: [
+    //       ChangeNotifierProvider(create: (_) => SettingsService()..load()),
+    //       ChangeNotifierProvider(create: (_) => UserDataService()..load()),
+    //     ],
+    //     child: MyApp(),
+    //   ),
+    // );
 
   }
   catch(e){
@@ -48,12 +53,18 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       color: COLOR_BLACK_LIGHT,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: Colors.blueGrey,
       ),
-      home: HomePage(),
+      home: //SplashScreen(),
+      Scaffold(
+        body: Center(
+          child:   Text('Test')
+        ),
+      )
     );
   }
 }

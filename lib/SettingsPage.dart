@@ -3,8 +3,6 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 
-
-
 class SettingsPage extends StatefulWidget {
   final String userId;
 
@@ -29,18 +27,12 @@ class _SettingsPageState extends State<SettingsPage> {
     _initTts();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // This executes after the first frame is built, when context is fully valid
       if (!mounted) return;
 
-      final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-
-      settingsProvider.LoadSettings(widget.userId).then((_) {
-        if (!mounted) return;
-
         setState(() {
-          _logPointPerMeterController.text = settingsProvider.LogPointPerMeter.toString();
+          _logPointPerMeterController.text = SettingsService().settings!.logPointPerMeter.toString();
         });
-      });
+      //});
     });
   }
 
@@ -50,12 +42,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (!mounted) return;
 
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    //final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
 
     // You could set up listeners here or perform one-time operations
     // that depend on inherited widgets
     if (!_didInitListeners) {
-      settingsProvider.addListener(_updateControllerValues);
+      SettingsService().addListener(_updateControllerValues);
+      //settingsProvider.addListener(_updateControllerValues);
       _didInitListeners = true;
     }
 
@@ -69,23 +62,28 @@ class _SettingsPageState extends State<SettingsPage> {
     _flutterTts.stop();
 
     if (_didInitListeners) {
-      Provider.of<SettingsProvider>(context, listen: false)
+      Provider.of<SettingsService>(context, listen: false)
           .removeListener(_updateControllerValues);
     }
 
     super.dispose();
   }
 
+  Future<void> updateSettingFields(Map<String, dynamic> updates) async {
+    await SettingsService().updateFields(updates);
+    //await Setting
+  }
+  
 // Method to update controller values
   void _updateControllerValues() {
     if(!mounted) return;
-
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-    if (!settingsProvider.isLoading && mounted) {
-      setState(() {
-        _logPointPerMeterController.text = (settingsProvider.LogPointPerMeter).toString();
-      });
-    }
+    
+    //final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    //if (!settingsProvider.isLoading && mounted) {
+    //  setState(() {
+    //    _logPointPerMeterController.text = (settingsProvider.LogPointPerMeter).toString();
+    //  });
+    //}
   }
   void getVoices() async {
     List<dynamic> voices = await _flutterTts.getVoices;
@@ -101,10 +99,10 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context){
 
-    return Consumer<SettingsProvider>(
-      builder: (context, settingsProvider, child) {
+    return Consumer<SettingsService>(
+      builder: (context, settings, child) {
 
-        if (settingsProvider.isLoading) {
+        if (settings.isLoading) {
           return Scaffold(
             appBar: AppBar(
               backgroundColor: APP_BAR_COLOR,
@@ -128,11 +126,8 @@ class _SettingsPageState extends State<SettingsPage> {
                    size: 30
                  ),
                  onPressed: () {
-                   settingsProvider.UpdateSetting(
-                       widget.userId, SettingLogPointPerMeter,
-                       _logPointPerMeterController.text);
-
-                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Saved")));
+                   settings.updateFields({SettingLogPointPerMeter: int.parse(_logPointPerMeterController.text)});
+                   GlobalSnackBar.show("Saved");
                  },
               ),
             ],
@@ -152,7 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
               // isVoicePromptOn
               MyToggleOption(
-                  value: settingsProvider.IsVoicePromptOn,
+                  value: settings.settings!.isVoicePromptOn,
                   label: 'Voice Prompt',
                   subtitle: 'Allow me to give you vocal feedback',
                   onChanged: (bool value)=>
@@ -160,9 +155,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     //setState(() {
                     //  _isVoicePromptOn = value;
                     //}),
-
-                    settingsProvider.UpdateSetting(
-                        widget.userId, SettingIsVoicePromptOn, value),
+                    settings.updateFields({SettingIsVoicePromptOn: value}),
+                    //settingsProvider.UpdateSetting(
+                    //    widget.userId, SettingIsVoicePromptOn, value),
 
                     if(value) {
                       _flutterTts.speak('Voice Prompt enabled'),

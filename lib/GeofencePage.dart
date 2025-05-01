@@ -39,6 +39,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
   bool _isBotScrolDrawerVisible = false;
   int _fencePntr = 0;
   String _appBarTitle = "GeoFence";
+  FenceData fenceData = FenceData();
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -267,7 +268,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
   }
   void _saveGeoFence() async {
     if (_currentPolygonPoints.length < 3) {
-      MyMessageBox(context, 'You need at least 3 points to create a geofence' );
+      myMessageBox(context, 'You need at least 3 points to create a geofence' );
       return;
     }
 
@@ -327,7 +328,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
           .toList();
 
       if (geoPointsList.length == 0){
-        MyMessageBox(context, 'No Geofence points found');
+        myMessageBox(context, 'No Geofence points found');
       }
       else{
         // Get the document to update or create new one
@@ -357,7 +358,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       }
 
     } catch (e) {
-        MyMessageBox(context, 'Error saving geo fence: $e');
+        myMessageBox(context, 'Error saving geo fence: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -417,7 +418,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
     final _userData = Provider.of<UserData>(context, listen: false);
 
     if(firestoreId == ""){
-      MyMessageBox(context, "Please select a Fence");
+      myMessageBox(context, "Please select a Fence");
       return;
     }
     final bool confirm = await showDialog(

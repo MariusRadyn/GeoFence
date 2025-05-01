@@ -2,10 +2,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/GeofencePage.dart';
 import 'package:geofence/SettingsPage.dart';
+import 'package:geofence/TrackingHistoryPage.dart';
 import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
-
 import 'VehiclesPage.dart';
 
 class HomePage extends StatefulWidget {
@@ -18,208 +18,183 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final TextEditingController _pwController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _pwController2 = TextEditingController();
+  final TextEditingController _userController = TextEditingController();
+  bool _isLoggedIn = false;
+  String userID = "";
+  final _user = FirebaseAuth.instance.currentUser;
+  String _userPhotoURL = "";
 
   @override
   void initState() {
     super.initState();
+
+    if(_user != null) {
+      setState(() {
+        _isLoggedIn = true;
+        if(_user.photoURL != null) _userPhotoURL = _user.photoURL!;
+      });
+    }
   }
 
   @override
-  void Dispose() {
+  void dispose() {
     _pwController.dispose();
     _emailController.dispose();
+    _pwController2.dispose();
+    _userController.dispose();
     super.dispose();
   }
 
-  Future<void> LoginScreen(BuildContext context, UserData _userData) {
-    double _widthMedia = MediaQuery.of(context).size.width;
-    double _heightMedia = MediaQuery.of(context).size.height;
-    double _widthContainer = _widthMedia * 0.8;
+  void showSignUpScreen (BuildContext context, UserData userData){
+    double _width = MediaQuery.of(context).size.width * 0.8;
+    double _height = MediaQuery.of(context).size.height * 0.6;
 
-    return showDialog<void>(
+    showDialog<void>(
       context: context,
       builder: (BuildContext context) {
-        return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Container(
-              margin: const EdgeInsets.only(top: 20, bottom: 50),
-              width:
-              _widthContainer > 500 ? 500 : _widthContainer, // Custom width
+          return Dialog(
+            backgroundColor: Colors.transparent,
+              //shape: RoundedRectangleBorder(
+              //  borderRadius: BorderRadius.circular(15),
+              //),
+              child: SizedBox(
+                width: _width > 500 ? 500 : _width, // Custom width
+                height: _height > 600 ? 600 : _height, // Custom height
 
-              child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Heading
-                    Text(
-                      "Login",
-                      textAlign: TextAlign.center,
-                      style:
-                      TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-
-                    SizedBox(height: 10),
-
-                    // Email
-                    Padding(
-                      padding: EdgeInsets.only(left: 20, right: 20),
-                      child: MyTextFormField(
-                        controller: _emailController,
-                        hintText: "Email Address",
-                      ),
-                    ),
-
-                    SizedBox(height: 20),
-
-                    // Password
-                    Padding(
-                      padding: EdgeInsets.only(left: 20, right: 20),
-                      child: MyTextFormField(
-                        controller: _pwController,
-                        hintText: "Password",
-                        isPasswordField: true,
-                      ),
-                    ),
-
-                    SizedBox(height: 20),
-
-                    // Buttons
-                    Row(
+                child: Container(
+                  decoration: BoxDecoration(
+                      gradient: MyTileGradient(),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: Colors.blue,
+                          width: 2
+                      )
+                  ),
+                  child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Cancel Button
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                          },
-                          style: MyButtonStyle(COLOR_ORANGE),
-                          child: const Text(
-                            "Cancel",
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.normal),
-                            textAlign: TextAlign.right,
+                        // Heading
+                        const MyText(
+                          text: "Sign Up",
+                          fontsize: 20,
+                        ),
+
+                        SizedBox(height: 10),
+
+                        // Username
+                        Padding(
+                          padding: const EdgeInsets.only(left: 20, right: 20),
+                          child: MyTextFormField(
+                            controller: _userController,
+                            hintText: "Enter Username",
                           ),
                         ),
 
-                        SizedBox(width: 10),
+                        SizedBox(height: 20),
 
-                        // OK Button
-                        TextButton(
-                          onPressed: () {
-                            loginWithEmail(context);
-                          },
-                          style: MyButtonStyle(COLOR_ORANGE),
-                          child: const Text(
-                            "OK",
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.normal),
-                            textAlign: TextAlign.right,
+                        // Email
+                        Padding(
+                          padding: EdgeInsets.only(left: 20, right: 20),
+                          child: MyTextFormField(
+                            controller: _emailController,
+                            hintText: "Enter Email Address",
                           ),
                         ),
-                      ],
-                    ),
 
-                    SizedBox(height: 20),
+                        SizedBox(height: 20),
 
-                    // Register
-                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Text("Dont have an account?"),
-                      SizedBox(width: 10),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          MySignupBox().dialogBuilder(context);
-                        },
-                        child: Text(
-                          "Register",
-                          style: TextStyle(color: COLOR_ORANGE),
+                        // Password 1
+                        Padding(
+                          padding: EdgeInsets.only(left: 20, right: 20),
+                          child: MyTextFormField(
+                            controller: _pwController,
+                            hintText: "Password",
+                            isPasswordField: true,
+                          ),
                         ),
-                      ),
-                    ]),
 
-                    SizedBox(height: 20),
+                        SizedBox(height: 20),
 
-                    // Login with Google
-                    Container(
-                      margin: MediaQuery.of(context).size.width > 600
-                          ? const EdgeInsets.only(left: 110, right: 110)
-                          : const EdgeInsets.only(left: 30, right: 30),
-                      child: TextButton(
-                        onPressed: () {
-                          loginWithGoogle(context, _userData);
-                          Navigator.of(context).pop();
-                        },
-                        style: MyButtonStyle(Colors.white),
-                        child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Image.asset(iconGOOGLE, height: 30, width: 30),
-                              SizedBox(width: 10),
-                              const Text(
-                                "Sign in with Google",
+                        // Password 2
+                        Padding(
+                          padding: EdgeInsets.only(left: 20, right: 20),
+                          child: MyTextFormField(
+                            controller: _pwController2,
+                            hintText: "Confirm Password",
+                            isPasswordField: true,
+                          ),
+                        ),
+
+                        SizedBox(height: 20),
+
+                        // Buttons
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Cancel Button
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                              style: MyButtonStyle(COLOR_ORANGE),
+                              child: const Text(
+                                "Cancel",
                                 style: TextStyle(
-                                    color: Colors.black,
+                                    color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.normal),
-                                textAlign: TextAlign.center,
+                                textAlign: TextAlign.right,
                               ),
-                            ]),
-                      ),
-                    ),
+                            ),
 
-                    SizedBox(height: 20),
+                            SizedBox(width: 10),
 
-                    // Signin with facebook
-                    Container(
-                      margin: MediaQuery.of(context).size.width > 600
-                          ? const EdgeInsets.only(left: 110, right: 110)
-                          : const EdgeInsets.only(left: 30, right: 30),
-                      child: TextButton(
-                        onPressed: () {
-                          //loginWithGoogle(context);
-                          //Navigator.of(context).pop();
-                        },
-                        style: MyButtonStyle(Colors.white),
-                        child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            //mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Image.asset(iconFACEBOOK, height: 30, width: 30),
-                              SizedBox(width: 10),
-                              const Text(
-                                "Sign in with Facebook",
+                            // OK Button
+                            TextButton(
+                              onPressed: () {
+                                signUp(context);
+                              },
+                              style: MyButtonStyle(COLOR_ORANGE),
+                              child: const Text(
+                                "OK",
                                 style: TextStyle(
-                                    color: Colors.black,
+                                    color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.normal),
-                                textAlign: TextAlign.center,
+                                textAlign: TextAlign.right,
                               ),
-                            ]),
-                      ),
-                    ),
-                  ]
-              ),
-            )
-        );
-      },
+                            ),
+                          ],
+                        ),
+                      ]),
+                ),
+              ));
+        },
     );
   }
-  void loginWithEmail(BuildContext context) async {
+  void signUp(BuildContext context) async {
     final _userData = Provider.of<UserData>(context, listen: false);
+    context.read<UserData>();
 
     if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
-      MyMessageBox(context, 'Please enter both email and password.');
+      myMessageBox(context, 'Please enter both email and password.');
       return;
     }
 
     if (!_emailController.text.contains('@')) {
-      MyMessageBox(context,'Please enter a valid email address.');
+      myMessageBox(context, 'Please enter a valid email address.');
+      return;
+    }
+
+    if (_userController.text.isEmpty) {
+      myMessageBox(context,'Please enter Username.');
+      return;
+    }
+
+    if (_pwController.text != _pwController2.text) {
+      myMessageBox(context, 'Passwords don''t match.');
       return;
     }
 
@@ -231,7 +206,7 @@ class _HomePageState extends State<HomePage> {
     );
 
     try {
-      User? user = await firebaseAuthService.fireAuthSignIn(
+      User? user = await firebaseAuthService.fireAuthCreateUser(
           context,
           _emailController.text,
           _pwController.text);
@@ -240,15 +215,244 @@ class _HomePageState extends State<HomePage> {
       Navigator.of(context).pop();
 
       if (user != null) {
-        firebaseAuthService.updateDisplayName("Marius");
-        _userData.update(user);
+
+        //_userData.update(user);
+        UserDataService().update(UserData(
+          displayName: user.displayName ?? "",
+          email: user.email ?? "",
+          emailValidated: user.emailVerified ?? false,
+        ));
+
+        print('User Created');
+        Navigator.of(context).pop();
+      } else {
+        UserDataService().logout();
+      }
+    } catch (e) {
+      // Pop status indicator
+      Navigator.of(context).pop();
+      print('Error: $e');
+    }
+  }
+  void showLoginScreen(BuildContext context, UserData userData) {
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: MyTileGradient(),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.blue,
+                  width: 2
+                )
+              ),
+
+              margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
+              width: MediaQuery.of(context).size.width * 0.8,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(height: 20),
+
+                  // Heading
+                  const MyText(
+                    text:  "Login",
+                    fontsize: 20,
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Email
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: MyTextFormField(
+                      controller: _emailController,
+                      hintText: "Email Address",
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Password
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: MyTextFormField(
+                      controller: _pwController,
+                      hintText: "Password",
+                      isPasswordField: true,
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Cancel Button
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        style: MyButtonStyle(COLOR_ORANGE),
+                        child: const MyText(
+                          text:  "Cancel",
+                        ),
+                      ),
+
+                      const SizedBox(width: 10),
+
+                      // OK Button
+                      TextButton(
+                        onPressed: () {
+                          loginWithEmail(context);
+                        },
+                        style: MyButtonStyle(COLOR_ORANGE),
+                        child: const MyText(
+                            text: 'OK',
+                          ),
+                        ),
+                      ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Register
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const MyText(
+                        text: "Don't have an account?",
+                        color: Colors.grey,
+                        fontsize: 14,
+                      ),
+
+                      const SizedBox(width: 10),
+
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          showSignUpScreen(context, userData);
+                        },
+                        child: const Text(
+                          "Register",
+                          style: TextStyle(color: COLOR_ORANGE),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Login with Google
+                      _buildSocialLoginButton(
+                        context: context,
+                        onPressed: () {
+                          loginWithGoogle(context, userData);
+                          Navigator.of(context).pop();
+                        },
+                        iconPath: iconGOOGLE,
+                      ),
+
+                      const SizedBox(width: 20),
+
+                      // Signin with facebook
+                      _buildSocialLoginButton(
+                        context: context,
+                        onPressed: () {
+                          // loginWithFacebook implementation would go here
+                        },
+                        iconPath: iconFACEBOOK,
+                      ),
+                    ],
+                  ),
+
+                SizedBox(height: 20),
+
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+  Widget _buildSocialLoginButton({
+    required BuildContext context,
+    required VoidCallback onPressed,
+    required String iconPath,
+    String text="",
+  }) {
+
+
+    return GestureDetector(
+      onTap: onPressed,
+      child: CircleAvatar(
+        radius: 25,
+        backgroundColor: Colors.white,
+        child: CircleAvatar(
+          radius: 18,
+          backgroundImage: AssetImage(iconPath),
+        ),
+      ),
+    );
+  }
+  void loginWithEmail(BuildContext context) async {
+    final userData = Provider.of<UserData>(context, listen: false);
+
+    if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
+      myMessageBox(context, 'Please enter both email and password.');
+      return;
+    }
+
+    if (!_emailController.text.contains('@')) {
+      myMessageBox(context, 'Please enter a valid email address.');
+      return;
+    }
+
+    // Show status indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      User? user = await firebaseAuthService.fireAuthSignIn(
+        context,
+        _emailController.text,
+        _pwController.text,
+      );
+
+      // Pop status indicator
+      Navigator.of(context).pop();
+
+      if (user != null) {
+        //firebaseAuthService.updateDisplayName("Marius");
+
+        UserDataService().update(UserData(
+            //displayName: "Marius",
+            displayName: user.displayName ?? "",
+            email: _emailController.text,
+            emailValidated: user.emailVerified ?? false,
+            isLoggedIn: true,
+            photoURL: user.photoURL ?? ""
+        ));
 
         printMsg('User logged in');
         Navigator.of(context).pop();
       } else {
-        _userData.logout();
-        printMsg(_userData.errorMsg);
-        MyMessageBox(context, _userData.errorMsg);
+        printMsg(userData.errorMsg);
+        GlobalMsg.show("Error", userData.errorMsg);
       }
     } catch (e) {
       // Pop status indicator
@@ -256,231 +460,232 @@ class _HomePageState extends State<HomePage> {
       printMsg('Error: $e');
     }
   }
-  void loginWithGoogle(BuildContext context, UserData _userData) async {
+  void loginWithGoogle(BuildContext context, UserData userData) async {
     bool showError = false;
 
     try {
-      _userData.Clear();
       UserCredential? userCred = await firebaseAuthService.signInWithGoogle();
 
-      if (userCred.user?.emailVerified != null) {
-        _userData.update(userCred.user!);
+      if (userCred != null && userCred.user != null && userCred.user!.emailVerified) {
+
+        UserDataService().update(UserData(
+          displayName:  userCred.user?.displayName ?? "",
+          email: userCred.user?.email ?? "",
+          emailValidated: userCred.user?.emailVerified ?? false,
+          photoURL: userCred.user?.photoURL ?? "",
+          isLoggedIn: true,
+        ));
 
         printMsg('User logged in with Google');
-        _userData.printHash();
+        UserDataService().printHash();
 
       } else {
-        _userData.logout();
-        printMsg(_userData.errorMsg);
-
-        MyMessageBox(context, _userData.errorMsg);
+        if(!userCred.user!.emailVerified){
+          GlobalMsg.show("Error", "Email address not verified");
+        }
+        else {
+          GlobalMsg.show("Error", "Firebase User Credential == Null");
+        }
       }
+
     } catch (e) {
       printMsg('Sign in With Google Error: $e');
       showError = true;
-      _userData.errorMsg = e.toString();
+      userData.errorMsg = e.toString();
+
     } finally {
       if (showError) {
-        MyMessageBox(context, _userData.errorMsg);
+        myMessageBox(context, userData.errorMsg);
       }
     }
   }
-  Widget LoginHeader(UserData _userData){
+  Widget buildLoginHeader(UserData userData) {
     return SafeArea(
-        child:Stack(
-          children: [
-            // Backdrop
-            Container(
-              alignment: Alignment.topCenter,
-              height: 200,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    stops: [
-                      0.3,
-                      0.9,
-                    ],
-                    colors: [
-                      COLOR_BLUE,
-                      COLOR_ICE_BLUE,
-                    ]),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(100),
-                  bottomRight: Radius.circular(100),
-                ),
+      child: Stack(
+        children: [
+          // Backdrop
+          Container(
+            alignment: Alignment.topCenter,
+            height: 200,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: [0.3, 0.9],
+                colors: [COLOR_BLUE, COLOR_ICE_BLUE],
+              ),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(100),
+                bottomRight: Radius.circular(100),
               ),
             ),
-            // White Container
-            Container(
-              margin:
-              const EdgeInsets.only(top: 60, left: 10, right: 10),
-              height: 150,
-              decoration: const BoxDecoration(
-                color: Colors.white70,
-                borderRadius: BorderRadius.all(
-                  Radius.circular(20),
-                ),
-              ),
+          ),
+
+          // White Container
+          Container(
+            margin: const EdgeInsets.only(top: 60, left: 10, right: 10),
+            height: 150,
+            decoration: const BoxDecoration(
+              color: Colors.white70,
+              borderRadius: BorderRadius.all(Radius.circular(20)),
             ),
-            // Avatar
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        //     Navigator.push(
-                        //       context,
-                        //       MaterialPageRoute(
-                        //           builder: (context) => HomePage()),
-                        //     );
-                      },
-                      child:CircleAvatar(
-                        radius: 55,
-                        backgroundColor: Colors.white,
-                        child: CircleAvatar(
-                          backgroundImage:
-                          _userData.photoURL?.isEmpty ?? true
-                              ? AssetImage(picPROFILE)
-                              : NetworkImage(_userData.photoURL)
-                          as ImageProvider,
-                          radius: 50,
-                        ),
+          ),
+
+          // Avatar
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      // Navigation logic could go here
+                    },
+                    child: CircleAvatar(
+                      radius: 55,
+                      backgroundColor: Colors.white,
+                      child: CircleAvatar(
+                        backgroundImage: (userData.photoURL?.isEmpty ?? true)
+                            ? AssetImage(picPROFILE)
+                            : NetworkImage(userData.photoURL!) as ImageProvider,
+                        radius: 50,
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            // Welcome Message
-            Center(
-              child: Container(
-                padding: EdgeInsets.only(top: 130),
-                child: ShowWelcomeMsg(context),
-              ),
-            ),
-
-            // Login Button
-            Center(
-              child: Container(
-                margin: EdgeInsets.only(top: 180),
-                width: 120,
-                height: 40,
-                decoration: const BoxDecoration(
-                    color: COLOR_ORANGE,
-                    borderRadius:
-                    BorderRadius.all(Radius.circular(20))),
-                child: TextButton(
-                  child: _userData.isLoggedIn
-                      ? const Text(
-                    'Log Out',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
-                  )
-                      : const Text(
-                    'Log In',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
                   ),
-                  onPressed: () {
-                    _userData.isLoggedIn == true
-                        ? MyMessageBox(context, "Already logged in")
-                        : LoginScreen(context, _userData);
-                  },
-                ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+
+          // Welcome Message
+          Center(
+            child: Container(
+              padding: const EdgeInsets.only(top: 130),
+              child: ShowWelcomeMsg(context),
+            ),
+          ),
+
+          // Login Button
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 180),
+              width: 120,
+              height: 40,
+              decoration: const BoxDecoration(
+                color: COLOR_ORANGE,
+                borderRadius: BorderRadius.all(Radius.circular(20)),
+              ),
+              child: TextButton(
+                child: Text(
+                  userData.isLoggedIn ? 'Log Out' : 'Log In',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                  ),
+                ),
+                onPressed: () {
+                  userData.isLoggedIn
+                      ? myMessageBox(context, "Already logged in")
+                      : showLoginScreen(context, userData);
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
     );
-}
+  }
 
-@override
+  @override
   Widget build(BuildContext context) {
-    //final _isLoggedIn = context.select((UserData u) => u.isLoggedIn);
 
-  final userData = Provider.of<UserData>(context, listen: false);
-  //final _settings = Provider.of<SettingsProvider>(context, listen: true);
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: APP_BAR_COLOR,
+        title: MyAppbarTitle('GeoFence V1.0'),
+        actions: [
+          Consumer2<UserData, SettingsService>(
+            builder: (context, userData, settings, child) {
 
-  return Scaffold(
-        appBar: AppBar(
-          backgroundColor: APP_BAR_COLOR,
-          title: MyAppbarTitle('GeoFence'),
-          actions: [
-            Consumer2<UserData, SettingsProvider>(
-              builder: (context, _userData, _settings, child) {
-                return Row(
-                  children:[
+              if (settings.isLoading) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Center(
+                    child: CircularProgressIndicator(color: Colors.blue,strokeWidth: 2),
+                  ),
+                );
+              }
+
+              return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Profile Pic
                     Padding(
-                      padding: const EdgeInsets.only(right: 10,top: 2,bottom: 2),
+                      padding: const EdgeInsets.only(right: 10, top: 2, bottom: 2),
                       child: GestureDetector(
-                        onTap: () =>{
-                          _userData.isLoggedIn == true
-                              ? MyMessageBox(context, "Already logged in")
-                              : LoginScreen(context, _userData),
-
-                          if(_userData.isLoggedIn) _settings.LoadSettings(_userData.userID),
+                        onTap: () {
+                          if (_user != null) {
+                            GlobalMsg.show("Login","Already logged in");
+                          } else {
+                            showLoginScreen(context, userData);
+                          }
                         },
+
+                        // Profile Pic
                         child: CircleAvatar(
                           radius: 20,
                           backgroundColor: Colors.white,
                           child: CircleAvatar(
                             radius: 18,
-                            backgroundImage:
-                            _userData.photoURL?.isEmpty ?? true
+                            backgroundImage: (!_isLoggedIn)
                                 ? AssetImage(picPROFILE)
-                                : NetworkImage(_userData.photoURL) as ImageProvider,
+                                : NetworkImage(_userPhotoURL) as ImageProvider,
                           ),
                         ),
                       ),
                     ),
-                    IconButton(
-                        icon:Icon(
-                          Icons.settings,
-                          size: 40,
-                          color: Colors.grey,
-                        ),
-                        onPressed: ()=>{
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => SettingsPage(userId:  _userData.userID)),
-                          ),
-                        }
-                    )
-                  ]
-                );
-              }
-            ),
-          ],
-        ),
-        backgroundColor: COLOR_DARK_BLUE,
 
+                    // Settings
+                    IconButton(
+                      icon: const Icon(
+                        Icons.settings,
+                        size: 40,
+                        color: Colors.grey,
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SettingsPage(userId: userData.userID),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+              );
+            },
+          ),
+        ],
+      ),
+      backgroundColor: COLOR_DARK_BLUE,
       body: SingleChildScrollView(
-         child: Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-
-          SizedBox(height: 50),
+            const SizedBox(height: 50),
 
             // Tiles
             myCustomTileWithPic(
               imagePath: 'assets/track.jpg',
               header: 'Track',
               description: 'Track your vehicle as it moves inside and outside of your GeoFences',
-              widget: TrackingPage(
-                  userId:  userData.userID
-              ),
+              widget: TrackingPage(userId: userID),
             ),
 
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
 
             const myCustomTileWithPic(
               imagePath: 'assets/geofence.jpg',
@@ -489,31 +694,26 @@ class _HomePageState extends State<HomePage> {
               widget: GeoFencePage(),
             ),
 
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
 
-            myCustomTileWithPic(
-              imagePath: 'assets/bakkie.jpg',
+            const myCustomTileWithPic(
+              imagePath: 'assets/red_pickup2.png',
               header: 'Vehicles',
               description: 'Add all the vehicles in your fleet',
               widget: VehiclesPage(),
             ),
 
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
 
-            myCustomTileWithPic(
+            const myCustomTileWithPic(
               imagePath: 'assets/report.png',
-              header: 'Track History',
+              header: 'Tracking History',
               description: 'View tracking history',
-              widget: GeoFencePage(),
+              widget: TrackingHistoryPage(),
             ),
-
           ],
-
-
-
-          //),
         ),
-      )
+      ),
     );
   }
 }

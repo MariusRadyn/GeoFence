@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geofence/utils.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -32,21 +33,24 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
   int _polygonIdCounter = 0;
   StreamSubscription<Position>? _positionStream;
   String _statusMessage = "Not tracking";
-  List<Map<String, dynamic>> _geofenceData = [];
+  List<FenceData> _geofenceList = [];
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FlutterTts _flutterTts = FlutterTts();
   bool _isLoading = false;
   bool _isTracking = false;
+  bool _newTrackingStarted = false;
   Map<String, bool> _insideGeofence = {};
   String? _selectedVehicleId;
   List<Map<String, dynamic>> _vehicles = [];
   String? _trackingSessionId;
-  List<LatLng> _trackingPath = [];
-  Polyline? _pathPolyline;
+  List<LatLng> _trackingPathRed = [];
+  List<LatLng> _trackingPathGreen = [];
+  Set<Polyline> _pathPolyline = {};
   LatLng _currentLocation = const LatLng(-29.6, 30.3);
   int _fencePntr = 0;
   int _distanceFilter = 0;
+  bool _isVoicePromptOn = false;
 
   final CameraPosition _initialPosition = const CameraPosition(
     target: LatLng(-29.0, 24.0), // Default to South Africa
@@ -59,18 +63,12 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     _initializeTracking();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // This executes after the first frame is built, when context is fully valid
+    Future.microtask(() async {
       if (!mounted) return;
 
-      final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-
-      settingsProvider.LoadSettings(widget.userId).then((_) {
-        if (!mounted) return;
-
-        setState(() {
-          _distanceFilter = settingsProvider.LogPointPerMeter;
-        });
+      setState(() {
+        _distanceFilter = SettingsService().settings!.logPointPerMeter;
+        _isVoicePromptOn = SettingsService().settings!.isVoicePromptOn;
       });
     });
   }
@@ -104,6 +102,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
   }
   Future<void> _loadGeoFences(BuildContext context) async {
     final _userData = Provider.of<UserData>(context, listen: false);
+    _geofenceList.clear();
 
     setState(() {
       _isLoading = true;
@@ -111,11 +110,12 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       _markers.clear();
     });
     try {
-      final userId = _userData.userID;// firebaseAuthService. _auth.currentUser!.uid;
+      final userId = _userData
+          .userID; // firebaseAuthService. _auth.currentUser!.uid;
       final geoFencesSnapshot = await firestore
-          .collection('users')
+          .collection(CollectionUsers)
           .doc(userId)
-          .collection('geofences')
+          .collection(CollectionGeoFences)
           .get();
 
       if (geoFencesSnapshot.docs.isNotEmpty) {
@@ -133,9 +133,10 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
               // Add marker for the label
               _markers.add(
                 Marker(
-                  icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueMagenta),
                   markerId: MarkerId(markerId),
-                  position: _calculateCentroid(polygonPoints),
+                  position: calculateCentroid(polygonPoints),
                   infoWindow: InfoWindow(title: data['name']),
                   //onTap: ()=> _onMarkerTap(polygonId, doc.id, data['name'], polygonPoints),
                 ),
@@ -152,13 +153,23 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
                   consumeTapEvents: true,
                 ),
               );
+
+              _geofenceList.add(FenceData(
+                  points: polygonPoints,
+                  name: data['name'],
+                  firestoreId: doc.id
+              ));
             });
           }
         }
       }
 
       // Focus map on user's location if available
-      final userDoc = await firestore.collection('users').doc(userId).get();
+      final userDoc = await firestore
+          .collection(CollectionUsers)
+          .doc(userId)
+          .get();
+
       if (userDoc.exists && userDoc.data()!.containsKey('location')) {
         final location = userDoc.data()!['location'] as GeoPoint;
         _mapController?.animateCamera(
@@ -191,7 +202,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       );
     });
 
-    if(_mapController != null) {
+    if (_mapController != null) {
       _mapController?.animateCamera
         (CameraUpdate.newLatLngZoom(_currentLocation!, 18),
       );
@@ -222,7 +233,6 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
         _vehicles = vehicles;
         _selectedVehicleId = vehicles[0]['id'];
       });
-
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading vehicles: $e')),
@@ -235,17 +245,6 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
   }
-  LatLng _calculateCentroid(List<LatLng> points) {
-    double latitude = 0;
-    double longitude = 0;
-
-    for (var point in points) {
-      latitude += point.latitude;
-      longitude += point.longitude;
-    }
-
-    return LatLng(latitude / points.length, longitude / points.length);
-  }
   Future<void> _startTracking() async {
     if (_selectedVehicleId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -254,48 +253,40 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       return;
     }
 
-    setState(() {
-      _isTracking = true;
-      _trackingPath = [];
-    });
-
-    print("_isTracking = true");
-
     try {
-      // Check location permissions
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        final requestPermission = await Geolocator.requestPermission();
-        if (requestPermission == LocationPermission.denied ||
-            requestPermission == LocationPermission.deniedForever) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location permission denied')),
-          );
-          return;
-        }
-      }
-
-      // Create tracking session in Firebase
-      final userId = _auth.currentUser!.uid;
-      final sessionRef = await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('tracking_sessions')
-          .add({
-        'vehicle_id': _selectedVehicleId,
-        'start_time': FieldValue.serverTimestamp(),
-        'is_active': true,
-        'distance_inside': 0.0,
-        'distance_outside': 0.0,
-      });
-
-      _trackingSessionId = sessionRef.id;
-
-      // Start position tracking
-      _startPositionTracking();
+      await LocationService.requestPermissions();
+      // // Check location permissions
+      // final permission = await Geolocator.checkPermission();
+      // if (permission == LocationPermission.denied) {
+      //   final requestPermission = await Geolocator.requestPermission();
+      //   if (requestPermission == LocationPermission.denied ||
+      //       requestPermission == LocationPermission.deniedForever) {
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       const SnackBar(content: Text('Location permission denied')),
+      //     );
+      //     _isTracking = false;
+      //     return;
+      //   }
+      //}
 
       setState(() {
-        _statusMessage = "Tracking active";
+        _isTracking = true;
+        _trackingPathRed = [];
+        _trackingPathGreen = [];
+        _newTrackingStarted = true;
+        _pathPolyline = {};
+      });
+
+
+      // Start position tracking Listener
+      // This will fire onPostionUpdate every 5m traveled
+      await LocationService.startLocationTracking();
+      //_startPositionTracking();
+
+      if(_isVoicePromptOn)  _flutterTts.speak('Tracking Started. Waiting for first movement');
+
+      setState(() {
+        _statusMessage = "Tracking Armed";
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -305,88 +296,145 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error starting tracking: $e')),
       );
-    } finally {
-
     }
   }
   void _startPositionTracking() {
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: _distanceFilter, // Update every 10 meters
-      ),
-    ).listen(_onPositionUpdate);
+    // _positionStream = Geolocator.getPositionStream(
+    //   locationSettings: LocationSettings(
+    //     accuracy: LocationAccuracy.high,
+    //     distanceFilter: _distanceFilter, // Update every 10 meters (Set in Settings)
+    //   ),
+    // ).listen(_onPositionUpdate);
+
+    FlutterBackgroundService().on('locationUpdate').listen((event) {
+      if (event != null) {
+        final latitude = event['latitude'] as double?;
+        final longitude = event['longitude'] as double?;
+        final timestamp = event['timestamp'] as String?;
+
+        if (latitude != null && longitude != null) {
+          _onPositionUpdate(latLngToPosition(LatLng(latitude, longitude)));
+        }
+      }
+    });
   }
+
   void _onPositionUpdate(Position position) async {
-    if (_trackingSessionId == null) return;
+    bool insideAny = false;
+    LatLng previousPosition;
+    double distance = 0;
 
     setState(() {
       _currentPosition = position;
     });
 
-    final currentLatLng = LatLng(position.latitude, position.longitude);
-
     // Add to tracking path
-    _trackingPath.add(currentLatLng);
-
-    // Update polyline on map
-    setState(() {
-      _pathPolyline = Polyline(
-        polylineId: const PolylineId('tracking_path'),
-        points: _trackingPath,
-        color: Colors.red,
-        width: 5,
-      );
-    });
+    final currentLatLng = LatLng(position.latitude, position.longitude);
 
     // Move camera to current position
     _mapController?.animateCamera(
       CameraUpdate.newLatLng(currentLatLng),
     );
 
-    // Calculate distances and check if inside any geofence
-    if (_trackingPath.length >= 2) {
-      final previousPosition = _trackingPath[_trackingPath.length - 2];
-      final distance = Geolocator.distanceBetween(
-        previousPosition.latitude,
-        previousPosition.longitude,
-        currentLatLng.latitude,
-        currentLatLng.longitude,
-      ) / 1000; // Convert to kilometers
+    // Check if inside any geofence
+    for (var geofence in _geofenceList) {
+      final bool isInside = isPointInsidePolygon(
+          currentLatLng, geofence.points);
 
-      // Check if inside any geofence
-      bool insideAny = false;
-      for (var geofence in _geofenceData) {
-        final bool isInside = _isPointInPolygon(
-          currentLatLng,
-          geofence['points'] as List<LatLng>,
-        );
+      if (isInside) {
+        _trackingPathGreen.add(currentLatLng);
+      } else {
+        _trackingPathRed.add(currentLatLng);
+      }
+      insideAny = insideAny || isInside;
 
-        insideAny = insideAny || isInside;
+      // Calculate distances and check if inside any geofence
+      if (_trackingPathRed.length >= 2 ||  _trackingPathGreen.length >= 2) {
 
-        // Check if status changed (entered or exited geofence)
-        if (isInside != _insideGeofence[geofence['id']]) {
-          _insideGeofence[geofence['id']] = isInside;
+        if(insideAny){
+          // Inside
+          previousPosition = _trackingPathGreen[_trackingPathGreen.length - 2];
+          distance = Geolocator.distanceBetween(
+            previousPosition.latitude,
+            previousPosition.longitude,
+            currentLatLng.latitude,
+            currentLatLng.longitude,
+          ) / 1000; // Convert to kilometers
+        }else{
+          // Outside
+          previousPosition = _trackingPathRed[_trackingPathRed.length - 2];
+          distance = Geolocator.distanceBetween(
+            previousPosition.latitude,
+            previousPosition.longitude,
+            currentLatLng.latitude,
+            currentLatLng.longitude,
+          ) / 1000; // Convert to kilometers
+        }
 
-          // Announce entry/exit via TTS
-          _checkSettings().then((voicePromptEnabled) {
-            if (voicePromptEnabled) {
-              if (isInside) {
-                _flutterTts.speak('Entering ${geofence['name']}');
-              } else {
-                _flutterTts.speak('Exiting ${geofence['name']}');
-              }
-            }
+        // Create tracking session in Firebase only
+        // once first movement was detected
+        if (_newTrackingStarted) {
+          if(distance == 0) return;
+
+          _newTrackingStarted = false;
+          if(_isVoicePromptOn) _flutterTts.speak('Movement Detected');
+
+          final userId = _auth.currentUser!.uid;
+          final sessionRef = await _firestore
+              .collection(CollectionUsers)
+              .doc(userId)
+              .collection(CollectionTrackingSessions)
+              .add({
+            'vehicle_id': _selectedVehicleId,
+            'start_time': FieldValue.serverTimestamp(),
+            'is_active': true,
+            'distance_inside': 0.0,
+            'distance_outside': 0.0,
           });
+          _trackingSessionId = sessionRef.id;
+        }
+
+        if (_trackingSessionId == null) return;
+        // Changed barriers (in or our fences)
+        // Check if status changed (entered or exited geofence)
+        if (isInside != _insideGeofence[geofence.firestoreId]) {
+          _insideGeofence[geofence.firestoreId] = isInside;
+
+          // Update polyline on map
+          setState(() {
+            _pathPolyline = {
+              Polyline(
+                polylineId: const PolylineId('tracking_path_red'),
+                points: _trackingPathRed,
+                color: Colors.red,
+                width: 5,
+              ),
+              Polyline(
+                polylineId: const PolylineId('tracking_path_green'),
+                points: _trackingPathGreen,
+                color: Colors.green,
+                width: 5,
+              ),
+            };
+          });
+
+          // Voice Prompt
+          if (_isVoicePromptOn) {
+            if (isInside) {
+              _flutterTts.speak('Entering ${geofence.name}');
+            } else {
+              _flutterTts.speak('Exiting ${geofence.name}');
+            }
+          }
         }
       }
 
       // Update tracking session with new data
       final userId = _auth.currentUser!.uid;
       final trackingRef = _firestore
-          .collection('users')
+          .collection(CollectionUsers)
           .doc(userId)
-          .collection('tracking_sessions')
+          .collection(CollectionTrackingSessions)
           .doc(_trackingSessionId);
 
       // Save location data
@@ -411,40 +459,6 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       });
     }
   }
-  bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
-    // Ray casting algorithm to determine if point is in polygon
-    bool isInside = false;
-    int j = polygon.length - 1;
-
-    for (int i = 0; i < polygon.length; i++) {
-      if ((polygon[i].longitude > point.longitude) != (polygon[j].longitude > point.longitude) &&
-          (point.latitude < (polygon[j].latitude - polygon[i].latitude) *
-              (point.longitude - polygon[i].longitude) /
-              (polygon[j].longitude - polygon[i].longitude) +
-              polygon[i].latitude)) {
-        isInside = !isInside;
-      }
-      j = i;
-    }
-
-    return isInside;
-  }
-  Future<bool> _checkSettings() async {
-    final userId = _auth.currentUser!.uid;
-    final settingsDoc = await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('settings')
-        .doc('app_settings')
-        .get();
-
-    if (settingsDoc.exists) {
-      final settings = settingsDoc.data() ?? {};
-      return settings[SettingIsVoicePromptOn] ?? true; // Default to true
-    }
-
-    return true; // Default to enabled if no settings found
-  }
   Future<void> _stopTracking() async {
     if (_trackingSessionId == null) return;
 
@@ -454,9 +468,10 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     });
 
     try {
+      await LocationService.stopLocationTracking();
       // Stop position updates
-      await _positionStream?.cancel();
-      _positionStream = null;
+      //await _positionStream?.cancel();
+      //_positionStream = null;
 
       // Mark tracking session as inactive
       final userId = _auth.currentUser!.uid;
@@ -473,9 +488,9 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       setState(() {
         _trackingSessionId = null;
         _statusMessage = "Tracking stopped";
-        _trackingPath = [];
-        _pathPolyline = null;
       });
+
+      if(_isVoicePromptOn)  _flutterTts.speak('Tracking Stopped');
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Tracking stopped')),
@@ -568,19 +583,19 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
         title: MyAppbarTitle('$_statusMessage'),
       ),
       bottomNavigationBar: BottomNavigationBar(
-        onTap: _onBotBarTap,
-        backgroundColor: APP_BAR_COLOR,
-        unselectedItemColor: Colors.grey,
-          selectedItemColor: Colors.purple,
+          onTap: _onBotBarTap,
+          backgroundColor: APP_BAR_COLOR,
+          unselectedItemColor: Colors.grey,
+          selectedItemColor: Colors.grey,
           items: [
-            BottomNavigationBarItem(icon: Icon(Icons.search, size: 35),label: "GeoFence"),
-            BottomNavigationBarItem(icon: Icon(Icons.refresh, size: 35),label: "Refresh" ),
-            BottomNavigationBarItem(
-                icon: _isTracking
-                    ? Icon(Icons.location_off, size: 35, color: Colors.red)
-                    : Icon(Icons.location_on, size: 35, color: Colors.blue),
-                label: (_trackingSessionId == null) ? "Track" : "Stop" ),
-          ]
+          BottomNavigationBarItem(icon: Icon(Icons.search, size: 35),label: "GeoFence"),
+          BottomNavigationBarItem(icon: Icon(Icons.refresh, size: 35),label: "Refresh" ),
+          BottomNavigationBarItem(
+              icon: _isTracking
+                  ? Icon(Icons.location_off, size: 35, color: Colors.red)
+                  : Icon(Icons.location_on, size: 35, color: Colors.grey),
+              label: (_trackingSessionId == null) ? "Track" : "Stop" ),
+        ]
       ),
       body: Stack(
         children: [
@@ -597,7 +612,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
                   markers: _markers,
                   polygons: _polygons,
                   polylines: _pathPolyline != null
-                      ? {_pathPolyline!}
+                      ? _pathPolyline
                       : {},
                   onMapCreated: (controller) {
                     _mapController = controller;

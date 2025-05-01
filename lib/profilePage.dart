@@ -124,7 +124,7 @@ class _profilePageState extends State<profilePage> {
             ));
       } else {
         print(_userData.errorMsg);
-        MyMessageBox(context, _userData.errorMsg);
+        myMessageBox(context, _userData.errorMsg);
       }
     } catch (e) {
       print('Error: $e');

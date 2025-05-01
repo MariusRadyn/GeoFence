@@ -34,40 +34,32 @@ class _VehiclesPageState extends State<VehiclesPage> {
             ),
             backgroundColor: APP_TILE_COLOR,
             shadowColor: Colors.black,
-            title: const Text(
-              "Delete",
-              style: TextStyle(color: Colors.white),
+            title: const MyText(
+              text: "Delete",
+              color: Colors.white
             ),
-            content: Text(
-              "${vehicle['name']}\n${vehicle['registrationNumber']}\n\nAre you sure?",
-              style: const TextStyle(
-                  color: Colors.grey,
-                fontSize: 18,
+            content: MyText(
+                text: "${vehicle['name']}\n${vehicle['registrationNumber']}\n\nAre you sure?",
+                color: Colors.grey,
+                fontsize: 18,
               ),
-            ),
             actions: [
               TextButton(
-                child: const Text(
-                  'No',
-                  style: TextStyle(
-                    color:  Colors.white,
-                    fontFamily: "Poppins",
-                    fontSize: 20,
-                  ),
+                child: const MyText(
+                  text: 'No',
+                  fontsize: 20,
                 ),
                 onPressed: () => Navigator.pop(context),
               ),
               TextButton(
-                  child: const Text(
-                    'Yes',
-                    style: TextStyle(
-                      color:  Colors.white,
-                      fontFamily: "Poppins",
-                      fontSize: 20,
-                    ),
+                  child: const MyText(
+                    text: 'Yes',
+                    color:  Colors.white,
+                    fontsize: 20,
                   ),
-                onPressed: () async {
-                  User? user = _auth.currentUser;
+
+                  onPressed: () async {
+                    User? user = _auth.currentUser;
 
                   await _firestore
                       .collection('users')
@@ -225,9 +217,9 @@ class _VehiclesPageState extends State<VehiclesPage> {
               .collection('vehicles')
               .snapshots(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
+            if (!snapshot.hasData)
               return Center(child: CircularProgressIndicator());
-            }
+
 
             var vehicles = snapshot.data!.docs;
             if (vehicles.isEmpty) {
@@ -250,7 +242,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
                   children: [
                     SizedBox(height: 20,),
 
-                    MyVehicleTile(
+                    MyTextTileWithEditDelete(
                       text: vehicle['name'],
                       subtext: 'Fuel Consumption: ${vehicle['fuelConsumption']} L/100km\nRegistration: ${vehicle['registrationNumber']}',
                       onTapEdit: (){

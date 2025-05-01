@@ -1,14 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:geofence/firebase.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:geofence/utils.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool isDebug = true;
 String debugLog = '';
 
@@ -22,6 +25,7 @@ String debugLog = '';
 //Valid until: Friday, 03 October 2053
 
 const String  googleAPiKey ="AIzaSyAVDoWELQE16C0wkf7-FSzUywpEcI6sYOc";
+
 //---------------------------------------------------
 // Constants Colors
 //---------------------------------------------------
@@ -46,7 +50,6 @@ const DRAWER_COLOR = Color.fromARGB(255, 33, 137, 215);
 
 final FirebaseAuthService firebaseAuthService = FirebaseAuthService();
 final FirebaseFirestore firestore = FirebaseFirestore.instance;
-FenceData fenceData = FenceData();
 
 final String fireUserName = 'user1';
 final String fireUserRecyclebin = '${fireUserName}_recycle/';
@@ -62,14 +65,15 @@ final String picPROFILE = 'assets/profile.png';
 //---------------------------------------------------
 const CollectionUsers = 'users';
 const CollectionGeoFences = 'geofences';
-const CollectionTracking = 'tracking_sessions';
+const CollectionTrackingSessions = 'tracking_sessions';
+const CollectionLocations = 'locations';
 const CollectionVehicles = 'vehicles';
 const CollectionSettings = 'settings';
 
 const DocAppSettings = 'app_settings';
 
-const SettingIsVoicePromptOn = 'IsVoicePromptOn';
-const SettingLogPointPerMeter = 'LogPointPerMeter';
+const SettingIsVoicePromptOn = 'isVoicePromptOn';
+const SettingLogPointPerMeter = 'logPointPerMeter';
 
 
 //---------------------------------------------------
@@ -81,80 +85,87 @@ void printMsg(String msg) {
 void writeLog(var text) {
   debugLog += text +'\r';
 }
-bool isPointInsidePolygon(Point test, List<Point> polygon) {
-  int intersections = 0;
-  int n = polygon.length;
-
-  for (int i = 0; i < n; i++) {
-    Point p1 = polygon[i];
-    Point p2 = polygon[(i + 1) % n]; // Connect last point to first
-
-    // Check if test point is exactly on a vertex (edge case)
-    if ((test.x == p1.x && test.y == p1.y) || (test.x == p2.x && test.y == p2.y)) {
-      return true;
-    }
-
-    // Check if the test point is within the y-range of the edge
-    if ((test.y > min(p1.y, p2.y)) && (test.y <= max(p1.y, p2.y)) &&
-        (test.x <= max(p1.x, p2.x))) {
-
-      // Compute intersection point of polygon edge with horizontal ray
-      double xIntersect = (test.y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y) + p1.x;
-
-      // If the intersection point is to the right of the test point, count it
-      if (xIntersect > test.x) {
-        intersections++;
-      }
-    }
-  }
-
-  // Odd intersections mean inside, even means outside
-  print("Intersertions = $intersections");
-  return (intersections % 2 == 1);
-}
 bool isOnDesktop() {
   if(kIsWeb) return true;
   else return false;
 }
-void MyMessageBox (BuildContext context, String message) {
-  // Close any open dialogs first
-  //if (Navigator.of(context).canPop()) {
-  //  Navigator.of(context).pop();
-  //}
+bool isPointInsidePolygon(LatLng point, List<LatLng> polygon) {
+  bool isInside = false;
+  int j = polygon.length - 1;
 
-  showDialog(
-    context: context,
-    barrierDismissible: false, // Prevents accidental closing
-    builder: (context) => _myMessageBox(message: message),
+  for (int i = 0; i < polygon.length; i++) {
+    final xi = polygon[i].longitude;
+    final yi = polygon[i].latitude;
+    final xj = polygon[j].longitude;
+    final yj = polygon[j].latitude;
+
+    final intersects = ((yi > point.latitude) != (yj > point.latitude)) &&
+        (point.longitude < (xj - xi) * (point.latitude - yi) / (yj - yi + 0.0000001) + xi);
+
+    if (intersects) {
+      isInside = !isInside;
+    }
+
+    j = i;
+  }
+
+  return isInside;
+}
+LatLng calculateCentroid(List<LatLng> points) {
+  double latitude = 0;
+  double longitude = 0;
+
+  for (var point in points) {
+    latitude += point.latitude;
+    longitude += point.longitude;
+  }
+
+  return LatLng(latitude / points.length, longitude / points.length);
+}
+Position latLngToPosition(LatLng latLng) {
+  return Position(
+    latitude: latLng.latitude,
+    longitude: latLng.longitude,
+    timestamp: DateTime.now(),
+    headingAccuracy: 0.0,
+    altitudeAccuracy: 0.0,
+    accuracy: 0.0,
+    altitude: 0.0,
+    heading: 0.0,
+    speed: 0.0,
+    speedAccuracy: 0.0,
+    floor: null,
+    isMocked: false,
   );
 }
 
 //---------------------------------------------------
 // Class
 //---------------------------------------------------
-class GlobalSnackBar {
-  static final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
-  GlobalKey<ScaffoldMessengerState>();
-
-  static void show(String message) {
-    scaffoldMessengerKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-        backgroundColor: Colors.white,
-      ),
-    );
-  }
-}
 class Point {
   final double x, y;
   Point(this.x, this.y);
 }
 class FenceData{
-  String polygonId = "";
-  String firestoreId = "";
-  String name = "";
-  List<LatLng> points = [];
+  String polygonId;
+  String firestoreId;
+  String name;
+  List<LatLng> points;
+
+  FenceData({
+    this.points = const [],
+    this.name = "",
+    this.firestoreId = "",
+    this.polygonId = "",
+  });
+}
+void myMessageBox (BuildContext context, String message) {
+
+  showDialog(
+    context: context,
+    barrierDismissible: false, // Prevents accidental closing
+    builder: (context) => _myMessageBox(message: message),
+  );
 }
 class _myMessageBox extends StatelessWidget {
   final String message;
@@ -173,9 +184,13 @@ class _myMessageBox extends StatelessWidget {
     return Dialog(
       elevation: 20,
       shadowColor: Colors.black87,
-      backgroundColor: Colors.white,
+      backgroundColor: APP_TILE_COLOR,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(15),
+        side: const BorderSide(
+          color: Colors.blue, // Border color
+          width: 2, // Border width
+        ),
       ),
       child: SizedBox(
         width: 250,
@@ -187,7 +202,10 @@ class _myMessageBox extends StatelessWidget {
             Align(
               alignment: Alignment.topRight,
               child: IconButton(
-                icon: Icon(Icons.close, color: Colors.grey),
+                icon: const Icon(
+                    Icons.close,
+                    color: Colors.grey
+                ),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
@@ -198,10 +216,10 @@ class _myMessageBox extends StatelessWidget {
               children: [
                 Image.asset(image, height: 30, width: 30),
                 SizedBox(width: 8),
-                Text(
-                  header,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                MyText(
+                  text:  header,
+                  fontsize: 20,
+                  color: Colors.white,
                 ),
               ],
             ),
@@ -210,9 +228,10 @@ class _myMessageBox extends StatelessWidget {
             // Message
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 10),
-              child: Text(
-                message,
-                textAlign: TextAlign.center,
+              child: MyText(
+                text:  message,
+                color: Colors.grey,
+                fontsize: 14,
               ),
             ),
             SizedBox(height: 20),
@@ -222,522 +241,15 @@ class _myMessageBox extends StatelessWidget {
               onPressed: () {
                 Navigator.of(context).pop(); // Close dialog
               },
-              child: const Text(
-                "OK",
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+              child: const MyText(
+                text: "OK",
+                fontsize: 16,
               ),
             ),
           ],
         ),
       ),
     );
-  }
-}
-class MyTextTile extends StatelessWidget {
-  final Color? color;
-  final String text;
-
-  const MyTextTile({super.key, this.color, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(50, 50, 50, 50),
-      child: Container(
-        color: color,
-        child: Center(
-          child: Column(
-            children: [
-              Text(
-                text,
-                style: const TextStyle(color: Colors.black, fontSize: 20),
-              ),
-              TextButton(
-                  onPressed: () {Navigator.pop(context);
-                  },
-                  child: Container(
-                    color: Colors.blue,
-                    height: 20,
-                    width: 100,
-                    child: Center(
-                        child: Text('OK')
-                    ),
-                    
-                  ))
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-class MyLoginBox {
-  final TextEditingController _pwController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-
-  void Dispose() {
-    _pwController.dispose();
-    _emailController.dispose();
-  }
-
-  Future<void> dialogBuilder(BuildContext context, UserData _userData) {
-    double _widthMedia = MediaQuery.of(context).size.width;
-    double _heightMedia = MediaQuery.of(context).size.height;
-    double _widthContainer = _widthMedia * 0.8;
-
-    return showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Container(
-              margin: const EdgeInsets.only(top: 20, bottom: 50),
-              width:
-              _widthContainer > 500 ? 500 : _widthContainer, // Custom width
-
-              child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Heading
-                    const Text(
-                      "Login",
-                      textAlign: TextAlign.center,
-                      style:
-                      TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Email
-                    Padding(
-                      padding: const EdgeInsets.only(
-                          left: 20,
-                          right: 20
-                      ),
-                      child: MyTextFormField(
-                        controller: _emailController,
-                        hintText: "Email Address",
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Password
-                    Padding(
-                      padding: const EdgeInsets.only(
-                          left: 20,
-                          right: 20
-                      ),
-                      child: MyTextFormField(
-                        controller: _pwController,
-                        hintText: "Password",
-                        isPasswordField: true,
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Buttons
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Cancel Button
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                          },
-                          style: MyButtonStyle(COLOR_ORANGE),
-                          child: const Text(
-                            "Cancel",
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.normal),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-
-                        const SizedBox(width: 10),
-
-                        // OK Button
-                        TextButton(
-                          onPressed: () {
-                            loginWithEmail(context);
-                          },
-                          style: MyButtonStyle(COLOR_ORANGE),
-                          child: const Text(
-                            "OK",
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.normal),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Register
-                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      const Text("Dont have an account?"),
-                      const SizedBox(width: 10),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          MySignupBox().dialogBuilder(context);
-                        },
-                        child: const Text(
-                          "Register",
-                          style: TextStyle(color: COLOR_ORANGE),
-                        ),
-                      ),
-                    ]),
-
-                    SizedBox(height: 20),
-
-                    // Login with Google
-                    Container(
-                      margin: MediaQuery.of(context).size.width > 600
-                          ? const EdgeInsets.only(left: 110, right: 110)
-                          : const EdgeInsets.only(left: 30, right: 30),
-                      child: TextButton(
-                        onPressed: () {
-                          loginWithGoogle(context, _userData);
-                        },
-                        style: MyButtonStyle(Colors.white),
-                        child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Image.asset(iconGOOGLE, height: 30, width: 30),
-                              SizedBox(width: 10),
-                              const Text(
-                                "Sign in with Google",
-                                style: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.normal),
-                                textAlign: TextAlign.center,
-                              ),
-                            ]),
-                      ),
-                    ),
-
-                    SizedBox(height: 20),
-
-                    // Signin with facebook
-                    Container(
-                      margin: MediaQuery.of(context).size.width > 600
-                          ? const EdgeInsets.only(left: 110, right: 110)
-                          : const EdgeInsets.only(left: 30, right: 30),
-                      child: TextButton(
-                        onPressed: () {
-                          //loginWithGoogle(context);
-                        },
-                        style: MyButtonStyle(Colors.white),
-                        child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            //mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Image.asset(iconFACEBOOK, height: 30, width: 30),
-                              SizedBox(width: 10),
-                              const Text(
-                                "Sign in with Facebook",
-                                style: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.normal),
-                                textAlign: TextAlign.center,
-                              ),
-                            ]),
-                      ),
-                    ),
-                  ]
-              ),
-            )
-        );
-      },
-    );
-  }
-
-  void loginWithEmail(BuildContext context) async {
-    final _userData = Provider.of<UserData>(context, listen: false);
-
-    if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
-      MyMessageBox(context, 'Please enter both email and password');
-      return;
-    }
-
-    if (!_emailController.text.contains('@')) {
-      MyMessageBox(context, 'Please enter a valid email address.');
-      return;
-    }
-
-    // Show status indicator
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      User? user = await firebaseAuthService.fireAuthSignIn(
-        context,
-          _emailController.text,
-          _pwController.text);
-
-      // Pop status indicator
-      Navigator.of(context).pop();
-
-      if (user != null) {
-        firebaseAuthService.updateDisplayName("Marius");
-        _userData.update(user);
-
-        printMsg('User logged in');
-        Navigator.of(context).pop();
-      } else {
-        _userData.logout();
-        printMsg(_userData.errorMsg);
-        MyMessageBox(context, _userData.errorMsg);
-      }
-    } catch (e) {
-      // Pop status indicator
-      Navigator.of(context).pop();
-      printMsg('Error: $e');
-    }
-  }
-  void loginWithGoogle(BuildContext context, UserData _userData) async {
-    bool showError = false;
-    //final _userData = Provider.of<UserData>(context, listen: false);
-
-    try {
-      _userData.Clear();
-      UserCredential? userCred = await firebaseAuthService.signInWithGoogle();
-
-      if (userCred.user?.emailVerified != null) {
-        _userData.update(userCred.user!);
-
-        printMsg('User logged in with Google');
-        _userData.printHash();
-
-      } else {
-        _userData.logout();
-        printMsg(_userData.errorMsg);
-
-        MyMessageBox(context, _userData.errorMsg);
-      }
-    } catch (e) {
-      printMsg('Sign in With Google Error: $e');
-      showError = true;
-      _userData.errorMsg = e.toString();
-    } finally {
-      Navigator.of(context).pop();
-
-      if (showError) {
-        MyMessageBox(context, _userData.errorMsg);
-      }
-    }
-  }
-}
-class MySignupBox {
-  final TextEditingController _pwController = TextEditingController();
-  final TextEditingController _pwController2 = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _userController = TextEditingController();
-
-  void Dispose() {
-    _pwController.dispose();
-    _pwController2.dispose();
-    _emailController.dispose();
-    _userController.dispose();
-  }
-
-  Future<void> dialogBuilder(BuildContext context) {
-    double _width = MediaQuery.of(context).size.width * 0.8;
-    double _height = MediaQuery.of(context).size.height * 0.6;
-
-    return showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: SizedBox(
-              width: _width > 500 ? 500 : _width, // Custom width
-              height: _height > 600 ? 600 : _height, // Custom height
-
-              child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Heading
-                    Text(
-                      "Sign Up",
-                      textAlign: TextAlign.center,
-                      style:
-                      TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-
-                    SizedBox(height: 10),
-
-                    // Username
-                    Padding(
-                      padding: EdgeInsets.only(left: 20, right: 20),
-                      child: MyTextFormField(
-                        controller: _userController,
-                        hintText: "Enter Username",
-                      ),
-                    ),
-
-                    SizedBox(height: 20),
-
-                    // Email
-                    Padding(
-                      padding: EdgeInsets.only(left: 20, right: 20),
-                      child: MyTextFormField(
-                        controller: _emailController,
-                        hintText: "Enter Email Address",
-                      ),
-                    ),
-
-                    SizedBox(height: 20),
-
-                    // Password 1
-                    Padding(
-                      padding: EdgeInsets.only(left: 20, right: 20),
-                      child: MyTextFormField(
-                        controller: _pwController,
-                        hintText: "Password",
-                        isPasswordField: true,
-                      ),
-                    ),
-
-                    SizedBox(height: 20),
-
-                    // Password 2
-                    Padding(
-                      padding: EdgeInsets.only(left: 20, right: 20),
-                      child: MyTextFormField(
-                        controller: _pwController2,
-                        hintText: "Confirm Password",
-                        isPasswordField: true,
-                      ),
-                    ),
-
-                    SizedBox(height: 20),
-
-                    // Buttons
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Cancel Button
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                          },
-                          style: MyButtonStyle(COLOR_ORANGE),
-                          child: const Text(
-                            "Cancel",
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.normal),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-
-                        SizedBox(width: 10),
-
-                        // OK Button
-                        TextButton(
-                          onPressed: () {
-                            signUp(context);
-                          },
-                          style: MyButtonStyle(COLOR_ORANGE),
-                          child: const Text(
-                            "OK",
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.normal),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ]),
-            ));
-      },
-    );
-  }
-
-  void signUp(BuildContext context) async {
-    final _userData = Provider.of<UserData>(context, listen: false);
-    context.read<UserData>();
-
-    if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
-      MyMessageBox(context, 'Please enter both email and password.');
-      return;
-    }
-
-    if (!_emailController.text.contains('@')) {
-      MyMessageBox(context, 'Please enter a valid email address.');
-      return;
-    }
-
-    if (_userController.text.isEmpty) {
-      MyMessageBox(context,'Please enter Username.');
-      return;
-    }
-
-    if (_pwController.text != _pwController2.text) {
-      MyMessageBox(context, 'Passwords don''t match.');
-      return;
-    }
-
-    // Show status indicator
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      User? user = await firebaseAuthService.fireAuthCreateUser(
-        context,
-          _emailController.text,
-          _pwController.text);
-
-      // Pop status indicator
-      Navigator.of(context).pop();
-
-      if (user != null) {
-        if (user.displayName != null) {
-          //user. = _userController.text;
-        }
-        _userData.update(user);
-
-        print('User Created');
-        Navigator.of(context).pop();
-      } else {
-        _userData.logout();
-        print(_userData.errorMsg);
-        MyMessageBox(context, _userData.errorMsg);
-      }
-    } catch (e) {
-      // Pop status indicator
-      Navigator.of(context).pop();
-      print('Error: $e');
-    }
   }
 }
 class MyTextFormField extends StatefulWidget {
@@ -924,7 +436,7 @@ class myCustomTileWithPic extends StatelessWidget {
                     MaterialPageRoute(builder: (context) => widget),
                   );
                 }else{
-                  MyMessageBox(context, "User not Logged In");
+                  myMessageBox(context, "User not Logged In");
                 }
               },
               child: Row(
@@ -1237,103 +749,185 @@ class MyToggleOption extends StatelessWidget {
     );
   }
 }
-class MyVehicleTile extends StatelessWidget {
-  final String text;
-  final String subtext;
-  final Function? onTapEdit;
-  final Function? onTapDelete;
+class MyText extends StatelessWidget {
 
-  const MyVehicleTile({
+  final String text;
+  final double? fontsize;
+  final Color color;
+
+  const MyText({
     required this.text,
-    required this.subtext,
-    this.onTapEdit,
-    this.onTapDelete,
+    this.fontsize = 16,
+    this.color = Colors.white,
     super.key
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: APP_TILE_COLOR,
-        border: Border.all(
-          color: Colors.grey,
-          width: 1,
-        ),
-        borderRadius: BorderRadius.circular(5),
-        gradient: MyTileGradient(),
+    return Text(
+      text,
+      style: TextStyle(
+        color: color,
+        fontFamily: 'Poppins',
+        fontWeight: FontWeight.normal,
+        fontSize: fontsize,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    text,
-                    style: const TextStyle(
+    );
+  }
+}
+class MyTextTileWithEditDelete extends StatelessWidget {
+  final String text;
+  final String subtext;
+  final Function? onTapEdit;
+  final Function? onTapDelete;
+  final Function? onTapTile;
+
+  const MyTextTileWithEditDelete({
+    required this.text,
+    required this.subtext,
+    this.onTapEdit,
+    this.onTapDelete,
+    this.onTapTile,
+    super.key
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: (){
+        if(onTapTile != null)
+          onTapTile!();
+        },
+      child: Container(
+        decoration: BoxDecoration(
+          color: APP_TILE_COLOR,
+          border: Border.all(
+            color: Colors.grey,
+            width: 1,
+          ),
+          borderRadius: BorderRadius.circular(5),
+          gradient: MyTileGradient(),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    MyText(
+                      text: text,
                       color: Colors.white,
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.normal,
-                      fontSize: 18,
+                      fontsize: 18,
                     ),
-                    textAlign: TextAlign.start,
-                  ),
+                    SizedBox(height: 1),
 
-                  SizedBox(height: 1),
-
-                  Text(
-                    subtext,
-                    style: const TextStyle(
+                    MyText(
+                      text: subtext,
                       color: Colors.grey,
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.normal,
-                      fontSize: 14,
+                      fontsize: 14,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
+
+            const SizedBox(width: 10),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if(onTapEdit != null)
+                  IconButton(
+                    icon: Icon(Icons.edit, color: Colors.white,),
+                    onPressed: () => onTapEdit!(),
+                    iconSize: 25,
+                    constraints: BoxConstraints(),
+                  ),
+
+                if(onTapDelete != null)
+                  IconButton(
+                    icon: Icon(Icons.delete, color: Colors.red,),
+                    onPressed: () => onTapDelete!(),
+                    iconSize: 25,
+                    constraints: BoxConstraints(),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+class GlobalMsg {
+  static void show(String header, String message) {
+    final context = navigatorKey.currentState?.overlay?.context;
+    if (context == null) return;
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(
+            color: Colors.blue, // Border color
+            width: 2, // Border width
           ),
+        ),
+        backgroundColor: APP_TILE_COLOR,
+        shadowColor: Colors.black,
+        title: MyText(
+            text: header,
+            color: Colors.white
+        ),
+        content: MyText(
+          text: message,
+          color: Colors.grey,
+          fontsize: 18,
+        ),
+        actions: [
+          TextButton(
+              child: const MyText(
+                text: 'OK',
+                color:  Colors.white,
+                fontsize: 20,
+              ),
 
-          SizedBox(width: 10,),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if(onTapEdit != null)
-                IconButton(
-                  icon: Icon(Icons.edit, color: Colors.white,),
-                  onPressed: () => onTapEdit!(),
-                  iconSize: 25,
-                  constraints: BoxConstraints(),
-                ),
-
-              if(onTapDelete != null)
-                IconButton(
-                  icon: Icon(Icons.delete, color: Colors.red,),
-                  onPressed: () => onTapDelete!(),
-                  iconSize: 25,
-                  constraints: BoxConstraints(),
-                ),
-            ],
+              onPressed: () async {
+                Navigator.pop(context);
+              }
           ),
         ],
       ),
     );
   }
 }
+class GlobalSnackBar {
+  static void show(String message) {
+    final context = navigatorKey.currentState?.overlay?.context;
+    if (context == null) return;
 
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: MyText(
+            text: message
+        ),
+        backgroundColor: Colors.blueGrey,
+      ),
+    );
+  }
+}
 
 //---------------------------------------------------
-// Data Providers
+// Data Services
 //---------------------------------------------------
-class UserData extends ChangeNotifier {
+class UserData{
   String displayName = "";
   String surname = "";
   String userID = "";
@@ -1343,154 +937,258 @@ class UserData extends ChangeNotifier {
   bool isLoggedIn = false;
   bool emailValidated = false;
 
-  void update(User user) {
-    try{
-      if(user == null){
-        userID = '';
-        email = '';
-        emailValidated = false;
-        displayName = '';
-        photoURL = "";
-        isLoggedIn = false;
-      }else{
-        userID = user.uid;
-        email = user.email;
-        emailValidated = user.emailVerified;
-        displayName = user.displayName ?? "";
-        photoURL = user.photoURL ?? "";
-        isLoggedIn = true;
+  UserData({
+    this.displayName = "",
+    this.surname = "",
+    this.userID = "",
+    this.email = "",
+    this.errorMsg = "",
+    this.photoURL = "",
+    this.isLoggedIn = false,
+    this.emailValidated = false,
+  });
 
-        notifyListeners();
-        print("Notify Listeners: UserData");
-      }
-    }catch (e){
-      print(e);
+  factory UserData.fromMap(Map<String, dynamic> map){
+    return UserData(
+      displayName: map['displayName'] ?? "",
+      surname: map['surname'] ?? "",
+      userID: map['userID'] ?? 0,
+      email: map['email'] ?? "",
+      photoURL: map['photoURL'] ?? "",
+      isLoggedIn: map['isLoggedIn'] ?? false,
+      emailValidated: map['emailValidated'] ?? false,
+    );
+  }
+
+  Map<String, dynamic> toMap(){
+    return{
+      'displayName': displayName,
+      'surname': surname,
+      'userID': userID,
+      'email': email,
+      'photoURL': photoURL,
+      'isLoggedIn': isLoggedIn,
+      'emailValidated': emailValidated
+    };
+  }
+
+  UserData copyWith({
+    String? displayName,
+    String? surname,
+    String? userID,
+    String? email,
+    String? photoURL,
+    bool? isLoggedIn,
+    bool? emailValidated,
+  }){
+    return UserData(
+      displayName: displayName ?? this.displayName,
+      surname: surname ?? this.surname,
+      userID: userID ?? this.userID,
+      email: email ?? this.email,
+      photoURL: photoURL ?? this.photoURL,
+      isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+      emailValidated: emailValidated ?? this.emailValidated,
+    );
+  }
+}
+class UserDataService extends ChangeNotifier {
+  static final UserDataService _instance = UserDataService._internal();
+  factory UserDataService() => _instance;
+  UserDataService._internal();
+
+  UserData? _userdata;
+  UserData? get userdata => _userdata;
+  bool isLoading = false;
+
+  final _auth = FirebaseAuth.instance;
+  final _db = FirebaseFirestore.instance;
+
+  Future<void> load() async {
+    if(_auth == null) return;
+    if(_db == null) return;
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    isLoading = true;
+
+    final doc = await _db
+        .collection(CollectionUsers)
+        .doc(uid)
+        .get();
+
+    if (doc.exists) {
+      _userdata = UserData.fromMap(doc.data()?[CollectionSettings] ?? {});
+      notifyListeners();
     }
 
+    isLoading = false;
+  }
+  Future<void> update(UserData newUserData) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    _userdata = newUserData;
+    await _db.collection(CollectionUsers).doc(uid).update({
+      CollectionSettings : newUserData.toMap(),
+    });
+
+    notifyListeners();
+  }
+  Future<void> updateFields(Map<String, dynamic> updates) async {
+    try {
+      final current = _userdata;
+      if (current == null) return;
+
+      final updated = current.copyWith(
+        displayName: updates['displayName'] ?? current.displayName,
+        surname: updates['surname'] ?? current.surname,
+        userID: updates['userID'] ?? current.userID,
+        email: updates['email'] ?? current.email,
+        emailValidated: updates['emailValidated'] ?? current.emailValidated,
+        isLoggedIn: updates['isLoggedin'] ?? current.isLoggedIn,
+      );
+
+      _userdata = updated;
+
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      await _db.collection(CollectionUsers).doc(uid).update({
+        CollectionSettings: updated.toMap(),
+      });
+
+      notifyListeners();
+    } catch (e) {
+      GlobalMsg.show('update Userdata Fields:', '${e}');
+    }
+  }
+  Future<void> logout() async{
+    try{
+      await _auth.signOut();
+      await updateFields({'isLoggedIn': false});
+
+      notifyListeners();
+    }catch (e){
+      GlobalMsg.show('Logout:', '${e}');
+    }
   }
   void printHash() {
     print(this.hashCode);
   }
-  void logout() {
-    userID = "";
-    email = "";
-    photoURL = "";
-    isLoggedIn = false;
-    emailValidated = false;
-    displayName = "";
-    notifyListeners();
+}
+
+class Settings{
+  bool isVoicePromptOn;
+  int logPointPerMeter;
+  double rebateValuePerLiter;
+  double dieselPrice;
+
+  Settings({
+    required this.dieselPrice,
+    required this.isVoicePromptOn,
+    required this.logPointPerMeter,
+    required this.rebateValuePerLiter
+  });
+
+  factory Settings.fromMap(Map<String, dynamic> map){
+    return Settings(
+      isVoicePromptOn: map['isVoicePromptOn'] ?? true,
+      dieselPrice: map['dieselPrice'] ?? 20,
+      logPointPerMeter: map['logPointPerMeter'] ?? 10,
+      rebateValuePerLiter: map['rebatePerLiter'] ?? 2.6,
+    );
   }
-  void Clear() {
-    displayName = "";
-    surname = "";
-    userID = "";
-    email = "";
-    errorMsg = "";
-    photoURL = "";
-    isLoggedIn = false;
-    emailValidated = false;
+
+  Map<String, dynamic> toMap(){
+    return{
+      'isVoicePromptOn': isVoicePromptOn,
+      'dieselPrice': dieselPrice,
+      'logPointPerMeter': logPointPerMeter,
+      'rebateValuePerLiter': rebateValuePerLiter
+    };
+  }
+
+  Settings copyWith({
+    bool? isVoicePromptOn,
+    int? logPointPerMeter,
+    double? rebateValuePerLiter,
+    double? dieselPrice,
+  }){
+    return Settings(
+      isVoicePromptOn: isVoicePromptOn ?? this.isVoicePromptOn,
+      logPointPerMeter: logPointPerMeter ?? this.logPointPerMeter,
+      dieselPrice: dieselPrice ?? this.dieselPrice,
+      rebateValuePerLiter: rebateValuePerLiter ?? this.rebateValuePerLiter,
+    );
   }
 }
-class SettingsProvider with ChangeNotifier {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+class SettingsService extends ChangeNotifier {
+  static final SettingsService _instance = SettingsService._internal();
+  factory SettingsService() => _instance;
+  SettingsService._internal();
 
-  bool _isVoicePromptOn = false;
-  int _logPointPerMeter = 0;
-  bool _isLoading = false;
+  Settings? _settings;
+  Settings? get settings => _settings;
+  bool isLoading = false;
 
-  bool get IsVoicePromptOn => _isVoicePromptOn;
-  int get LogPointPerMeter => _logPointPerMeter;
-  bool get isLoading => _isLoading;
+  final _db = FirebaseFirestore.instance;
 
-  Future<void> LoadSettings(String userId) async {
-    if (userId == "") return;
+  Future<void> load() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
 
-    try{
-      _isLoading = true;
-      notifyListeners();
+    isLoading = true;
 
-      DocumentSnapshot doc = await _firestore
-          .collection(CollectionUsers)
-          .doc(userId)
-          .collection(CollectionSettings)
-          .doc(DocAppSettings)
-          .get();
-
-      // Create Default Settings
-      if (!doc.exists) {
-        await _firestore
-            .collection(CollectionUsers)
-            .doc(userId)
-            .collection(CollectionSettings)
-            .doc(DocAppSettings)
-            .set({
-          '$SettingIsVoicePromptOn': true,
-          '$SettingLogPointPerMeter': 10,
-        });
-
-        _isVoicePromptOn = true;
-        _logPointPerMeter = 10; // Default value
-
-        printMsg('Default Settings created on Firestore');
-      }
-      else{
-        // Get document data map
-        final data = doc.data() as Map<String, dynamic>?;
-
-        // Safely access data with proper typing
-        _isVoicePromptOn = data?[SettingIsVoicePromptOn] as bool? ?? true;
-
-        // For numeric values, ensure proper conversion
-        if (data?[SettingLogPointPerMeter] != null) {
-          // Handle potential type issues - Firestore might store as double
-          final pointsValue = data![SettingLogPointPerMeter];
-          if (pointsValue is int) {
-            _logPointPerMeter = pointsValue;
-          } else if (pointsValue is double) {
-            _logPointPerMeter = pointsValue.toInt();
-          } else if (pointsValue is String) {
-            _logPointPerMeter = int.tryParse(pointsValue) ?? 10;
-          }
-        } else {
-          _logPointPerMeter = 10; // Default value
-        }
-      }
-    }
-    catch (e){
-      print('Error loading settings: $e');
-    }
-    finally{
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-  Future<void> UpdateSetting(String userId, String key, dynamic value) async {
-
-    // Check var type
-    if (key == SettingLogPointPerMeter && value is String) {
-      try {
-        value = int.parse(value);
-      } catch (e) {
-        print('Error parsing value to int: $e');
-        return; // Don't update if value can't be parsed
-      }
-    }
-    await _firestore
+    final doc = await _db
         .collection(CollectionUsers)
-        .doc(userId)
-        .collection(CollectionSettings)
-        .doc(DocAppSettings)
-        .set(
-      {key: value},
-      SetOptions(
-          merge: true
-      ), // Ensures we update only specified settings
-    );
+        .doc(uid)
+        .get();
 
-    if (key == SettingIsVoicePromptOn) _isVoicePromptOn = value;
-    if (key == SettingLogPointPerMeter) _logPointPerMeter = value as int;
+    if (doc.exists) {
+      _settings = Settings.fromMap(doc.data()?[CollectionSettings] ?? {});
+      notifyListeners();
+    }
+
+    isLoading = false;
+  }
+  Future<void> update(Settings newSettings) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    _settings = newSettings;
+    await _db.collection(CollectionUsers).doc(uid).update({
+      CollectionSettings : newSettings.toMap(),
+    });
 
     notifyListeners();
+  }
+  Future<void> updateFields(Map<String, dynamic> updates) async {
+    try {
+      final current = _settings;
+      if (current == null) return;
+
+      final updated = current.copyWith(
+        isVoicePromptOn: updates['isVoicePromptOn'] ?? current.isVoicePromptOn,
+        logPointPerMeter: updates['logPointPerMeter'] ?? current.logPointPerMeter,
+        rebateValuePerLiter: updates['rebateValuePerLiter'] ?? current.rebateValuePerLiter,
+        dieselPrice: updates['dieselPrice'] ?? current.dieselPrice,
+      );
+
+      _settings = updated;
+
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      await _db.collection(CollectionUsers).doc(uid).update({
+        CollectionSettings: updated.toMap(),
+      });
+
+      notifyListeners();
+    } catch (e) {
+      GlobalMsg.show('updateSettingFields:', '${e}');
+    }
   }
 }
 
@@ -1566,7 +1264,7 @@ Widget MyAppbarTitle(String text){
             fontFamily: 'Poppins',
             fontWeight: FontWeight.normal,
             fontSize: 22,
-            color: Colors.white
+            color: Colors.grey
             ),
         ),
       ],
@@ -1589,6 +1287,20 @@ LinearGradient MyTileGradient() {
       ],
   );
 }
+LinearGradient MyTileGradientBlue() {
+  return const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    stops: [
+      0.1,
+      0.9
+    ],
+    colors: [
+      COLOR_BLUE,
+      Colors.black,
+    ],
+  );
+}
 
 //---------------------------------------------------
 // Styles
@@ -1598,5 +1310,15 @@ ButtonStyle MyButtonStyle(Color backgroundColor) {
     minimumSize: const Size(100, 50),
     backgroundColor: backgroundColor,
     shadowColor: Colors.white,
+  );
+}
+TextStyle MyTextStyle(){
+  double fontsize = 16;
+
+  return TextStyle(
+      color: Colors.white,
+      fontSize: fontsize,
+      fontWeight: FontWeight.normal,
+      fontFamily: "Poppins"
   );
 }
