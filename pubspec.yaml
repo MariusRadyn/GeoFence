@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.5.4
+  sdk: ^3.6.0-334.4.beta
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -30,7 +30,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -48,7 +47,10 @@ dependencies:
   google_sign_in: ^6.2.2
   provider: ^6.0.5
   flutter_tts: ^4.2.2
-
+  #flutter_background_service: ^5.1.0
+  location: ^7.0.1
+  permission_handler: ^12.0.0+1
+  #intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
@@ -59,15 +61,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^4.0.0
-  flutter_launcher_icons: ^0.14.3
-
-flutter_icons:
-  android: true
-  ios: true
-  image_path: "assets/AppLogo.png"  # Path to your logo
-  adaptive_icon_foreground: "assets/AppLogo.png"  # Optional for Android adaptive icon
-  adaptive_icon_background: "assets/AppLogo.png"  # Optional for Android adaptive icon
+  flutter_lints: ^5.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -93,6 +87,8 @@ flutter:
     - assets/bakkie.jpg
     - assets/fuelGuage.jpg
     - assets/report.png
+    - assets/appicon_blue.png
+    - assets/red_pickup2.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -105,14 +101,16 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
-  fonts:
-     - family: BookAntique
-       fonts:
-         - asset: assets/fonts/bkant.ttf
-     - family: Poppins
-       fonts:
-         - asset: assets/fonts/Poppins-Regular.ttf
-         - asset: assets/fonts/Poppins-Bold.ttf
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
   #         weight: 700
   #
   # For details regarding fonts from package dependencies,
