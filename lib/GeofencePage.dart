@@ -92,7 +92,8 @@ class _GeoFencePageState extends State<GeoFencePage> {
     }
   }
   Future<void> _loadGeoFences(BuildContext context) async {
-    final _userData = Provider.of<UserData>(context, listen: false);
+    //final _userData = Provider.of<UserData>(context, listen: false);
+    UserData? _userData = UserDataService().userdata;
 
     setState(() {
       _isLoading = true;
@@ -100,7 +101,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       _markers.clear();
     });
     try {
-      final userId = _userData.userID;// firebaseAuthService. _auth.currentUser!.uid;
+      final userId = _userData!.userID;// firebaseAuthService. _auth.currentUser!.uid;
       final geoFencesSnapshot = await firestore
           .collection('users')
           .doc(userId)
@@ -314,7 +315,8 @@ class _GeoFencePageState extends State<GeoFencePage> {
     );
   }
   Future<void> _saveGeoFenceToFirebase(BuildContext context, String name) async {
-    final _userData = Provider.of<UserData>(context, listen: false);
+    //final _userData = Provider.of<UserData>(context, listen: false);
+    final _userData = UserDataService().userdata;
 
     setState(() {
       _isLoading = true;
@@ -322,7 +324,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
     });
 
     try {
-      final userId = _userData.userID; // _auth.currentUser!.uid;
+      final userId = _userData!.userID; // _auth.currentUser!.uid;
       final geoPointsList = _currentPolygonPoints
           .map((point) => GeoPoint(point.latitude, point.longitude))
           .toList();
@@ -415,7 +417,8 @@ class _GeoFencePageState extends State<GeoFencePage> {
     );
   }
   Future<void> _deleteGeoFence(BuildContext context, String firestoreId, String name) async {
-    final _userData = Provider.of<UserData>(context, listen: false);
+    //final _userData = Provider.of<UserData>(context, listen: false);
+    UserData? _userData = UserDataService().userdata;
 
     if(firestoreId == ""){
       myMessageBox(context, "Please select a Fence");
@@ -445,7 +448,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       });
 
       try {
-        final userId = _userData.userID;// _auth.currentUser!.uid;
+        final userId = _userData!.userID;// _auth.currentUser!.uid;
         await firestore
             .collection('users')
             .doc(userId)

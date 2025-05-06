@@ -240,7 +240,8 @@ class FirebaseAuthService {
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   Future<User?> fireAuthCreateUser(BuildContext context, String email, String password) async {
-    final _userData = Provider.of<UserData>(context, listen: false);
+    //final _userData = Provider.of<UserData>(context, listen: false);
+    UserData? _userData = UserDataService().userdata;
 
     try {
       UserCredential credential = await _auth.createUserWithEmailAndPassword(
@@ -275,20 +276,20 @@ class FirebaseAuthService {
           ///  - Thrown if email/password accounts are not enabled. Enable
           ///    email/password accounts in the Firebase Console, under the Auth tab.
           case 'email-already-in-use':
-            _userData.errorMsg = "Email already in use.";
+            _userData!.errorMsg = "Email already in use.";
             break;
 
           case 'invalid-email':
-            _userData.errorMsg = "Invalid Email.";
+            _userData!.errorMsg = "Invalid Email.";
             break;
 
           case 'weak-password':
-            _userData.errorMsg =
+            _userData!.errorMsg =
                 "Weak Password. Must be at least 6 characters and contain a symbol.";
             break;
 
           default:
-            _userData.errorMsg = e.code;
+            _userData!.errorMsg = e.code;
         }
       }
       print("Firebase Auth Error: $e");
@@ -296,7 +297,8 @@ class FirebaseAuthService {
     }
   }
   Future<User?> fireAuthSignIn(BuildContext context, String email, String password) async {
-    final _userData = Provider.of<UserData>(context, listen: false);
+    //final _userData = Provider.of<UserData>(context, listen: false);
+    UserData? _userData = UserDataService().userdata;
 
     try {
       UserCredential credential = await _auth.signInWithEmailAndPassword(
@@ -339,11 +341,11 @@ class FirebaseAuthService {
           case 'invalid-email':
           case 'wrong-password':
           case 'invalid-credential':
-            _userData.errorMsg = "Invalid email or password.";
+            _userData!.errorMsg = "Invalid email or password.";
             break;
 
           default:
-            _userData.errorMsg = e.code;
+            _userData!.errorMsg = e.code;
         }
       }
 

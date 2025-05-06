@@ -21,7 +21,8 @@ class _profilePageState extends State<profilePage> {
 
   @override
   Widget build(BuildContext context) {
-    UserData _userData = Provider.of<UserData>(context, listen: false);
+    //UserData _userData = Provider.of<UserData>(context, listen: false);
+    UserData? _userData = UserDataService().userdata;
 
     return Scaffold(
       appBar: AppBar(
@@ -106,7 +107,7 @@ class _profilePageState extends State<profilePage> {
     );
   }
 
-  void login(UserData _userData) async {
+  void login(UserData? _userData) async {
     FirebaseAuthService _auth = FirebaseAuthService();
 
 
@@ -123,7 +124,7 @@ class _profilePageState extends State<profilePage> {
               builder: (context) => HomePage(),
             ));
       } else {
-        print(_userData.errorMsg);
+        print(_userData!.errorMsg);
         myMessageBox(context, _userData.errorMsg);
       }
     } catch (e) {

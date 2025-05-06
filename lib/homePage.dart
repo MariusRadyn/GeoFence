@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:geofence/GeofencePage.dart';
 import 'package:geofence/SettingsPage.dart';
 import 'package:geofence/TrackingHistoryPage.dart';
-import 'package:geofence/TrackingPage.dart';
+//import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'VehiclesPage.dart';
@@ -46,7 +46,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  void showSignUpScreen (BuildContext context, UserData userData){
+  void showSignUpScreen (BuildContext context){
     double _width = MediaQuery.of(context).size.width * 0.8;
     double _height = MediaQuery.of(context).size.height * 0.6;
 
@@ -175,7 +175,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
   void signUp(BuildContext context) async {
-    final _userData = Provider.of<UserData>(context, listen: false);
+    //final _userData = Provider.of<UserData>(context, listen: false);
     context.read<UserData>();
 
     if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
@@ -234,7 +234,7 @@ class _HomePageState extends State<HomePage> {
       print('Error: $e');
     }
   }
-  void showLoginScreen(BuildContext context, UserData userData) {
+  void showLoginScreen(BuildContext context) {
     showDialog<void>(
       context: context,
       builder: (BuildContext context) {
@@ -338,7 +338,7 @@ class _HomePageState extends State<HomePage> {
                       GestureDetector(
                         onTap: () {
                           Navigator.of(context).pop();
-                          showSignUpScreen(context, userData);
+                          showSignUpScreen(context);
                         },
                         child: const Text(
                           "Register",
@@ -357,7 +357,7 @@ class _HomePageState extends State<HomePage> {
                       _buildSocialLoginButton(
                         context: context,
                         onPressed: () {
-                          loginWithGoogle(context, userData);
+                          loginWithGoogle(context);
                           Navigator.of(context).pop();
                         },
                         iconPath: iconGOOGLE,
@@ -407,7 +407,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
   void loginWithEmail(BuildContext context) async {
-    final userData = Provider.of<UserData>(context, listen: false);
+    //final userData = Provider.of<UserData>(context, listen: false);
+    UserData? _userData = UserDataService().userdata;
 
     if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
       myMessageBox(context, 'Please enter both email and password.');
@@ -451,8 +452,8 @@ class _HomePageState extends State<HomePage> {
         printMsg('User logged in');
         Navigator.of(context).pop();
       } else {
-        printMsg(userData.errorMsg);
-        GlobalMsg.show("Error", userData.errorMsg);
+        //printMsg(userData.errorMsg);
+        //GlobalMsg.show("Error", userData.errorMsg);
       }
     } catch (e) {
       // Pop status indicator
@@ -460,7 +461,7 @@ class _HomePageState extends State<HomePage> {
       printMsg('Error: $e');
     }
   }
-  void loginWithGoogle(BuildContext context, UserData userData) async {
+  void loginWithGoogle(BuildContext context) async {
     bool showError = false;
 
     try {
@@ -491,15 +492,17 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       printMsg('Sign in With Google Error: $e');
       showError = true;
-      userData.errorMsg = e.toString();
+      UserDataService().userdata?.errorMsg = e.toString();
 
     } finally {
       if (showError) {
-        myMessageBox(context, userData.errorMsg);
+        if(UserDataService().userdata != null) {
+          myMessageBox(context, UserDataService().userdata!.errorMsg);
+        }
       }
     }
   }
-  Widget buildLoginHeader(UserData userData) {
+  Widget buildLoginHeader() {
     return SafeArea(
       child: Stack(
         children: [
@@ -547,9 +550,9 @@ class _HomePageState extends State<HomePage> {
                       radius: 55,
                       backgroundColor: Colors.white,
                       child: CircleAvatar(
-                        backgroundImage: (userData.photoURL?.isEmpty ?? true)
+                        backgroundImage: (UserDataService().userdata?.photoURL.isEmpty ?? true)
                             ? AssetImage(picPROFILE)
-                            : NetworkImage(userData.photoURL!) as ImageProvider,
+                            : NetworkImage(UserDataService().userdata!.photoURL) as ImageProvider,
                         radius: 50,
                       ),
                     ),
@@ -579,16 +582,16 @@ class _HomePageState extends State<HomePage> {
               ),
               child: TextButton(
                 child: Text(
-                  userData.isLoggedIn ? 'Log Out' : 'Log In',
+                  UserDataService().userdata!.isLoggedIn ? 'Log Out' : 'Log In',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                   ),
                 ),
                 onPressed: () {
-                  userData.isLoggedIn
+                  UserDataService().userdata!.isLoggedIn
                       ? myMessageBox(context, "Already logged in")
-                      : showLoginScreen(context, userData);
+                      : showLoginScreen(context);
                 },
               ),
             ),
@@ -606,7 +609,7 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: APP_BAR_COLOR,
         title: MyAppbarTitle('GeoFence V1.0'),
         actions: [
-          Consumer2<UserData, SettingsService>(
+          Consumer2<UserDataService, SettingsService>(
             builder: (context, userData, settings, child) {
 
               if (settings.isLoading) {
@@ -630,7 +633,7 @@ class _HomePageState extends State<HomePage> {
                           if (_user != null) {
                             GlobalMsg.show("Login","Already logged in");
                           } else {
-                            showLoginScreen(context, userData);
+                            showLoginScreen(context);
                           }
                         },
 
@@ -659,7 +662,7 @@ class _HomePageState extends State<HomePage> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => SettingsPage(userId: userData.userID),
+                            builder: (context) => SettingsPage(userId: UserDataService().userdata!.userID),
                           ),
                         );
                       },
@@ -682,7 +685,7 @@ class _HomePageState extends State<HomePage> {
               imagePath: 'assets/track.jpg',
               header: 'Track',
               description: 'Track your vehicle as it moves inside and outside of your GeoFences',
-              widget: TrackingPage(userId: userID),
+              widget:GeoFencePage(),// TrackingPage(userId: userID),
             ),
 
             const SizedBox(height: 10),

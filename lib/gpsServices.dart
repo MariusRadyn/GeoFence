@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
+//import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geofence/utils.dart';
-import 'package:flutter_background_service_android/flutter_background_service_android.dart';
+//import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:location/location.dart' as loc;
 import 'package:permission_handler/permission_handler.dart' as perm;
 
@@ -128,111 +128,104 @@ Future<void>  getPolylinePoints(double _originLatitude, double _originLongitude,
 
 // Initialize the background service
 Future<void> initializeGpsService() async {
-  final service = FlutterBackgroundService();
-
-  // For Android, we need to create a notification channel
-  await service.configure(
-    androidConfiguration: AndroidConfiguration(
-      onStart: onStart,
-      autoStart: false,
-      isForegroundMode: true,
-      notificationChannelId: 'location_tracking_channel',
-      initialNotificationTitle: 'Location Tracking',
-      initialNotificationContent: 'Tracking your location',
-      foregroundServiceNotificationId: 888,
-    ),
-    iosConfiguration: IosConfiguration(
-      autoStart: false,
-      onForeground: onStart,
-      onBackground: onIosBackground,
-    ),
-  );
+  // final service = FlutterBackgroundService();
+  //
+  // // For Android, we need to create a notification channel
+  // await service.configure(
+  //   androidConfiguration: AndroidConfiguration(
+  //     onStart: onStart,
+  //     autoStart: false,
+  //     isForegroundMode: true,
+  //     notificationChannelId: 'location_tracking_channel',
+  //     initialNotificationTitle: 'Location Tracking',
+  //     initialNotificationContent: 'Tracking your location',
+  //     foregroundServiceNotificationId: 888,
+  //   ),
+  //   iosConfiguration: IosConfiguration(
+  //     autoStart: false,
+  //     onForeground: onStart,
+  //     onBackground: onIosBackground,
+  //   ),
+  //);
 }
 
-// iOS background handler - required but may not be needed for your case
-@pragma('vm:entry-point')
-Future<bool> onIosBackground(ServiceInstance service) async {
-  return true;
-}
 
 // Main background service function
-@pragma('vm:entry-point')
-void onStart(ServiceInstance service) async {
-  DartPluginRegistrant.ensureInitialized();
-
-   int _distanceFilter = SettingsService().settings!.logPointPerMeter;
-   bool _isVoicePromptOn = SettingsService().settings!.isVoicePromptOn;
-
-  // For Android, this needs to run in foreground with a persistent notification
-  if (service is AndroidServiceInstance) {
-    service.setAsForegroundService();
-  }
-
-  // Initialize location services
-  final location = loc.Location();
-
-  // Configure high accuracy
-  await location.changeSettings(
-    accuracy: loc.LocationAccuracy.high,
-    interval: 5000, // Update interval in milliseconds
-    distanceFilter: _distanceFilter as double, // Minimum distance in meters to trigger updates
-  );
-
-  // Request permissions if not already granted
-  bool serviceEnabled = await location.serviceEnabled();
-  if (!serviceEnabled) {
-    serviceEnabled = await location.requestService();
-    if (!serviceEnabled) {
-      return;
-    }
-  }
-
-  loc.PermissionStatus permissionStatus = await location.hasPermission();
-  if (permissionStatus == loc.PermissionStatus.denied) {
-    permissionStatus = await location.requestPermission();
-    if (permissionStatus != loc.PermissionStatus.granted) {
-      return;
-    }
-  }
-
-  // Listen for location updates
-  location.onLocationChanged.listen((loc.LocationData currentLocation) {
-    // Here you can:
-    // 1. Send location data to your server
-    // 2. Update local storage
-    // 3. Update service notification with current location
-
-    // Example: Update the notification with new coordinates
-    if (service is AndroidServiceInstance) {
-      service.setForegroundNotificationInfo(
-        title: "Tracking Location",
-        content: "Lat: ${currentLocation.latitude}, Lng: ${currentLocation.longitude}",
-      );
-    }
-
-    // Send data to your app if it's running
-    service.invoke('locationUpdate', {
-      'latitude': currentLocation.latitude,
-      'longitude': currentLocation.longitude,
-      'timestamp': DateTime.now().toString(),
-    });
-  });
-}
+// @pragma('vm:entry-point')
+// void onStart(ServiceInstance service) async {
+//   DartPluginRegistrant.ensureInitialized();
+//
+//    int _distanceFilter = SettingsService().settings!.logPointPerMeter;
+//    bool _isVoicePromptOn = SettingsService().settings!.isVoicePromptOn;
+//
+//   // For Android, this needs to run in foreground with a persistent notification
+//   if (service is AndroidServiceInstance) {
+//     service.setAsForegroundService();
+//   }
+//
+//   // Initialize location services
+//   final location = loc.Location();
+//
+//   // Configure high accuracy
+//   await location.changeSettings(
+//     accuracy: loc.LocationAccuracy.high,
+//     interval: 5000, // Update interval in milliseconds
+//     distanceFilter: _distanceFilter as double, // Minimum distance in meters to trigger updates
+//   );
+//
+//   // Request permissions if not already granted
+//   bool serviceEnabled = await location.serviceEnabled();
+//   if (!serviceEnabled) {
+//     serviceEnabled = await location.requestService();
+//     if (!serviceEnabled) {
+//       return;
+//     }
+//   }
+//
+//   loc.PermissionStatus permissionStatus = await location.hasPermission();
+//   if (permissionStatus == loc.PermissionStatus.denied) {
+//     permissionStatus = await location.requestPermission();
+//     if (permissionStatus != loc.PermissionStatus.granted) {
+//       return;
+//     }
+//   }
+//
+//   // Listen for location updates
+//   location.onLocationChanged.listen((loc.LocationData currentLocation) {
+//     // Here you can:
+//     // 1. Send location data to your server
+//     // 2. Update local storage
+//     // 3. Update service notification with current location
+//
+//     // Example: Update the notification with new coordinates
+//     if (service is AndroidServiceInstance) {
+//       service.setForegroundNotificationInfo(
+//         title: "Tracking Location",
+//         content: "Lat: ${currentLocation.latitude}, Lng: ${currentLocation.longitude}",
+//       );
+//     }
+//
+//     // Send data to your app if it's running
+//     service.invoke('locationUpdate', {
+//       'latitude': currentLocation.latitude,
+//       'longitude': currentLocation.longitude,
+//       'timestamp': DateTime.now().toString(),
+//     });
+//   });
+// }
 
 class LocationService {
-  static Future<void> requestPermissions() async {
-    // Request location permissions
-    await perm.Permission.locationAlways.request();
-    await perm.Permission.notification.request();
-  }
-
-  static Future<void> startLocationTracking() async {
-    final service = FlutterBackgroundService();
-    await service.startService();
-  }
-
-  static Future<void> stopLocationTracking() async {
-    final service = FlutterBackgroundService();
-    service.invoke('stopService');
-  }
+  // static Future<void> requestPermissions() async {
+  //   // Request location permissions
+  //   await perm.Permission.locationAlways.request();
+  //   await perm.Permission.notification.request();
+  // }
+  // static Future<void> startLocationTracking() async {
+  //   final service = FlutterBackgroundService();
+  //   await service.startService();
+  // }
+  // static Future<void> stopLocationTracking() async {
+  //   final service = FlutterBackgroundService();
+  //   service.invoke('stopService');
+  // }
 }

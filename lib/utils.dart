@@ -397,7 +397,7 @@ class myCustomTileWithPic extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final _userData = Provider.of<UserData>(context, listen: false);
+    //final _userData = Provider.of<UserData>(context, listen: false);
 
     return Padding(
       padding: const EdgeInsets.only(top: 5, bottom: 5),
@@ -430,7 +430,7 @@ class myCustomTileWithPic extends StatelessWidget {
           child:
             GestureDetector(
               onTap: (){
-                if(_userData.isLoggedIn){
+                if(UserData().isLoggedIn){
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => widget),
@@ -1196,9 +1196,10 @@ class SettingsService extends ChangeNotifier {
 // Widgets
 //---------------------------------------------------
 Widget ShowWelcomeMsg(BuildContext context) {
-  final _userData = Provider.of<UserData>(context, listen: false);
+  //final _userData = Provider.of<UserData>(context, listen: false);
+  UserData? _userData = UserDataService().userdata;
 
-  if (_userData.isLoggedIn) {
+  if (_userData!.isLoggedIn) {
     return Text(
       'Welcome ${_userData.displayName}',
       style: const TextStyle(

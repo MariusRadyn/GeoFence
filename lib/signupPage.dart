@@ -33,7 +33,8 @@ class _signupPageState extends State<signupPage> {
 
   @override
   Widget build(BuildContext context) {
-    UserData _userData = Provider.of<UserData>(context, listen: false);
+    //UserData _userData = Provider.of<UserData>(context, listen: false);
+    UserData? _userData = UserDataService().userdata;
 
     return Scaffold(
       appBar: AppBar(
@@ -120,7 +121,7 @@ class _signupPageState extends State<signupPage> {
     );
   }
 
-  void signUp(UserData _userData) async {
+  void signUp(UserData? _userData) async {
     String username = _userController.text;
     String email = _emailController.text;
     String password = _pwController.text;

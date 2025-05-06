@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
-import 'package:intl/intl.dart';
+//import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'TrackingHistoryMap.dart';
@@ -20,7 +20,7 @@ class TrackingHistoryPage extends StatefulWidget {
 class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final nrFormatter = NumberFormat('0.00', 'en_US');
+  //final nrFormatter = NumberFormat('0.00', 'en_US');
   List<Map<String, dynamic>>? _vehicles = [];
 
   @override
@@ -77,7 +77,8 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
               style: TextStyle(color: Colors.white),
             ),
             content: Text(
-              "${DateFormat('yyyy-MM-dd – kk:mm').format(session['start_time'].toDate())}\n${vehicle}\n${reg}\n\nAre you sure?",
+              "",
+              //"${DateFormat('yyyy-MM-dd – kk:mm').format(session['start_time'].toDate())}\n${vehicle}\n${reg}\n\nAre you sure?",
               style: const TextStyle(
                 color: Colors.grey,
                 fontSize: 18,
@@ -197,13 +198,13 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
                     SizedBox(height: 20,),
 
                     MyTextTileWithEditDelete(
-                      text: DateFormat('yyyy-MM-dd (kk:mm) ').format(session['start_time'].toDate()),
+                      text: "",//DateFormat('yyyy-MM-dd (kk:mm) ').format(session['start_time'].toDate()),
                       subtext:
                       'ID: ${session.id}\n'
                       'Vehicle: ${vehicleName}\n'
                       'Reg: ${vehicleReg}\n'
-                      'Inside: ${nrFormatter.format(session['distance_inside'])} km\n'
-                      'Outside: ${nrFormatter.format(session['distance_outside'])} km\n'
+                      //'Inside: ${nrFormatter.format(session['distance_inside'])} km\n'
+                      //'Outside: ${nrFormatter.format(session['distance_outside'])} km\n'
                       ,
 
                       onTapDelete: (){
