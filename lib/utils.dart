@@ -430,7 +430,7 @@ class myCustomTileWithPic extends StatelessWidget {
           child:
             GestureDetector(
               onTap: (){
-                if(UserData().isLoggedIn){
+                if(UserDataService().userdata!.isLoggedIn){
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => widget),

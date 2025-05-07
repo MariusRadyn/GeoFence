@@ -20,19 +20,27 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController2 = TextEditingController();
   final TextEditingController _userController = TextEditingController();
-  bool _isLoggedIn = false;
   String userID = "";
-  final _user = FirebaseAuth.instance.currentUser;
+  //final _user = FirebaseAuth.instance.currentUser;
   String _userPhotoURL = "";
 
   @override
   void initState() {
     super.initState();
 
-    if(_user != null) {
+    // WidgetsBinding.instance.addPostFrameCallback((_) {
+    //   if (!mounted) return;
+    //
+    //   setState(() {
+    //     _logPointPerMeterController.text = SettingsService().settings!.logPointPerMeter.toString();
+    //   });
+    //   //});
+    // });
+
+    if(UserDataService().userdata != null) {
       setState(() {
-        _isLoggedIn = true;
-        if(_user.photoURL != null) _userPhotoURL = _user.photoURL!;
+        UserDataService().userdata!.isLoggedIn = true;
+        if(UserDataService().userdata!.photoURL != null) _userPhotoURL = UserDataService().userdata!.photoURL;
       });
     }
   }
@@ -612,11 +620,14 @@ class _HomePageState extends State<HomePage> {
           Consumer2<UserDataService, SettingsService>(
             builder: (context, userData, settings, child) {
 
-              if (settings.isLoading) {
+              if (settings.isLoading && userData.isLoading) {
                 return const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Center(
-                    child: CircularProgressIndicator(color: Colors.blue,strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                        color: Colors.blue,
+                        strokeWidth: 2
+                    ),
                   ),
                 );
               }
@@ -630,7 +641,7 @@ class _HomePageState extends State<HomePage> {
                       padding: const EdgeInsets.only(right: 10, top: 2, bottom: 2),
                       child: GestureDetector(
                         onTap: () {
-                          if (_user != null) {
+                          if (userData.userdata!.isLoggedIn) {
                             GlobalMsg.show("Login","Already logged in");
                           } else {
                             showLoginScreen(context);
@@ -643,9 +654,9 @@ class _HomePageState extends State<HomePage> {
                           backgroundColor: Colors.white,
                           child: CircleAvatar(
                             radius: 18,
-                            backgroundImage: (!_isLoggedIn)
-                                ? AssetImage(picPROFILE)
-                                : NetworkImage(_userPhotoURL) as ImageProvider,
+                            backgroundImage: userData.userdata!.isLoggedIn
+                                ? NetworkImage(userData.userdata!.photoURL) as ImageProvider
+                                : AssetImage(picPROFILE),
                           ),
                         ),
                       ),
