@@ -7,6 +7,16 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Load MAP_API_KEY from local.properties
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader("UTF-8") { reader ->
+        localProperties.load(reader)
+    }
+}
+def MAP_API_KEY = localProperties.getProperty("MAP_API_KEY")
+
 android {
     namespace = "com.geofence.app"
     compileSdk = flutter.compileSdkVersion
@@ -30,6 +40,7 @@ android {
         targetSdk = 36.0
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        resValue "string", "google_maps_key", MAP_API_KEY
     }
 
     buildTypes {

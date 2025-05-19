@@ -15,16 +15,8 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool isDebug = true;
 String debugLog = '';
 
-//Variant: debugAndroidTest
-//Config: debug
-//Store: C:\Users\mradyn\.android\debug.keystore
-//Alias: AndroidDebugKey
-//MD5: 87:9C:BF:70:DB:3E:04:A9:FE:AB:34:70:06:BE:FA:A3
-//SHA1: 79:03:DE:0A:58:43:3B:9D:39:F4:48:04:CB:25:8E:48:9D:D8:79:88
-//SHA-256: C5:71:BA:B9:AC:78:67:EB:2C:D9:42:CB:38:3B:ED:9B:FB:07:01:13:81:7A:44:EB:25:26:A3:ED:AA:39:4D:54
-//Valid until: Friday, 03 October 2053
 
-const String  googleAPiKey ="AIzaSyAVDoWELQE16C0wkf7-FSzUywpEcI6sYOc";
+const String  googleAPiKey = String.fromEnvironment('MAPS_API_KEY'); //"AIzaSyAVDoWELQE16C0wkf7-FSzUywpEcI6sYOc";
 
 // keytool -keystore C:\Users\mradyn\.android\debug.keystore -list
 // PW android
