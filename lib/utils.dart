@@ -26,6 +26,9 @@ String debugLog = '';
 
 const String  googleAPiKey ="AIzaSyAVDoWELQE16C0wkf7-FSzUywpEcI6sYOc";
 
+// keytool -keystore C:\Users\mradyn\.android\debug.keystore -list
+// PW android
+
 //---------------------------------------------------
 // Constants Colors
 //---------------------------------------------------
@@ -338,9 +341,9 @@ class MyDialogWidget extends StatelessWidget {
   final String but2Text;
   final VoidCallback? onPressedBut1;
   final VoidCallback? onPressedBut2;
-  String image;
+  final String image;
 
-  MyDialogWidget({
+  const MyDialogWidget({
     super.key,
     required this.message,
     required this.header,
@@ -381,13 +384,13 @@ class MyDialogWidget extends StatelessWidget {
     );
   }
 }
-class myCustomTileWithPic extends StatelessWidget {
+class MyCustomTileWithPic extends StatelessWidget {
   final String imagePath;
   final String header;
   final String description;
   final Widget widget;
 
-  const myCustomTileWithPic({
+  const MyCustomTileWithPic({
     required this.imagePath,
     required this.header,
     this.description = "",
@@ -397,56 +400,60 @@ class myCustomTileWithPic extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    //final _userData = Provider.of<UserData>(context, listen: false);
-
     return Padding(
       padding: const EdgeInsets.only(top: 5, bottom: 5),
       child: Center(
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          height: 100,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              stops: [
-                0.1,
-                0.9
-              ],
-              colors: [
-                COLOR_BLUE,
-                Colors.black,
-              ],
+        child: GestureDetector(
+          onTap: (){
+            if(UserDataService().userdata?.isLoggedIn == true){
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => widget),
+              );
+            }else{
+              myMessageBox(context, "User not Logged In");
+            }
+          },
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.9,
+            height: 100,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: [
+                  0.1,
+                  0.9
+                ],
+                colors: [
+                  COLOR_BLUE,
+                  Colors.black,
+                ],
+              ),
+              borderRadius:const BorderRadius.only(
+                topRight: Radius.circular(20),
+                bottomRight: Radius.circular(20),
+              ),
+              border: Border.all(
+                color: Colors.grey,
+                width: 2,
+              )
             ),
-            borderRadius:const BorderRadius.only(
-              topRight: Radius.circular(20),
-              bottomRight: Radius.circular(20),
-            ),
-            border: Border.all(
-              color: Colors.grey,
-              width: 2,
-            )
-          ),
-          child:
-            GestureDetector(
-              onTap: (){
-                if(UserDataService().userdata!.isLoggedIn){
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => widget),
-                  );
-                }else{
-                  myMessageBox(context, "User not Logged In");
-                }
-              },
-              child: Row(
+            child:
+              Row(
                 children: [
                   // Image
-                  Image.asset (
-                      imagePath,
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover
+                  ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      bottomLeft: Radius.circular(20),
+                    ),
+                    child: Image.asset (
+                        imagePath,
+                        width: 100,
+                        height: 100,
+                        fit: BoxFit.cover
+                    ),
                   ),
 
                   const SizedBox(width: 10),
@@ -459,7 +466,7 @@ class myCustomTileWithPic extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         //const SizedBox(height: 5),
-                    
+
                         Text(
                           header,
                           style: const TextStyle(
@@ -495,7 +502,7 @@ class myCustomTileWithPic extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
+          ),
         ),
       ),
     );
@@ -596,9 +603,9 @@ class Grabber extends StatelessWidget {
 }
 class MyTextOption extends StatelessWidget {
   TextEditingController controller = TextEditingController();
-  String label;
-  String description;
-  String measure;
+  final String label;
+  final String description;
+  final String measure;
 
   MyTextOption({
     required this.controller,
@@ -952,7 +959,6 @@ class UserData{
     return UserData(
       displayName: map['displayName'] ?? "",
       surname: map['surname'] ?? "",
-      userID: map['userID'] ?? 0,
       email: map['email'] ?? "",
       photoURL: map['photoURL'] ?? "",
       isLoggedIn: map['isLoggedIn'] ?? false,
@@ -964,7 +970,6 @@ class UserData{
     return{
       'displayName': displayName,
       'surname': surname,
-      'userID': userID,
       'email': email,
       'photoURL': photoURL,
       'isLoggedIn': isLoggedIn,
@@ -975,7 +980,6 @@ class UserData{
   UserData copyWith({
     String? displayName,
     String? surname,
-    String? userID,
     String? email,
     String? photoURL,
     bool? isLoggedIn,
@@ -984,7 +988,6 @@ class UserData{
     return UserData(
       displayName: displayName ?? this.displayName,
       surname: surname ?? this.surname,
-      userID: userID ?? this.userID,
       email: email ?? this.email,
       photoURL: photoURL ?? this.photoURL,
       isLoggedIn: isLoggedIn ?? this.isLoggedIn,
@@ -1005,9 +1008,6 @@ class UserDataService extends ChangeNotifier {
   final _db = FirebaseFirestore.instance;
 
   Future<void> load() async {
-    if(_auth == null) return;
-    if(_db == null) return;
-
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
@@ -1020,6 +1020,7 @@ class UserDataService extends ChangeNotifier {
 
     if (doc.exists) {
       _userdata = UserData.fromMap(doc.data()?[CollectionSettings] ?? {});
+      _userdata?.userID = uid;
       notifyListeners();
     }
 
@@ -1044,7 +1045,6 @@ class UserDataService extends ChangeNotifier {
       final updated = current.copyWith(
         displayName: updates['displayName'] ?? current.displayName,
         surname: updates['surname'] ?? current.surname,
-        userID: updates['userID'] ?? current.userID,
         email: updates['email'] ?? current.email,
         emailValidated: updates['emailValidated'] ?? current.emailValidated,
         isLoggedIn: updates['isLoggedin'] ?? current.isLoggedIn,
@@ -1196,7 +1196,6 @@ class SettingsService extends ChangeNotifier {
 // Widgets
 //---------------------------------------------------
 Widget ShowWelcomeMsg(BuildContext context) {
-  //final _userData = Provider.of<UserData>(context, listen: false);
   UserData? _userData = UserDataService().userdata;
 
   if (_userData!.isLoggedIn) {

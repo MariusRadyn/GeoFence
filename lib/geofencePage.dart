@@ -53,8 +53,11 @@ class _GeoFencePageState extends State<GeoFencePage> {
   @override
   void initState() {
     super.initState();
-    _loadGeoFences(context);
-    _getLocation();
+
+    if(mounted){
+      _loadGeoFences();
+      _getLocation();
+    }
   }
 
   @override
@@ -91,8 +94,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
         );
     }
   }
-  Future<void> _loadGeoFences(BuildContext context) async {
-    //final _userData = Provider.of<UserData>(context, listen: false);
+  Future<void> _loadGeoFences() async {
     UserData? _userData = UserDataService().userdata;
 
     setState(() {
@@ -103,9 +105,9 @@ class _GeoFencePageState extends State<GeoFencePage> {
     try {
       final userId = _userData!.userID;// firebaseAuthService. _auth.currentUser!.uid;
       final geoFencesSnapshot = await firestore
-          .collection('users')
+          .collection(CollectionUsers)
           .doc(userId)
-          .collection('geofences')
+          .collection(CollectionGeoFences)
           .get();
 
       if (geoFencesSnapshot.docs.isNotEmpty) {
@@ -148,16 +150,16 @@ class _GeoFencePageState extends State<GeoFencePage> {
       }
 
       // Focus map on user's location if available
-      final userDoc = await firestore.collection('users').doc(userId).get();
-      if (userDoc.exists && userDoc.data()!.containsKey('location')) {
-        final location = userDoc.data()!['location'] as GeoPoint;
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLng(LatLng(location.latitude, location.longitude)),
-        );
-      }
+      // final userDoc = await firestore.collection(CollectionUsers).doc(userId).get();
+      // if (userDoc.exists && userDoc.data()!.containsKey('location')) {
+      //   final location = userDoc.data()!['location'] as GeoPoint;
+      //   _mapController?.animateCamera(
+      //     CameraUpdate.newLatLng(LatLng(location.latitude, location.longitude)),
+      //   );
+      // }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading geo fences: $e')),
+        SnackBar(content: Text('Error loading geofences: $e')),
       );
     } finally {
       setState(() {
@@ -298,7 +300,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
 
               Navigator.pop(context);
               await _saveGeoFenceToFirebase(context, _geoFenceNameController.text);
-              await _loadGeoFences(context);
+              await _loadGeoFences();
 
               ScaffoldMessenger.of(context).hideCurrentSnackBar();
               ScaffoldMessenger.of(context).showSnackBar(
@@ -461,7 +463,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
         );
 
         // Reload all geo fences
-        await _loadGeoFences(context);
+        await _loadGeoFences();
 
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -576,7 +578,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
             iconColor: Colors.white,
             textColor: Colors.white,
             onTap: () => {
-              _loadGeoFences(context),
+              _loadGeoFences(),
             },
           ),
           const SizedBox(height: 5),
@@ -647,7 +649,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
             iconColor: Colors.white,
             textColor: Colors.white,
             onTap: () => {
-              _loadGeoFences(context),
+              _loadGeoFences(),
             },
           ),
 
@@ -734,7 +736,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
             iconColor: Colors.white,
             textColor: Colors.white,
             onTap: () => {
-              _loadGeoFences(context),
+              _loadGeoFences(),
             },
           ),
           const SizedBox(height: 5),
@@ -939,6 +941,15 @@ class _GeoFencePageState extends State<GeoFencePage> {
             child: Stack(
               children: [
 
+                // Loading
+                if (_isLoading)
+                  Container(
+                    color: Colors.black,
+                    child: const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+
                 GoogleMap(
                   initialCameraPosition: _initialPosition,
                   myLocationEnabled: true,
@@ -958,15 +969,6 @@ class _GeoFencePageState extends State<GeoFencePage> {
 
                 if(_isBotScrolDrawerVisible)
                   EditFenceBottomScrollDraw(),
-
-                // Loading
-                if (_isLoading)
-                  Container(
-                    color: Colors.black.withOpacity(0.3),
-                    child: const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
               ],
             ),
           ),

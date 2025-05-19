@@ -129,8 +129,8 @@ class _signupPageState extends State<signupPage> {
     User? user = await _auth.fireAuthCreateUser(context, email, password);
 
     if (user != null) {
-      _userData.userID = user.uid;
-      _userData.displayName = username;
+      _userData?.userID = user.uid;
+      _userData?.displayName = username;
 
       printMsg('User created successfully');
 

@@ -17,7 +17,7 @@ Future<void> main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    //await initializeGpsService();
+    await initializeGpsService();
 
     // Web app
     //if(kIsWeb){
@@ -54,18 +54,13 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        //navigatorKey: navigatorKey,
+        navigatorKey: navigatorKey,
         //color: COLOR_BLACK_LIGHT,
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primaryColor: Colors.blueGrey,
         ),
         home: SplashScreen(),
-      // Scaffold(
-      //   body: Center(
-      //     child:  Text("Test")
-      //   ),
-      // )
     );
   }
 }

@@ -3,7 +3,7 @@
 // This file is generated from template in file `flutter_tools/lib/src/flutter_plugins.dart`.
 //
 
-// @dart = 3.6
+// @dart = 3.3
 
 import 'dart:io'; // flutter_ignore: dart_io_import.
 import 'package:geocoding_android/geocoding_android.dart';

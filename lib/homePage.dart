@@ -1,12 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:geofence/GeofencePage.dart';
-import 'package:geofence/SettingsPage.dart';
-import 'package:geofence/TrackingHistoryPage.dart';
+import 'package:geofence/geofencePage.dart';
+import 'package:geofence/settingsPage.dart';
+import 'package:geofence/trackingHistoryPage.dart';
 //import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
-import 'VehiclesPage.dart';
+import 'vehiclesPage.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -20,27 +20,14 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController2 = TextEditingController();
   final TextEditingController _userController = TextEditingController();
-  String userID = "";
-  //final _user = FirebaseAuth.instance.currentUser;
-  String _userPhotoURL = "";
 
   @override
   void initState() {
     super.initState();
 
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   if (!mounted) return;
-    //
-    //   setState(() {
-    //     _logPointPerMeterController.text = SettingsService().settings!.logPointPerMeter.toString();
-    //   });
-    //   //});
-    // });
-
     if(UserDataService().userdata != null) {
       setState(() {
         UserDataService().userdata!.isLoggedIn = true;
-        if(UserDataService().userdata!.photoURL != null) _userPhotoURL = UserDataService().userdata!.photoURL;
       });
     }
   }
@@ -641,9 +628,14 @@ class _HomePageState extends State<HomePage> {
                       padding: const EdgeInsets.only(right: 10, top: 2, bottom: 2),
                       child: GestureDetector(
                         onTap: () {
-                          if (userData.userdata!.isLoggedIn) {
+                          if (userData.userdata != null){
+                           if( userData.userdata!.isLoggedIn) {
                             GlobalMsg.show("Login","Already logged in");
                           } else {
+                            showLoginScreen(context);
+                            }
+                          }
+                          else{
                             showLoginScreen(context);
                           }
                         },
@@ -654,7 +646,7 @@ class _HomePageState extends State<HomePage> {
                           backgroundColor: Colors.white,
                           child: CircleAvatar(
                             radius: 18,
-                            backgroundImage: userData.userdata!.isLoggedIn
+                            backgroundImage: userData.userdata?.isLoggedIn == true
                                 ? NetworkImage(userData.userdata!.photoURL) as ImageProvider
                                 : AssetImage(picPROFILE),
                           ),
@@ -692,7 +684,7 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 50),
 
             // Tiles
-            myCustomTileWithPic(
+            MyCustomTileWithPic(
               imagePath: 'assets/track.jpg',
               header: 'Track',
               description: 'Track your vehicle as it moves inside and outside of your GeoFences',
@@ -701,7 +693,7 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 10),
 
-            const myCustomTileWithPic(
+            const MyCustomTileWithPic(
               imagePath: 'assets/geofence.jpg',
               header: 'GeoFence',
               description: 'Set all the fence perimeters where you would like to record refundable tax rebate',
@@ -710,7 +702,7 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 10),
 
-            const myCustomTileWithPic(
+            const MyCustomTileWithPic(
               imagePath: 'assets/red_pickup2.png',
               header: 'Vehicles',
               description: 'Add all the vehicles in your fleet',
@@ -719,7 +711,7 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 10),
 
-            const myCustomTileWithPic(
+            const MyCustomTileWithPic(
               imagePath: 'assets/report.png',
               header: 'Tracking History',
               description: 'View tracking history',
