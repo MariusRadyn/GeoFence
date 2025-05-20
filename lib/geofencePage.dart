@@ -10,6 +10,8 @@ import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart';
 
 const double DRAW_WIDTH = 60;
+double _sheetPosition = 0.25;
+final double _dragSensitivity = 600;
 
 class GeoFencePage extends StatefulWidget {
   const GeoFencePage({super.key});
@@ -25,6 +27,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
   final Set<Marker> _geoMarkers = {};
   final List<LatLng> _currentPolygonPoints = [];
   final TextEditingController _geoFenceNameController = TextEditingController();
+  final DraggableScrollableController _controller = DraggableScrollableController();
   bool _isDrawing = false;
   bool _isEditing = false;
   bool _isSaving = false;
@@ -223,6 +226,13 @@ class _GeoFencePageState extends State<GeoFencePage> {
       fenceData.points = points;
       _appBarTitle = 'Fence: $name';
     });
+
+    _controller.animateTo(
+      0.25,
+      duration: Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+
   }
   void _nextFence() {
     if (_markers.length == 0) return;
@@ -760,18 +770,17 @@ class _GeoFencePageState extends State<GeoFencePage> {
           : SizedBox(), // Empty container when hidden
     );
   }
-  Widget EditFenceBottomScrollDraw(){
-    double _sheetPosition = 0.25;
-    final double _dragSensitivity = 600;
-    //final DraggableScrollableController _controller = DraggableScrollableController();
+  Widget FenceBottomScrollDraw(){
+
 
     return DraggableScrollableSheet(
       snap: true,
       initialChildSize: _sheetPosition,
-      minChildSize: 0.25, // Minimum height
+      minChildSize: 0, // Minimum height
       maxChildSize: 0.9, // Can be dragged to full screen
       snapSizes: [0.25, 0.9], // Snap points
       expand: true,
+      controller: _controller,
       builder: (BuildContext context, ScrollController scrollController) {
         return Container(
           decoration: const BoxDecoration(
@@ -804,6 +813,12 @@ class _GeoFencePageState extends State<GeoFencePage> {
                 isOnDesktopAndWeb: isOnDesktop(),
 
                 onVerticalDragUpdate: (DragUpdateDetails details) {
+                  _controller.animateTo(
+                      _sheetPosition,
+                      duration: Duration(milliseconds: 300),
+                      curve: Curves.easeInOut
+                  );
+
                   setState(() {
                     _sheetPosition -= details.delta.dy / _dragSensitivity;
                     if (_sheetPosition < 0.25) {
@@ -851,7 +866,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
                                   iconColor: Colors.blue,
                                   textColor: Colors.black,
                                   iconSize: 20,
-                                  onTap: () => {
+                                  onTap: () {
 
                                   },
                                 ),
@@ -864,12 +879,12 @@ class _GeoFencePageState extends State<GeoFencePage> {
                                   iconColor: Colors.red,
                                   textColor: Colors.black,
                                   iconSize: 20,
-                                  onTap: () => {
+                                  onTap: () {
                                     _deleteGeoFence(
                                       context,
                                         fenceData.firestoreId,
                                         fenceData.name,
-                                    ),
+                                    );
                                   },
                                 ),
                               ],
@@ -894,8 +909,8 @@ class _GeoFencePageState extends State<GeoFencePage> {
 
                             Padding(
                               padding: const EdgeInsets.only(left: 8.0),
-                              child: ListView(
-                                shrinkWrap: true,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: fenceData.points.isEmpty
                                     ? [Text('No Points')]
                                     : GetFencePoints()
@@ -955,7 +970,6 @@ class _GeoFencePageState extends State<GeoFencePage> {
                   myLocationEnabled: true,
                   myLocationButtonEnabled: true,
                   markers: _markers,
-                  //polylines: _polylines,
                   polygons: _polygons,
                   mapType: _isStreetView ? MapType.satellite : MapType.normal,
                   onMapCreated: (controller) {
@@ -968,7 +982,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
                 ),
 
                 if(_isBotScrolDrawerVisible)
-                  EditFenceBottomScrollDraw(),
+                  FenceBottomScrollDraw(),
               ],
             ),
           ),
