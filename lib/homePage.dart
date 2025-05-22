@@ -212,7 +212,7 @@ class _HomePageState extends State<HomePage> {
       if (user != null) {
 
         //_userData.update(user);
-        UserDataService().update(UserData(
+        UserDataService().create(UserData(
           displayName: user.displayName ?? "",
           email: user.email ?? "",
           emailValidated: user.emailVerified ?? false,
@@ -435,8 +435,7 @@ class _HomePageState extends State<HomePage> {
       if (user != null) {
         //firebaseAuthService.updateDisplayName("Marius");
 
-        UserDataService().update(UserData(
-            //displayName: "Marius",
+        UserDataService().create(UserData(
             displayName: user.displayName ?? "",
             email: _emailController.text,
             emailValidated: user.emailVerified ?? false,
@@ -464,7 +463,7 @@ class _HomePageState extends State<HomePage> {
 
       if (userCred != null && userCred.user != null && userCred.user!.emailVerified) {
 
-        UserDataService().update(UserData(
+        UserDataService().create(UserData(
           displayName:  userCred.user?.displayName ?? "",
           email: userCred.user?.email ?? "",
           emailValidated: userCred.user?.emailVerified ?? false,
@@ -623,6 +622,7 @@ class _HomePageState extends State<HomePage> {
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+
                     // Profile Pic
                     Padding(
                       padding: const EdgeInsets.only(right: 10, top: 2, bottom: 2),
@@ -630,7 +630,11 @@ class _HomePageState extends State<HomePage> {
                         onTap: () {
                           if (userData.userdata != null){
                            if( userData.userdata!.isLoggedIn) {
-                            GlobalMsg.show("Login","Already logged in");
+                             UserDataService().logout();
+                             GlobalMsg.show("Login","User logged Out");
+                             setState(() {
+                               userData.userdata!.isLoggedIn = false;
+                             });
                           } else {
                             showLoginScreen(context);
                             }

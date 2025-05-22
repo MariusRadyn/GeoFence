@@ -17,6 +17,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   TextEditingController _logPointPerMeterController = TextEditingController();
+  TextEditingController _rebateValueController = TextEditingController();
   final FlutterTts _flutterTts = FlutterTts();
   bool _didInitListeners = false;
 
@@ -31,6 +32,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
         setState(() {
           _logPointPerMeterController.text = SettingsService().settings!.logPointPerMeter.toString();
+          _rebateValueController.text = SettingsService().settings!.rebateValuePerLiter.toString();
         });
       //});
     });
@@ -126,7 +128,10 @@ class _SettingsPageState extends State<SettingsPage> {
                    size: 30
                  ),
                  onPressed: () {
-                   settings.updateFields({SettingLogPointPerMeter: int.parse(_logPointPerMeterController.text)});
+                   settings.updateFields({
+                     SettingLogPointPerMeter: int.parse(_logPointPerMeterController.text),
+                     SettingRebateValue: double.parse(_rebateValueController.text),
+                   });
                    GlobalSnackBar.show("Saved");
                  },
               ),
@@ -137,10 +142,22 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               const SizedBox(height: 20),
 
+              // Rebate Value
+              MyTextOption(
+                controller: _rebateValueController,
+                label: 'Rebate Value',
+                description: "Rebate value per kilometer",
+                prefix: 'R',
+              ),
+
+              const SizedBox(height: 10),
+
+              // logPointPerMeter
               MyTextOption(
                 controller: _logPointPerMeterController,
                 label: 'Log Location Interval',
                 description: "Record a map location everytime you move this far in meters",
+                suffix: 'm',
               ),
 
               const SizedBox(height: 10),
@@ -156,8 +173,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     //  _isVoicePromptOn = value;
                     //}),
                     settings.updateFields({SettingIsVoicePromptOn: value}),
-                    //settingsProvider.UpdateSetting(
-                    //    widget.userId, SettingIsVoicePromptOn, value),
 
                     if(value) {
                       _flutterTts.speak('Voice Prompt enabled'),

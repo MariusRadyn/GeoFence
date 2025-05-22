@@ -153,13 +153,13 @@ class _GeoFencePageState extends State<GeoFencePage> {
       }
 
       // Focus map on user's location if available
-      // final userDoc = await firestore.collection(CollectionUsers).doc(userId).get();
-      // if (userDoc.exists && userDoc.data()!.containsKey('location')) {
-      //   final location = userDoc.data()!['location'] as GeoPoint;
-      //   _mapController?.animateCamera(
-      //     CameraUpdate.newLatLng(LatLng(location.latitude, location.longitude)),
-      //   );
-      // }
+      final userDoc = await firestore.collection(CollectionUsers).doc(userId).get();
+      if (userDoc.exists && userDoc.data()!.containsKey('location')) {
+        final location = userDoc.data()!['location'] as GeoPoint;
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLng(LatLng(location.latitude, location.longitude)),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading geofences: $e')),
@@ -943,6 +943,8 @@ class _GeoFencePageState extends State<GeoFencePage> {
             onPressed: () {
               setState(() {
                 _isDrawerVisible = !_isDrawerVisible;
+                _isBotScrolDrawerVisible = false;
+                _setDrawerPointer(_showMainDrawer);
               });
             },
           ),

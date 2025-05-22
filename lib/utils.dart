@@ -63,12 +63,16 @@ const CollectionGeoFences = 'geofences';
 const CollectionTrackingSessions = 'tracking_sessions';
 const CollectionLocations = 'locations';
 const CollectionVehicles = 'vehicles';
-const CollectionSettings = 'settings';
+
+const FieldsSettings = 'settings';
+const FieldsUserData = 'userdata';
 
 const DocAppSettings = 'app_settings';
 
 const SettingIsVoicePromptOn = 'isVoicePromptOn';
 const SettingLogPointPerMeter = 'logPointPerMeter';
+const SettingRebateValue = 'rebateValuePerLiter';
+const SettingDieselPrice = 'dieselPrice';
 
 
 //---------------------------------------------------
@@ -422,9 +426,8 @@ class MyCustomTileWithPic extends StatelessWidget {
                   Colors.black,
                 ],
               ),
-              borderRadius:const BorderRadius.only(
-                topRight: Radius.circular(20),
-                bottomRight: Radius.circular(20),
+              borderRadius:const BorderRadius.all(
+                Radius.circular(20),
               ),
               border: Border.all(
                 color: Colors.grey,
@@ -598,12 +601,16 @@ class MyTextOption extends StatelessWidget {
   final String label;
   final String description;
   final String measure;
+  final String prefix;
+  final String suffix;
 
   MyTextOption({
     required this.controller,
     required this.label,
     this.description = "",
     this.measure = "",
+    this.prefix = "",
+    this.suffix = ""
   });
 
   @override
@@ -662,13 +669,18 @@ class MyTextOption extends StatelessWidget {
               child: TextFormField(
                 controller: controller,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: '0',
                   border: OutlineInputBorder(),
-                  suffixText: "m",
-                  suffixStyle: TextStyle(
+                  suffixText: suffix,
+                  prefixText: prefix,
+                  prefixStyle: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                  ),
+                    suffixStyle: TextStyle(
                     color: Colors.white,
-                    fontSize: 18
+                    fontSize: 18,
                   )
                 ),
 
@@ -780,6 +792,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
   final Function? onTapEdit;
   final Function? onTapDelete;
   final Function? onTapTile;
+  final Function? onTapReport;
 
   const MyTextTileWithEditDelete({
     required this.text,
@@ -787,6 +800,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
     this.onTapEdit,
     this.onTapDelete,
     this.onTapTile,
+    this.onTapReport,
     super.key
   });
 
@@ -853,6 +867,14 @@ class MyTextTileWithEditDelete extends StatelessWidget {
                   IconButton(
                     icon: Icon(Icons.delete, color: Colors.red,),
                     onPressed: () => onTapDelete!(),
+                    iconSize: 25,
+                    constraints: BoxConstraints(),
+                  ),
+
+                if(onTapReport != null)
+                  IconButton(
+                    icon: Icon(Icons.list_alt, color: Colors.blue,),
+                    onPressed: () => onTapReport!(),
                     iconSize: 25,
                     constraints: BoxConstraints(),
                   ),
@@ -1011,20 +1033,20 @@ class UserDataService extends ChangeNotifier {
         .get();
 
     if (doc.exists) {
-      _userdata = UserData.fromMap(doc.data()?[CollectionSettings] ?? {});
+      _userdata = UserData.fromMap(doc.data()?[FieldsUserData] ?? {});
       _userdata?.userID = uid;
       notifyListeners();
     }
 
     isLoading = false;
   }
-  Future<void> update(UserData newUserData) async {
+  Future<void> create(UserData newUserData) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
     _userdata = newUserData;
     await _db.collection(CollectionUsers).doc(uid).update({
-      CollectionSettings : newUserData.toMap(),
+      FieldsUserData : newUserData.toMap(),
     });
 
     notifyListeners();
@@ -1047,9 +1069,18 @@ class UserDataService extends ChangeNotifier {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
 
-      await _db.collection(CollectionUsers).doc(uid).update({
-        CollectionSettings: updated.toMap(),
+      //await _db.collection(CollectionUsers).doc(uid).update({
+      //  FieldsSettings: updated.toMap(),
+      //});
+
+      final Map<String, dynamic> nestedUpdates = {};
+      updated.toMap().forEach((key, value) {
+        if (updates.containsKey(key)) {
+          nestedUpdates['$FieldsUserData.$key'] = value;
+        }
       });
+
+      await _db.collection(CollectionUsers).doc(uid).update(nestedUpdates);
 
       notifyListeners();
     } catch (e) {
@@ -1139,23 +1170,23 @@ class SettingsService extends ChangeNotifier {
         .get();
 
     if (doc.exists) {
-      _settings = Settings.fromMap(doc.data()?[CollectionSettings] ?? {});
+      _settings = Settings.fromMap(doc.data()?[FieldsSettings] ?? {});
       notifyListeners();
     }
 
     isLoading = false;
   }
-  Future<void> update(Settings newSettings) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    _settings = newSettings;
-    await _db.collection(CollectionUsers).doc(uid).update({
-      CollectionSettings : newSettings.toMap(),
-    });
-
-    notifyListeners();
-  }
+  // Future<void> update(Settings newSettings) async {
+  //   final uid = FirebaseAuth.instance.currentUser?.uid;
+  //   if (uid == null) return;
+  //
+  //   _settings = newSettings;
+  //   await _db.collection(CollectionUsers).doc(uid).update({
+  //     CollectionSettings : newSettings.toMap(),
+  //   });
+  //
+  //   notifyListeners();
+  // }
   Future<void> updateFields(Map<String, dynamic> updates) async {
     try {
       final current = _settings;
@@ -1173,9 +1204,13 @@ class SettingsService extends ChangeNotifier {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
 
-      await _db.collection(CollectionUsers).doc(uid).update({
-        CollectionSettings: updated.toMap(),
+      final Map<String, dynamic> nestedUpdates = {};
+      updated.toMap().forEach((key, value) {
+        if (updates.containsKey(key)) {
+          nestedUpdates['$FieldsSettings.$key'] = value;
+        }
       });
+      await _db.collection(CollectionUsers).doc(uid).update(nestedUpdates);
 
       notifyListeners();
     } catch (e) {

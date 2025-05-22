@@ -7,6 +7,7 @@ import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'trackingHistoryMap.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class TrackingHistoryPage extends StatefulWidget {
   const TrackingHistoryPage({super.key});
@@ -20,6 +21,12 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final nrFormatter = NumberFormat('0.00', 'en_US');
   List<Map<String, dynamic>>? _vehicles = [];
+  DateTime _selectedDateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  DateTime _selectedDateTo = DateTime(DateTime.now().year, DateTime.now().month + 1, 0, );
+  double _totalRebate = 0.0;
+  double _totalKM = 0.0;
+  double _totalLiters = 0.0;
+
 
   @override
   void initState() {
@@ -142,6 +149,107 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
       orElse: () => {'registrationNumber': 'Unknown'}, // Default if not found
     )['registrationNumber'] as String;
   }
+  double? _getVehicleFuelConsumptiomById(String vehicleId) {
+    dynamic fuel = _vehicles?.firstWhere(
+          (vehicle) => vehicle['vehicle_id'] == vehicleId,
+      orElse: () => {'fuelConsumption': 0}, // Default if not found
+    )['fuelConsumption'];
+
+    if(fuel is double){
+      return fuel;
+    }
+    else if(fuel is int){
+      return fuel.toDouble();
+    }
+    else{
+      throw Exception("Value from firestore not double or int");
+    }
+  }
+  Future<void> _pickDateFrom() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDateFrom ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+
+    if (picked != null && picked != _selectedDateFrom) {
+      setState(() {
+        _selectedDateFrom = picked;
+      });
+    }
+  }
+  Future<void> _pickDateTo() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDateTo ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+
+    if (picked != null && picked != _selectedDateTo) {
+      setState(() {
+        _selectedDateTo = picked;
+      });
+    }
+  }
+  Future<void> _sendReportToEmail (String email) async{
+    final subject = Uri.encodeComponent('Tracking Report');
+    final body = Uri.encodeComponent('Here is your requested tracking report.');
+    final uri = Uri.parse('mailto:$email?subject=$subject&body=$body');
+
+    if (await canLaunchUrl(uri)) {
+    await launchUrl(uri);
+    } else {
+    throw 'Could not launch $uri';
+    }
+    GlobalSnackBar.show('Email sent');
+  }
+  void emailReport(BuildContext context) {
+    final TextEditingController _emailTextController = TextEditingController();
+
+    showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(
+              color: Colors.blue, // Border color
+              width: 2, // Border width
+            ),
+          ),
+          backgroundColor: APP_TILE_COLOR,
+          shadowColor: Colors.black,
+          title: Text('Email Address',
+            style: TextStyle(color: Colors.white)),
+          content: TextField(
+            controller: _emailTextController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: InputDecoration(
+              labelText: 'Enter Email Address',
+              hintText: 'example@email.com'
+            ),
+            style: TextStyle(color: Colors.grey),
+          ),
+          actions: [
+            TextButton(
+              child:
+              Text('Cancel',style:
+                TextStyle(color: Colors.grey)),
+              onPressed: () => Navigator.pop(context),
+            ),
+            TextButton(
+              child: Text('Send',
+                style: TextStyle(color: Colors.grey),),
+              onPressed: (){
+                Navigator.pop(context);
+                _sendReportToEmail(_emailTextController.text.trim());
+              }
+            ),
+          ],
+        )
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +259,40 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
       appBar: AppBar(
         backgroundColor: APP_BAR_COLOR,
         foregroundColor: Colors.white,
-        title: MyAppbarTitle('History'),
+
+        actions: [
+          Row(
+            children: [
+              // Date from
+              Text('${_selectedDateFrom!.toLocal().toString().split(' ')[0]}'),
+              IconButton(
+                icon: const Icon(
+                  Icons.date_range,
+                  size: 30,
+                  color: Colors.grey,
+                ),
+                onPressed: () {
+                  _pickDateFrom();
+                },
+              ),
+
+              SizedBox(width: 2),
+
+              // Date To
+              Text('${_selectedDateTo!.toLocal().toString().split(' ')[0]}'),
+              IconButton(
+                icon: const Icon(
+                  Icons.date_range,
+                  size: 30,
+                  color: Colors.grey,
+                ),
+                onPressed: () {
+                  _pickDateTo();
+                },
+              ),
+            ],
+          )
+        ],
       ),
       body: Container(
         color: APP_BACKGROUND_COLOR,
@@ -160,6 +301,8 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
               .collection(CollectionUsers)
               .doc(_auth.currentUser!.uid)
               .collection(CollectionTrackingSessions)
+              .where('start_time', isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedDateFrom))
+              .where('start_time', isLessThanOrEqualTo: Timestamp.fromDate(_selectedDateTo))
               .orderBy('start_time', descending: true)
               .snapshots(),
 
@@ -181,48 +324,97 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
               );
             }
 
+            // Calculate totals
+            for (var session in sessions) {
+              final vehicleId = session['vehicle_id'];
+              final distanceInside = (session['distance_inside'] ?? 0).toDouble();
+              final vehicleConsumption = _getVehicleFuelConsumptiomById(vehicleId) ?? 0;
+              final rebate = SettingsService().settings?.rebateValuePerLiter ?? 0;
+              double litersUsed = 0.0;
+              double thisRebate = 0;
+
+              if (vehicleConsumption > 0) {
+                litersUsed = distanceInside / vehicleConsumption;
+                thisRebate = litersUsed * rebate;
+              }
+
+              _totalRebate += thisRebate;
+              _totalKM += distanceInside;
+              _totalLiters += litersUsed;
+            }
+
             return _vehicles == null
                 ? Center(child: CircularProgressIndicator())
-                :   ListView.builder(
+                :
 
-                itemCount: sessions.length,
-                itemBuilder: (context, index) {
-                var session = sessions[index];
-                String vehicleName = _getVehicleNameById(session['vehicle_id']) ?? "Unknown Vehicle";
-                String vehicleReg = _getVehicleRegById(session['vehicle_id']) ?? "Unknown";
+            Column(
+              children: [
+                MyTextTileWithEditDelete(
+                    text: 'Total',
+                    subtext:
+                        'Total Rebate: R${nrFormatter.format(_totalRebate)}\n'
+                        'Total Distance: ${nrFormatter.format(_totalKM)}km\n'
+                        'Total Liters: ${nrFormatter.format(_totalLiters)}L',
+                    onTapReport: (){
+                     emailReport(context);
+                    },
+                ),
+                Expanded(
+                      child: ListView.builder(
 
-                return Column(
-                  children: [
-                    SizedBox(height: 20,),
+                      itemCount: sessions.length,
+                      itemBuilder: (context, index) {
 
-                    MyTextTileWithEditDelete(
-                      text: DateFormat('yyyy-MM-dd (kk:mm) ').format(session['start_time'].toDate()),
-                      subtext:
-                      'ID: ${session.id}\n'
-                      'Vehicle: ${vehicleName}\n'
-                      'Reg: ${vehicleReg}\n'
-                      'Inside: ${nrFormatter.format(session['distance_inside'])} km\n'
-                      'Outside: ${nrFormatter.format(session['distance_outside'])} km\n'
-                      ,
+                        var session = sessions[index];
+                        String vehicleName = _getVehicleNameById(session['vehicle_id']) ?? "Unknown Vehicle";
+                        String vehicleReg = _getVehicleRegById(session['vehicle_id']) ?? "Unknown";
+                        double vehicleConsumption = _getVehicleFuelConsumptiomById(session['vehicle_id']) ?? 0;
+                        double rebate = SettingsService().settings?.rebateValuePerLiter ?? 0;
+                        double insideKM = session['distance_inside'];
+                        double outsideKM = session['distance_outside'];
+                        double litersUsed = 0.0;
 
-                      onTapDelete: (){
-                        _deleteSession(session, vehicleName, vehicleReg);
-                      } ,
+                        if(vehicleConsumption > 0){
+                          litersUsed =  insideKM / vehicleConsumption;
+                        }
 
-                      onTapTile: (){
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => TrackingHistoryMap(
-                            userId: _auth.currentUser?.uid,
-                            trackSessionId: session.id,
-                          )),
-                        );
-                      },
+                          return Column(
+                            children: [
+                              SizedBox(height: 20),
+
+                              MyTextTileWithEditDelete(
+                                text: DateFormat('yyyy-MM-dd (kk:mm) ').format(session['start_time'].toDate()),
+                                subtext:
+                                  //'ID: ${session.id}\n'
+                                  'Vehicle: ${vehicleName}\n'
+                                  'Reg: ${vehicleReg}\n'
+                                  'Inside: ${nrFormatter.format(insideKM)} km\n'
+                                  'Outside: ${nrFormatter.format(outsideKM)} km\n'
+                                  'Liters Used: ${nrFormatter.format(litersUsed)} L\n'
+                                  'Rebate: R${nrFormatter.format(litersUsed * rebate)}\n',
+
+                                onTapDelete: (){
+                                    _deleteSession(session, vehicleName, vehicleReg);
+                                  } ,
+
+                                  onTapTile: (){
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => TrackingHistoryMap(
+                                        userId: _auth.currentUser?.uid,
+                                        trackSessionId: session.id,
+                                      )),
+                                    );
+                                  },
+                              ),
+
+                              SizedBox(height: 1)
+                            ],
+                          );
+                        },
+                                  ),
                     ),
-                    SizedBox(height: 1,)
-                  ],
-                );
-              },
+              ],
             );
           },
         ),
