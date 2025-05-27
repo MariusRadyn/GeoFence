@@ -198,11 +198,11 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
     final body = Uri.encodeComponent('Here is your requested tracking report.');
     final uri = Uri.parse('mailto:$email?subject=$subject&body=$body');
 
-    if (await canLaunchUrl(uri)) {
-    await launchUrl(uri);
-    } else {
-    throw 'Could not launch $uri';
-    }
+    // if (await canLaunchUrl(uri)) {
+    // await launchUrl(uri);
+    // } else {
+    // throw 'Could not launch $uri';
+    // }
     GlobalSnackBar.show('Email sent');
   }
   void emailReport(BuildContext context) {
