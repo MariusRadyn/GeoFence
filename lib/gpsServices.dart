@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
-//import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geofence/utils.dart';
-//import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:location/location.dart' as loc;
 import 'package:permission_handler/permission_handler.dart' as perm;
+
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_background_service_android/flutter_background_service_android.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 Future<Position> determinePosition() async {
   bool serviceEnabled;
@@ -215,17 +217,51 @@ Future<void> initializeGpsService() async {
 // }
 
 class LocationService {
-  // static Future<void> requestPermissions() async {
-  //   // Request location permissions
-  //   await perm.Permission.locationAlways.request();
-  //   await perm.Permission.notification.request();
-  // }
-  // static Future<void> startLocationTracking() async {
-  //   final service = FlutterBackgroundService();
-  //   await service.startService();
-  // }
-  // static Future<void> stopLocationTracking() async {
-  //   final service = FlutterBackgroundService();
-  //   service.invoke('stopService');
-  // }
+  static Future<void> requestPermissions() async {
+    // Request location permissions
+    await perm.Permission.locationAlways.request();
+    await perm.Permission.notification.request();
+  }
+  Future<void> startLocationTracking() async {
+    final service = FlutterBackgroundService();
+
+    await service.configure(
+      androidConfiguration: AndroidConfiguration(
+        onStart: onStart,
+        autoStart: true,
+        isForegroundMode: true,
+        initialNotificationTitle: 'Background Service',
+        initialNotificationContent: 'Running in the background...',
+      ),
+      iosConfiguration: IosConfiguration(
+        autoStart: true,
+        onForeground: onStart,
+        //onBackground: onIosBackground,
+      ),
+    );
+
+    await service.startService();
+  }
+  static Future<void> stopLocationTracking() async {
+    final service = FlutterBackgroundService();
+    service.invoke('stopService');
+  }
+
+  void onStart(ServiceInstance service) async {
+    // Initialize FlutterLocalNotificationsPlugin
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+    if (service is AndroidServiceInstance) {
+      service.on('stopService').listen((event) {
+        service.stopSelf();
+      });
+
+      flutterLocalNotificationsPlugin.initialize(
+        const InitializationSettings(
+          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        ),
+      );
+    }
+  }
 }

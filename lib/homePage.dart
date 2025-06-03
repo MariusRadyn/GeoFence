@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/geofencePage.dart';
 import 'package:geofence/settingsPage.dart';
 import 'package:geofence/trackingHistoryPage.dart';
@@ -606,7 +607,7 @@ class _HomePageState extends State<HomePage> {
           Consumer2<UserDataService, SettingsService>(
             builder: (context, userData, settings, child) {
 
-              if (settings.isLoading && userData.isLoading) {
+              if (userData.userdata == null || (settings.isLoading && userData.isLoading)) {
                 return const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Center(
@@ -687,12 +688,12 @@ class _HomePageState extends State<HomePage> {
           children: [
             const SizedBox(height: 50),
 
-            // Tiles
+
             MyCustomTileWithPic(
               imagePath: 'assets/track.jpg',
               header: 'Track',
               description: 'Track your vehicle as it moves inside and outside of your GeoFences',
-              widget:GeoFencePage(),// TrackingPage(userId: userID),
+              widget: TrackingPage(),
             ),
 
             const SizedBox(height: 10),
