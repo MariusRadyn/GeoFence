@@ -43,6 +43,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
   int _fencePntr = 0;
   String _appBarTitle = "GeoFence";
   FenceData fenceData = FenceData();
+  bool _errorGeoFence = false;
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -81,8 +82,6 @@ class _GeoFencePageState extends State<GeoFencePage> {
 
     setState(() {
       _currentLocation = LatLng(pos.latitude, pos.longitude);
-      GlobalSnackBar.show('Got Location');
-
       _geoMarkers.add(
         Marker(
           markerId: MarkerId("myLocation"),
@@ -121,7 +120,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
               LatLng(point.latitude, point.longitude)).toList();
 
           if (polygonPoints.length >= 3) {
-            final polygonId = 'polygon_${_polygonIdCounter++}';
+            final polygonId = 'polygon_${_polygonIdCounter}';
             final markerId = 'marker_${_polygonIdCounter++}';
 
             setState(() {
@@ -161,9 +160,9 @@ class _GeoFencePageState extends State<GeoFencePage> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading geofences: $e')),
-      );
+      setState(() {
+        _errorGeoFence = true;
+      });
     } finally {
       setState(() {
         _isLoading = false;
@@ -959,7 +958,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
               children: [
 
                 // Loading
-                if (_isLoading)
+                if (_isLoading == true)
                   Container(
                     color: Colors.black,
                     child: const Center(
@@ -967,21 +966,22 @@ class _GeoFencePageState extends State<GeoFencePage> {
                     ),
                   ),
 
-                GoogleMap(
-                  initialCameraPosition: _initialPosition,
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
-                  markers: _markers,
-                  polygons: _polygons,
-                  mapType: _isStreetView ? MapType.satellite : MapType.normal,
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                    for (Marker marker in _markers) {
-                      _mapController?.showMarkerInfoWindow(marker.markerId);
-                    }
-                  },
-                  onTap: _onMapTap,
-                ),
+                if(_isLoading == false)
+                  GoogleMap(
+                    initialCameraPosition: _initialPosition,
+                    myLocationEnabled: true,
+                    myLocationButtonEnabled: true,
+                    markers: _markers,
+                    polygons: _polygons,
+                    mapType: _isStreetView ? MapType.satellite : MapType.normal,
+                    onMapCreated: (controller) {
+                      _mapController = controller;
+                      for (Marker marker in _markers) {
+                        _mapController?.showMarkerInfoWindow(marker.markerId);
+                      }
+                    },
+                    onTap: _onMapTap,
+                  ),
 
                 if(_isBotScrolDrawerVisible)
                   FenceBottomScrollDraw(),
@@ -989,8 +989,18 @@ class _GeoFencePageState extends State<GeoFencePage> {
             ),
           ),
 
-          _drawerPntr == _showMainDrawer ? MenuDrawer() : SizedBox(),
-          _drawerPntr == _showAddMarkerDrawer ? AddMarkerDrawer() : SizedBox(),
+          Visibility(
+            child: MenuDrawer(),
+            visible: _drawerPntr == _showMainDrawer,
+          ),
+
+          Visibility(
+            child: AddMarkerDrawer(),
+            visible: _drawerPntr == _showAddMarkerDrawer,
+          )
+
+          //_drawerPntr == _showMainDrawer ? MenuDrawer() : SizedBox(),
+          //_drawerPntr == _showAddMarkerDrawer ? AddMarkerDrawer() : SizedBox(),
           //_drawerPntr == _showEditFenceDrawer ? EditFenceDrawer() : SizedBox(),
         ],
       ),

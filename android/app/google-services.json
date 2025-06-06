@@ -1,0 +1,90 @@
+{
+  "project_info": {
+    "project_number": "615271668557",
+    "project_id": "geofence-23924",
+    "storage_bucket": "geofence-23924.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:615271668557:android:e934e35a4392e85ff2f504",
+        "android_client_info": {
+          "package_name": "com.geofence.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "615271668557-c7hva0pvp2jmnf9ft19b922cil6pm4uh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.geofence.app",
+            "certificate_hash": "ac995b0a0666c0f84b3a6caa47429a74626aa33b"
+          }
+        },
+        {
+          "client_id": "615271668557-4rir6g6stpgta23eok46fpf9oa6dk8cn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC0YJm6nBZvOZ5kOn9Mlaa2eKuXh2dlFOs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "615271668557-4rir6g6stpgta23eok46fpf9oa6dk8cn.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "615271668557-75r7qo9up462pb4t8e1lq8oqvkvumbni.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.geofence"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:615271668557:android:9c2cd62fb530bdbbf2f504",
+        "android_client_info": {
+          "package_name": "com.geofence.com"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "615271668557-4rir6g6stpgta23eok46fpf9oa6dk8cn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC0YJm6nBZvOZ5kOn9Mlaa2eKuXh2dlFOs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "615271668557-4rir6g6stpgta23eok46fpf9oa6dk8cn.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "615271668557-75r7qo9up462pb4t8e1lq8oqvkvumbni.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.geofence"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

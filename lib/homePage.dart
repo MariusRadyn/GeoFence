@@ -388,8 +388,6 @@ class _HomePageState extends State<HomePage> {
     required String iconPath,
     String text="",
   }) {
-
-
     return GestureDetector(
       onTap: onPressed,
       child: CircleAvatar(
@@ -607,18 +605,23 @@ class _HomePageState extends State<HomePage> {
           Consumer2<UserDataService, SettingsService>(
             builder: (context, userData, settings, child) {
 
-              if (userData.userdata == null || (settings.isLoading && userData.isLoading)) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Center(
-                    child: CircularProgressIndicator(
-                        color: Colors.blue,
-                        strokeWidth: 2
+              if (userData.userdata == null) {
+                if ((settings.isLoading && userData.isLoading)) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                          color: Colors.blue,
+                          strokeWidth: 2
+                      ),
                     ),
-                  ),
-                );
+                  );
+                }
               }
 
+              if (userData.firebaseError){
+                //GlobalSnackBar.show("Firebase Error");
+              }
               return Row(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,

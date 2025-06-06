@@ -1017,15 +1017,22 @@ class UserDataService extends ChangeNotifier {
   UserData? _userdata;
   UserData? get userdata => _userdata;
   bool isLoading = false;
+  bool firebaseError = false;
 
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
 
   Future<void> load() async {
+    var i  = FirebaseAuth.instance;
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      firebaseError = true;
+      isLoading = false;
+      return;
+    }
 
     isLoading = true;
+    firebaseError = false;
 
     final doc = await _db
         .collection(CollectionUsers)
