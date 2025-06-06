@@ -524,7 +524,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
   Widget MenuDrawer(){
     return AnimatedContainer(
       width: _isDrawerVisible ? DRAW_WIDTH : 0, // Animate width
-      duration: Duration(milliseconds: 300),
+      duration: Duration(milliseconds: 1000),
       decoration: const BoxDecoration(
         color: DRAWER_COLOR,
         borderRadius: BorderRadius.only(
@@ -990,14 +990,20 @@ class _GeoFencePageState extends State<GeoFencePage> {
           ),
 
           Visibility(
-            child: MenuDrawer(),
             visible: _drawerPntr == _showMainDrawer,
+            child: AnimatedSwitcher(
+              duration: Duration(microseconds: 3000),
+              child: MenuDrawer(),
+            ) ,
           ),
 
           Visibility(
-            child: AddMarkerDrawer(),
             visible: _drawerPntr == _showAddMarkerDrawer,
-          )
+            child: AnimatedSwitcher(
+              duration: Duration(microseconds: 3000),
+              child: AddMarkerDrawer(),
+            ) ,
+          ),
 
           //_drawerPntr == _showMainDrawer ? MenuDrawer() : SizedBox(),
           //_drawerPntr == _showAddMarkerDrawer ? AddMarkerDrawer() : SizedBox(),

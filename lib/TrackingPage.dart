@@ -281,7 +281,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       if(_isVoicePromptOn)  _flutterTts.speak('Tracking Started. Waiting for first movement');
 
       setState(() {
-        _statusMessage = "Tracking Armed";
+        _statusMessage = "Tracking";
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -455,66 +455,82 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     }
   }
   Future<void> _stopTracking() async {
-    if (_trackingSessionId == null) return;
+    if (_trackingSessionId == null) {
+        setState(() {
+          _isTracking = false;
+          _statusMessage = "Stop";
+        });
+        return;
+    }
 
     setState(() {
       _isTracking = false;
       _isLoading = true;
+      _statusMessage = "Stop";
     });
 
-    try {
-      await LocationService.stopLocationTracking();
-      // Stop position updates
-      //await _positionStream?.cancel();
-      //_positionStream = null;
+      try {
+        await LocationService.stopLocationTracking();
+        // Stop position updates
+        //await _positionStream?.cancel();
+        //_positionStream = null;
 
-      // Mark tracking session as inactive
-      final userId = UserDataService().userdata!.userID;
-      await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('tracking_sessions')
-          .doc(_trackingSessionId)
-          .update({
-        'is_active': false,
-        'end_time': FieldValue.serverTimestamp(),
-      });
+        // Mark tracking session as inactive
+        final userId = UserDataService().userdata!.userID;
+        await _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('tracking_sessions')
+            .doc(_trackingSessionId)
+            .update({
+          'is_active': false,
+          'end_time': FieldValue.serverTimestamp(),
+        });
 
-      setState(() {
-        _trackingSessionId = null;
-        _statusMessage = "Tracking stopped";
-      });
+        setState(() {
+          _trackingSessionId = null;
+          _statusMessage = "Tracking stopped";
+        });
 
-      if(_isVoicePromptOn)  _flutterTts.speak('Tracking Stopped');
+        if(_isVoicePromptOn)  _flutterTts.speak('Tracking Stopped');
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tracking stopped')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error stopping tracking: $e')),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tracking stopped')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error stopping tracking: $e')),
+        );
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
-  }
+
   Widget _buildVehicleSelector() {
     return Card(
-      margin: const EdgeInsets.all(8.0),
+      color: APP_TILE_COLOR,
+      margin: const EdgeInsets.all(5.0),
       child: Padding(
-        padding: const EdgeInsets.all(8.0),
+        padding: const EdgeInsets.all(5.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
 
             _vehicles.isEmpty
-                ? const Text('No vehicles found. Please add a vehicle first.')
+                ? const Text('No vehicles found. Please add a vehicle',
+                    style: TextStyle(color: Colors.grey),
+                )
+
                 : DropdownButton<String>(
-              isExpanded: true,
-              value: _selectedVehicleId,
-              hint: const Text('Select a vehicle'),
+                  isExpanded: true,
+                  value: _selectedVehicleId,
+                  hint: const Text(
+                  'Select a vehicle',
+                  style: TextStyle(color: Colors.grey),
+                ),
+
               onChanged: (newValue) {
                 setState(() {
                   _selectedVehicleId = newValue;
@@ -523,7 +539,9 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
               items: _vehicles.map((vehicle) {
                 return DropdownMenuItem<String>(
                   value: vehicle['id'],
-                  child: Text('${vehicle['name']} (${vehicle['registrationNumber']})'),
+                  child: Text('${vehicle['name']} (${vehicle['registrationNumber']})',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 );
               }).toList(),
             ),
@@ -572,10 +590,14 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: APP_BACKGROUND_COLOR,
       appBar: AppBar(
         foregroundColor: Colors.white,
-        backgroundColor: APP_BAR_COLOR,
+        backgroundColor: _isTracking ? Colors.redAccent : APP_BAR_COLOR,
         title: MyAppbarTitle('$_statusMessage'),
+        actions: [
+          //_buildVehicleSelector(),
+        ],
       ),
       bottomNavigationBar: BottomNavigationBar(
           onTap: _onBotBarTap,
@@ -583,7 +605,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
           unselectedItemColor: Colors.grey,
           selectedItemColor: Colors.grey,
           items: [
-          BottomNavigationBarItem(icon: Icon(Icons.search, size: 35),label: "GeoFence"),
+          BottomNavigationBarItem(icon: Icon(Icons.navigate_next, size: 35),label: "GeoFence"),
           BottomNavigationBarItem(icon: Icon(Icons.refresh, size: 35),label: "Refresh" ),
           BottomNavigationBarItem(
               icon: _isTracking
@@ -620,7 +642,9 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
             Container(
               color: Colors.black.withOpacity(0.3),
               child: const Center(
-                child: CircularProgressIndicator(),
+                child: CircularProgressIndicator(
+                  color: Colors.lightBlue,
+                ),
               ),
             ),
         ],
