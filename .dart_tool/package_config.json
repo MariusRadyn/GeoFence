@@ -20,6 +20,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "bluez",
+      "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/bluez-0.8.3",
+      "packageUri": "lib/",
+      "languageVersion": "2.17"
+    },
+    {
       "name": "boolean_selector",
       "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/boolean_selector-2.1.2",
       "packageUri": "lib/",
@@ -228,6 +234,42 @@
       "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_background_service_platform_interface-5.1.2",
       "packageUri": "lib/",
       "languageVersion": "2.17"
+    },
+    {
+      "name": "flutter_blue_plus",
+      "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_blue_plus-1.35.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
+      "name": "flutter_blue_plus_android",
+      "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_blue_plus_android-4.0.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
+      "name": "flutter_blue_plus_darwin",
+      "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_blue_plus_darwin-4.0.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
+      "name": "flutter_blue_plus_linux",
+      "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_blue_plus_linux-3.0.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
+      "name": "flutter_blue_plus_platform_interface",
+      "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_blue_plus_platform_interface-4.0.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
+      "name": "flutter_blue_plus_web",
+      "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_blue_plus_web-3.0.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
     },
     {
       "name": "flutter_lints",
@@ -634,6 +676,12 @@
     {
       "name": "provider",
       "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/provider-6.1.5",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "rxdart",
+      "rootUri": "file:///C:/Users/mradyn/AppData/Local/Pub/Cache/hosted/pub.dev/rxdart-0.28.0",
       "packageUri": "lib/",
       "languageVersion": "2.12"
     },

@@ -20,6 +20,7 @@ def MAP_API_KEY = localProperties.getProperty("MAP_API_KEY")
 
 android {
     namespace = "com.geofence.app"
+
     compileSdk = flutter.compileSdkVersion
     //ndkVersion = flutter.ndkVersion
     ndkVersion = "27.0.12077973"

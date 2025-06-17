@@ -204,12 +204,15 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     }
   }
   Future<void> _loadVehicles() async {
+    String userId = "";
     try {
-      final userId = UserDataService().userdata!.userID;
+      userId = UserDataService().userdata!.userID;
+
+      UserDataService().userdata!.userID;
       final vehiclesSnapshot = await _firestore
-          .collection('users')
+          .collection(CollectionUsers)
           .doc(userId)
-          .collection('vehicles')
+          .collection(CollectionVehicles)
           .get();
 
       List<Map<String, dynamic>> vehicles = [];
@@ -229,9 +232,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
         _selectedVehicleId = vehicles[0]['id'];
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading vehicles: $e')),
-      );
+      GlobalMsg.show("Error", 'Error loading vehicles: $e\nUserID: ${userId}');
     }
   }
   void _initTts() async {

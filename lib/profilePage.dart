@@ -14,10 +14,130 @@ class profilePage extends StatefulWidget {
 }
 
 class _profilePageState extends State<profilePage> {
-  TextEditingController _usernameControl = TextEditingController();
-  TextEditingController _emailControl = TextEditingController();
+  TextEditingController _displaynameControl = TextEditingController();
+  TextEditingController _emailController = TextEditingController();
   TextEditingController _Control = TextEditingController();
   TextEditingController _pwControl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+
+    if(UserDataService().userdata != null) {
+      setState(() {
+        if(UserDataService().userdata != null){
+          _displaynameControl.text =  UserDataService().userdata!.displayName;
+          _emailController.text =  UserDataService().userdata!.email;
+        }
+      });
+    }
+  }
+
+  Widget buildLoginHeader() {
+    return SafeArea(
+      child: Stack(
+        children: [
+          // Backdrop
+          Container(
+            alignment: Alignment.topCenter,
+            height: 200,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: [0.3, 0.9],
+                colors: [COLOR_BLUE, COLOR_ICE_BLUE],
+              ),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(100),
+                bottomRight: Radius.circular(100),
+              ),
+            ),
+          ),
+
+          // White Container
+          Container(
+            margin: const EdgeInsets.only(top: 60, left: 10, right: 10),
+            height: 150,
+            decoration: const BoxDecoration(
+              color: Colors.white70,
+              borderRadius: BorderRadius.all(Radius.circular(20)),
+            ),
+          ),
+
+          // Avatar
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      // Navigation logic could go here
+                    },
+                    child: CircleAvatar(
+                      radius: 55,
+                      backgroundColor: Colors.white,
+                      child: CircleAvatar(
+                        backgroundImage: (UserDataService().userdata?.photoURL.isEmpty ?? true)
+                            ? AssetImage(picPROFILE)
+                            : NetworkImage(UserDataService().userdata!.photoURL) as ImageProvider,
+                        radius: 50,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Welcome Message
+          Center(
+            child: Container(
+              padding: const EdgeInsets.only(top: 130),
+              child: ShowWelcomeMsg(context),
+            ),
+          ),
+
+          // Login Button
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 180),
+              width: 120,
+              height: 40,
+              decoration: const BoxDecoration(
+                color: COLOR_ORANGE,
+                borderRadius: BorderRadius.all(Radius.circular(20)),
+              ),
+              child: TextButton(
+                child: Text(
+                  UserDataService().userdata!.isLoggedIn ? 'Log Out' : 'Log In',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                  ),
+                ),
+                onPressed: () {
+                  UserDataService().userdata!.isLoggedIn
+                     ? Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => MyDialogWidget(
+                            message: "Log Out?",
+                            header: "Login",
+                            but1Text: "OK",
+                            but2Text: "Cancel"))
+                        )
+                     : UserDataService().logout();
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,83 +145,63 @@ class _profilePageState extends State<profilePage> {
     UserData? _userData = UserDataService().userdata;
 
     return Scaffold(
+      backgroundColor: APP_BACKGROUND_COLOR,
       appBar: AppBar(
-        title: Text('Profile'),
+        title: MyAppbarTitle('Profile'),
+        backgroundColor: APP_BAR_COLOR,
+        foregroundColor: Colors.white,
       ),
       body: Padding(
         padding: EdgeInsets.only(left: 20, right: 20),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              // Email Address
-              MyTextFormField(
-                controller: _usernameControl,
-                hintText: "Username",
-                width: 300,
-              ),
-              SizedBox(height: 20),
-              // Password
-              MyTextFormField(
-                controller: _emailControl,
-                hintText: "Email",
-                isPasswordField: true,
-                width: 300,
-              ),
-              SizedBox(height: 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
 
-              // Login Button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+            // Header
+            buildLoginHeader(),
+
+            Container(
+
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        TextButton(
-                          style: ButtonStyle(
-                            minimumSize: WidgetStatePropertyAll(Size(150, 50)),
-                            backgroundColor:
-                                WidgetStatePropertyAll(COLOR_ORANGE),
-                          ),
-                          child: Text(
-                            "Login",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                            ),
-                          ),
-                          onPressed: () {
-                            login(_userData);
-                          },
-                        ),
-                      ]),
-                ],
-              ),
 
-              SizedBox(height: 20),
+                  SizedBox(height: 20),
 
-              // Register
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text("Dont have an account?"),
-                  SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => signupPage()),
-                      );
+                  // Display Name
+                  MyTextFormField(
+                    backgroundColor: APP_BACKGROUND_COLOR,
+                    foregroundColor: Colors.white,
+                    controller: _displaynameControl,
+                    hintText: "Type display name here",
+                    labelText: "Display Name",
+                    onFieldSubmitted: (value){
+                      UserDataService().updateFields({
+                        "displayName":value
+                      });
                     },
-                    child: Text(
-                      "Register",
-                      style: TextStyle(color: COLOR_ORANGE),
-                    ),
                   ),
+
+                  SizedBox(height: 20),
+
+                  // Email
+                  MyTextFormField(
+                    backgroundColor: APP_BACKGROUND_COLOR,
+                    foregroundColor: Colors.white,
+                    controller: _emailController,
+                    hintText: "No email address",
+                    labelText: "Email",
+                    isPasswordField: false,
+                    isReadOnly: true,
+                  ),
+
+                  SizedBox(height: 20),
+
                 ],
-              )
-            ],
-          ),
+              ),
+            )
+          ],
         ),
       ),
     );
@@ -109,7 +209,6 @@ class _profilePageState extends State<profilePage> {
 
   void login(UserData? _userData) async {
     FirebaseAuthService _auth = FirebaseAuthService();
-
 
     try {
       //User? user = await _auth.fireAuthSignIn(context, _emailControl.text, _pwControl.text);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geofence/utils.dart';
+import 'package:geofence/vehiclesAddPage.dart';
 
 class VehiclesPage extends StatefulWidget {
   const VehiclesPage({Key? key}) : super(key: key);
@@ -212,14 +213,14 @@ class _VehiclesPageState extends State<VehiclesPage> {
         color: APP_BACKGROUND_COLOR,
         child: StreamBuilder<QuerySnapshot>(
           stream: _firestore
-              .collection('users')
+              .collection(CollectionUsers)
               .doc(user?.uid)
-              .collection('vehicles')
+              .collection(CollectionVehicles)
               .snapshots(),
+
           builder: (context, snapshot) {
             if (!snapshot.hasData)
               return Center(child: CircularProgressIndicator());
-
 
             var vehicles = snapshot.data!.docs;
             if (vehicles.isEmpty) {
@@ -262,7 +263,14 @@ class _VehiclesPageState extends State<VehiclesPage> {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: COLOR_ORANGE,
-        onPressed: _addVehicle,
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder:(context) => vehiclesAddPage()
+            ),
+          );
+        },
+        // _addVehicle,
         child: Icon(Icons.add,color: Colors.white,),
       ),
     );

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:geofence/bluetooth.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+import 'Bluetooth2.dart';
 
 class SettingsPage extends StatefulWidget {
   final String userId;
@@ -20,11 +25,19 @@ class _SettingsPageState extends State<SettingsPage> {
   TextEditingController _rebateValueController = TextEditingController();
   final FlutterTts _flutterTts = FlutterTts();
   bool _didInitListeners = false;
+  String? bluetoothValue;
+  List<ScanResult> scanResults = [];
+  List<BluetoothDevice> pairedDevices = [];
+  bool isScanning = false;
+  BluetoothDevice? connectedDevice;
+  BluetoothDevice? selectedDevice;
 
   @override
   void initState() {
     super.initState();
 
+    _requestPermissions();
+    _getPairedDevices();
     _initTts();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -34,7 +47,6 @@ class _SettingsPageState extends State<SettingsPage> {
           _logPointPerMeterController.text = SettingsService().settings!.logPointPerMeter.toString();
           _rebateValueController.text = SettingsService().settings!.rebateValuePerLiter.toString();
         });
-      //});
     });
   }
 
@@ -62,12 +74,12 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _logPointPerMeterController.dispose();
     _flutterTts.stop();
+    FlutterBluePlus.stopScan();
 
     if (_didInitListeners) {
       Provider.of<SettingsService>(context, listen: false)
           .removeListener(_updateControllerValues);
     }
-
     super.dispose();
   }
 
@@ -96,6 +108,91 @@ class _SettingsPageState extends State<SettingsPage> {
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
+  }
+
+  // Bluetooth
+  Future<void> _requestPermissions() async {
+    await [
+      Permission.bluetooth,
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+      Permission.location,
+    ].request();
+  }
+  Future<void> _getPairedDevices() async {
+    try {
+      List<BluetoothDevice> devices = await FlutterBluePlus.bondedDevices;
+      setState(() {
+        pairedDevices = devices;
+      });
+    } catch (e) {
+      print('Error getting paired devices: $e');
+    }
+  }
+  Future<void> _startScan() async {
+    if (await FlutterBluePlus.isSupported == false) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Bluetooth not supported')),
+      );
+      return;
+    }
+
+    setState(() {
+      isScanning = true;
+      scanResults.clear();
+    });
+
+    // Listen to scan results
+    FlutterBluePlus.scanResults.listen((results) {
+      setState(() {
+        scanResults = results;
+      });
+    });
+
+    // Start scanning
+    await FlutterBluePlus.startScan(timeout: Duration(seconds: 10));
+
+    setState(() {
+      isScanning = false;
+    });
+  }
+  Future<void> _stopScan() async {
+    await FlutterBluePlus.stopScan();
+    setState(() {
+      isScanning = false;
+    });
+  }
+  Future<void> _connectToDevice(BluetoothDevice device) async {
+    try {
+      await device.connect();
+      setState(() {
+        connectedDevice = device;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Connected to ${device.name}')),
+      );
+
+      // Discover services after connection
+      List<BluetoothService> services = await device.discoverServices();
+      print('Discovered ${services.length} services');
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to connect: $e')),
+      );
+    }
+  }
+  Future<void> _disconnect() async {
+    if (connectedDevice != null) {
+      await connectedDevice!.disconnect();
+      setState(() {
+        connectedDevice = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Disconnected')),
+      );
+    }
   }
 
   @override
@@ -179,6 +276,81 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                   }
               ),
+
+              const SizedBox(height: 10),
+
+              // Bluetooth
+
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text("Use the Bluetooth device in your vehicle to get vehicle ID"
+                    "Select from your Bluetooth paired list what Bluetooth device"
+                    "you connect to in this vehicle",
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white,),
+                softWrap: true,
+                ),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButton<BluetoothDevice>(
+                        value: selectedDevice,
+                        style: TextStyle(color: Colors.white),
+                        hint: Text("Select bluetooth device",
+                                  style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
+                              ),
+                          items: pairedDevices.map((device) {
+                            String deviceName = device.platformName.isNotEmpty ? device.platformName : device.remoteId.toString();
+                            return DropdownMenuItem(
+                              value: device,
+                              child: Text(deviceName),
+                            );
+                          }).toList(),
+                          onChanged: (BluetoothDevice? newDevice) {
+                            setState(() {
+                              selectedDevice = newDevice;
+                            });
+                          },
+                      ),
+                    ),
+
+                    SizedBox(width: 10),
+
+                    ElevatedButton(
+                        onPressed: (){
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Scanning Bluetooth')),
+                          );
+                          //_getPairedDevices();
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context)=> BluetoothDeviceDropdown(),
+                              ),
+                          );
+                        },
+                        child: Text(
+                          "Refresh",
+                          style: TextStyle(
+                              color: Colors.white
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                      ),
+                    )
+                  ],
+                ),
+              )
+
             ],
           ),
         );

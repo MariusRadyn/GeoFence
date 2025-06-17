@@ -1,12 +1,15 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/geofencePage.dart';
+import 'package:geofence/profilePage.dart';
 import 'package:geofence/settingsPage.dart';
 import 'package:geofence/trackingHistoryPage.dart';
 //import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
+import 'bluetooth.dart';
 import 'vehiclesPage.dart';
 
 class HomePage extends StatefulWidget {
@@ -21,6 +24,7 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController2 = TextEditingController();
   final TextEditingController _userController = TextEditingController();
+
 
   @override
   void initState() {
@@ -495,104 +499,7 @@ class _HomePageState extends State<HomePage> {
       }
     }
   }
-  Widget buildLoginHeader() {
-    return SafeArea(
-      child: Stack(
-        children: [
-          // Backdrop
-          Container(
-            alignment: Alignment.topCenter,
-            height: 200,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                stops: [0.3, 0.9],
-                colors: [COLOR_BLUE, COLOR_ICE_BLUE],
-              ),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(100),
-                bottomRight: Radius.circular(100),
-              ),
-            ),
-          ),
 
-          // White Container
-          Container(
-            margin: const EdgeInsets.only(top: 60, left: 10, right: 10),
-            height: 150,
-            decoration: const BoxDecoration(
-              color: Colors.white70,
-              borderRadius: BorderRadius.all(Radius.circular(20)),
-            ),
-          ),
-
-          // Avatar
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      // Navigation logic could go here
-                    },
-                    child: CircleAvatar(
-                      radius: 55,
-                      backgroundColor: Colors.white,
-                      child: CircleAvatar(
-                        backgroundImage: (UserDataService().userdata?.photoURL.isEmpty ?? true)
-                            ? AssetImage(picPROFILE)
-                            : NetworkImage(UserDataService().userdata!.photoURL) as ImageProvider,
-                        radius: 50,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Welcome Message
-          Center(
-            child: Container(
-              padding: const EdgeInsets.only(top: 130),
-              child: ShowWelcomeMsg(context),
-            ),
-          ),
-
-          // Login Button
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 180),
-              width: 120,
-              height: 40,
-              decoration: const BoxDecoration(
-                color: COLOR_ORANGE,
-                borderRadius: BorderRadius.all(Radius.circular(20)),
-              ),
-              child: TextButton(
-                child: Text(
-                  UserDataService().userdata!.isLoggedIn ? 'Log Out' : 'Log In',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-                onPressed: () {
-                  UserDataService().userdata!.isLoggedIn
-                      ? myMessageBox(context, "Already logged in")
-                      : showLoginScreen(context);
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -634,11 +541,17 @@ class _HomePageState extends State<HomePage> {
                         onTap: () {
                           if (userData.userdata != null){
                            if( userData.userdata!.isLoggedIn) {
-                             UserDataService().logout();
-                             GlobalMsg.show("Login","User logged Out");
-                             setState(() {
-                               userData.userdata!.isLoggedIn = false;
-                             });
+                             // GlobalMsg.show(
+                             //     "Profile", "Userid: ${userData.userdata?.userID}\n"
+                             //     "UserName: ${userData.userdata?.displayName}\n"
+                             //      "email: ${userData.userdata?.email}"
+                             // );
+                             Navigator.push(
+                                 context,
+                                 MaterialPageRoute(
+                                 builder: (context) => profilePage(),
+                              ),
+                             );
                           } else {
                             showLoginScreen(context);
                             }
@@ -684,13 +597,12 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      backgroundColor: COLOR_DARK_BLUE,
+      backgroundColor: APP_BACKGROUND_COLOR,
       body: SingleChildScrollView(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
             const SizedBox(height: 50),
-
 
             MyCustomTileWithPic(
               imagePath: 'assets/track.jpg',

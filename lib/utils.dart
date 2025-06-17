@@ -15,8 +15,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool isDebug = true;
 String debugLog = '';
 
-
-const String  googleAPiKey = String.fromEnvironment('MAPS_API_KEY'); //"AIzaSyAVDoWELQE16C0wkf7-FSzUywpEcI6sYOc";
+const String  googleAPiKey = String.fromEnvironment('MAPS_API_KEY');
 
 // keytool -keystore C:\Users\mradyn\.android\debug.keystore -list
 // PW android
@@ -39,7 +38,7 @@ const COLOR_GREY = Color.fromARGB(139, 119, 119, 119);
 const COLOR_LIGHT_GREY = Color.fromARGB(137, 222, 222, 222);
 
 const APP_BAR_COLOR = Color.fromARGB(255, 0, 36, 52);
-const APP_BACKGROUND_COLOR = Color.fromARGB(255, 0, 24, 37);
+const APP_BACKGROUND_COLOR = COLOR_DARK_BLUE;
 const APP_TILE_COLOR = Color.fromARGB(255, 21, 34, 52);
 const DRAWER_COLOR = Color.fromARGB(255, 33, 137, 215);
 
@@ -138,28 +137,8 @@ Position latLngToPosition(LatLng latLng) {
   );
 }
 
-//---------------------------------------------------
-// Class
-//---------------------------------------------------
-class Point {
-  final double x, y;
-  Point(this.x, this.y);
-}
-class FenceData{
-  String polygonId;
-  String firestoreId;
-  String name;
-  List<LatLng> points;
-
-  FenceData({
-    this.points = const [],
-    this.name = "",
-    this.firestoreId = "",
-    this.polygonId = "",
-  });
-}
+// NOT USED
 void myMessageBox (BuildContext context, String message) {
-
   showDialog(
     context: context,
     barrierDismissible: false, // Prevents accidental closing
@@ -251,85 +230,6 @@ class _myMessageBox extends StatelessWidget {
     );
   }
 }
-class MyTextFormField extends StatefulWidget {
-  final TextEditingController? controller;
-  final Key? key;
-  final bool? isPasswordField;
-  final String? hintText;
-  final String? labelText;
-  final String? helperText;
-  final FormFieldSetter<String>? onSaved;
-  final FormFieldValidator<String>? validator;
-  final ValueChanged<String>? onFieldSubmitted;
-  final TextInputType? inputType;
-  final double? width;
-
-  const MyTextFormField({
-    this.controller,
-    this.isPasswordField,
-    this.key,
-    this.hintText,
-    this.labelText,
-    this.helperText,
-    this.onSaved,
-    this.validator,
-    this.width,
-    this.onFieldSubmitted,
-    this.inputType
-  });
-
-  @override
-  _MyTextFormFieldState createState() => _MyTextFormFieldState();
-}
-class _MyTextFormFieldState extends State<MyTextFormField> {
-  bool _obscureText = true;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: widget.width,
-      //clipBehavior: Clip.hardEdge,
-      //decoration: BoxDecoration(
-      //  borderRadius: BorderRadius.circular(4),
-      color: Colors.red,
-      //),
-      child: TextFormField(
-        style: TextStyle(
-            fontSize: 14,
-            color: Colors.black
-        ),
-        controller: widget.controller,
-        keyboardType: widget.inputType,
-        key: widget.key,
-        obscureText: widget.isPasswordField == true ? _obscureText : false,
-        onSaved: widget.onSaved,
-        validator: widget.validator,
-        onFieldSubmitted: widget.onFieldSubmitted,
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          filled: true,
-          hintText: widget.hintText,
-          hintStyle: TextStyle(
-              color: Colors.blueGrey
-          ),
-          suffixIcon: GestureDetector(
-            onTap: () {
-              setState(() {
-                _obscureText = !_obscureText;
-              });
-            },
-            child: widget.isPasswordField == true
-                ? Icon(
-              _obscureText ? Icons.visibility_off : Icons.visibility,
-              color: _obscureText == false ? Colors.blue : Colors.grey,
-            )
-                : Text(""),
-          ),
-        ),
-      ),
-    );
-  }
-}
 class MyDialogWidget extends StatelessWidget {
   final String message;
   final String header;
@@ -347,7 +247,7 @@ class MyDialogWidget extends StatelessWidget {
     required this.but2Text,
     this.onPressedBut1,
     this.onPressedBut2,
-    this.image = "assets/images/warning.png",
+    this.image = "assets/warning.png",
   });
 
   @override
@@ -377,6 +277,169 @@ class MyDialogWidget extends StatelessWidget {
           child: Text(but2Text),
         ),
       ],
+    );
+  }
+}
+class Grabber extends StatelessWidget {
+  /// A draggable widget that accepts vertical drag gestures
+  /// and this is only visible on desktop and web platforms.
+  const Grabber({super.key, required this.onVerticalDragUpdate, required this.isOnDesktopAndWeb});
+
+  final ValueChanged<DragUpdateDetails> onVerticalDragUpdate;
+  final bool isOnDesktopAndWeb;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isOnDesktopAndWeb) {
+      return const SizedBox.shrink();
+    }
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+
+    return GestureDetector(
+      onVerticalDragUpdate: onVerticalDragUpdate,
+      child: Container(
+        width: double.infinity,
+        color: colorScheme.onSurface,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 8.0),
+            width: 32.0,
+            height: 4.0,
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+//---------------------------------------------------
+// Class
+//---------------------------------------------------
+class Point {
+  final double x, y;
+  Point(this.x, this.y);
+}
+class FenceData{
+  String polygonId;
+  String firestoreId;
+  String name;
+  List<LatLng> points;
+
+  FenceData({
+    this.points = const [],
+    this.name = "",
+    this.firestoreId = "",
+    this.polygonId = "",
+  });
+}
+class MyTextFormField extends StatefulWidget {
+  final TextEditingController? controller;
+  final Key? key;
+  final bool? isPasswordField;
+  final bool isReadOnly;
+  final String? hintText;
+  final String? labelText;
+  final String? helperText;
+  final FormFieldSetter<String>? onSaved;
+  final FormFieldValidator<String>? validator;
+  final ValueChanged<String>? onFieldSubmitted;
+  final TextInputType? inputType;
+  final double? width;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
+
+  const MyTextFormField({
+    this.controller,
+    this.isPasswordField,
+    this.key,
+    this.hintText,
+    this.labelText,
+    this.helperText,
+    this.onSaved,
+    this.validator,
+    this.width,
+    this.onFieldSubmitted,
+    this.inputType,
+    this.backgroundColor = Colors.white,
+    this.foregroundColor = Colors.black,
+    this.isReadOnly = false,
+  });
+
+  @override
+  _MyTextFormFieldState createState() => _MyTextFormFieldState();
+}
+class _MyTextFormFieldState extends State<MyTextFormField> {
+  bool _obscureText = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: widget.width,
+      child: TextFormField(
+        style: TextStyle(
+            fontSize: 20,
+            color: widget.foregroundColor
+        ),
+        readOnly: widget.isReadOnly,
+        controller: widget.controller,
+        keyboardType: widget.inputType,
+        key: widget.key,
+        obscureText: widget.isPasswordField == true ? _obscureText : false,
+        onSaved: widget.onSaved,
+        validator: widget.validator,
+        onFieldSubmitted: widget.onFieldSubmitted,
+        decoration: InputDecoration(
+          enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(
+            color: Colors.white
+            ),
+          ),
+          focusedBorder: UnderlineInputBorder(
+            borderSide: BorderSide(
+            color: Colors.blue,
+            ),
+          ),
+
+          filled: true,
+          fillColor: widget.backgroundColor,
+
+          hintText: widget.hintText,
+          hintStyle: TextStyle(
+              color: Colors.grey,
+            fontSize: 16,
+          ),
+
+          labelText: widget.labelText,
+          labelStyle: TextStyle(
+            color: widget.foregroundColor,
+            fontSize: 20,
+          ),
+
+          suffixIcon: GestureDetector(
+            onTap: () {
+              setState(() {
+                _obscureText = !_obscureText;
+              });
+            },
+            child:
+              widget.isPasswordField == true
+                ? Icon( _obscureText
+                    ? Icons.visibility_off
+                    : Icons.visibility,
+
+                  color: _obscureText == false
+                   ? Colors.blue
+                   : Colors.grey,
+                )
+                : Text(""),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -560,42 +623,6 @@ class MyIcon extends StatelessWidget {
       );
   }
 }
-class Grabber extends StatelessWidget {
-  /// A draggable widget that accepts vertical drag gestures
-  /// and this is only visible on desktop and web platforms.
-  const Grabber({super.key, required this.onVerticalDragUpdate, required this.isOnDesktopAndWeb});
-
-  final ValueChanged<DragUpdateDetails> onVerticalDragUpdate;
-  final bool isOnDesktopAndWeb;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!isOnDesktopAndWeb) {
-      return const SizedBox.shrink();
-    }
-    final ColorScheme colorScheme = Theme.of(context).colorScheme;
-
-    return GestureDetector(
-      onVerticalDragUpdate: onVerticalDragUpdate,
-      child: Container(
-        width: double.infinity,
-        color: colorScheme.onSurface,
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 8.0),
-            width: 32.0,
-            height: 4.0,
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 class MyTextOption extends StatelessWidget {
   TextEditingController controller = TextEditingController();
   final String label;
@@ -777,6 +804,7 @@ class MyText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
+      softWrap: true,
       style: TextStyle(
         color: color,
         fontFamily: 'Poppins',
@@ -812,6 +840,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
           onTapTile!();
         },
       child: Container(
+
         decoration: BoxDecoration(
           color: APP_TILE_COLOR,
           border: Border.all(
@@ -944,7 +973,60 @@ class GlobalSnackBar {
     );
   }
 }
+Future<T?> MyQuestionAlertBox<T> ({
+  required BuildContext context,
+  required String message,
+  VoidCallback? onPress,
+}) {
+    return showDialog(
+        context: context,
+        builder: (context){
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: const BorderSide(
+                color: Colors.blue, // Border color
+                width: 2, // Border width
+              ),
+            ),
+            backgroundColor: APP_TILE_COLOR,
+            shadowColor: Colors.black,
+            title: const MyText(
+                text: "Delete",
+                color: Colors.white
+            ),
+            content: MyText(
+              text: message,
+              color: Colors.grey,
+              fontsize: 18,
+            ),
+            actions: [
+              TextButton(
+                child: const MyText(
+                  text: 'No',
+                  fontsize: 20,
+                ),
+                onPressed: () => Navigator.pop(context),
+              ),
+              TextButton(
+                  child: const MyText(
+                    text: 'Yes',
+                    color:  Colors.white,
+                    fontsize: 20,
+                  ),
 
+                  onPressed: () {
+                    if(onPress != null){
+                      onPress();
+                    }
+                    Navigator.pop(context);
+                  }
+              ),
+            ],
+          );
+        }
+    );
+}
 //---------------------------------------------------
 // Data Services
 //---------------------------------------------------
@@ -952,7 +1034,7 @@ class UserData{
   String displayName = "";
   String surname = "";
   String userID = "";
-  String? email = "";
+  String email = "";
   String errorMsg = "";
   String photoURL = "";
   bool isLoggedIn = false;
@@ -1068,7 +1150,7 @@ class UserDataService extends ChangeNotifier {
         surname: updates['surname'] ?? current.surname,
         email: updates['email'] ?? current.email,
         emailValidated: updates['emailValidated'] ?? current.emailValidated,
-        isLoggedIn: updates['isLoggedin'] ?? current.isLoggedIn,
+        isLoggedIn: updates['isLoggedIn'] ?? current.isLoggedIn,
       );
 
       _userdata = updated;
@@ -1076,10 +1158,7 @@ class UserDataService extends ChangeNotifier {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
 
-      //await _db.collection(CollectionUsers).doc(uid).update({
-      //  FieldsSettings: updated.toMap(),
-      //});
-
+      // Get only the keys that changed
       final Map<String, dynamic> nestedUpdates = {};
       updated.toMap().forEach((key, value) {
         if (updates.containsKey(key)) {
