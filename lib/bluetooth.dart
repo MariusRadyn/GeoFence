@@ -4,6 +4,8 @@ import 'package:permission_handler/permission_handler.dart';
 
 
 class BluetoothScreen extends StatefulWidget {
+  const BluetoothScreen({super.key});
+
   @override
   _BluetoothScreenState createState() => _BluetoothScreenState();
 }
@@ -364,7 +366,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
 class BluetoothInteraction extends StatefulWidget {
   final BluetoothDevice device;
 
-  BluetoothInteraction({required this.device});
+  const BluetoothInteraction({super.key, required this.device});
 
   @override
   _BluetoothInteractionState createState() => _BluetoothInteractionState();

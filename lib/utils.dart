@@ -1,15 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:provider/provider.dart';
-import 'package:geofence/utils.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool isDebug = true;
@@ -68,11 +65,18 @@ const FieldsUserData = 'userdata';
 
 const DocAppSettings = 'app_settings';
 
+// General Settings
 const SettingIsVoicePromptOn = 'isVoicePromptOn';
 const SettingLogPointPerMeter = 'logPointPerMeter';
 const SettingRebateValue = 'rebateValuePerLiter';
 const SettingDieselPrice = 'dieselPrice';
 
+// Vehicle settings
+const SettingVehicleName = 'name';
+const SettingVehicleFuelConsumption = 'fuelConsumption';
+const SettingVehicleReg = 'registrationNumber';
+const SettingVehicleBlueDeviceName = 'bluetoothDeviceName';
+const SettingVehicleBlueMac = 'bluetoothMAC';
 
 //---------------------------------------------------
 // Methods
@@ -84,8 +88,11 @@ void writeLog(var text) {
   debugLog += text +'\r';
 }
 bool isOnDesktop() {
-  if(kIsWeb) return true;
-  else return false;
+  if(kIsWeb) {
+    return true;
+  } else {
+    return false;
+  }
 }
 bool isPointInsidePolygon(LatLng point, List<LatLng> polygon) {
   bool isInside = false;
@@ -152,9 +159,8 @@ class _myMessageBox extends StatelessWidget {
 
   const _myMessageBox({
     required this.message,
-    this.header = "Warning",
-    this.image = "assets/warning.png",
-    super.key,
+    this.header = '',
+    this.image = ''
   });
 
   @override
@@ -339,12 +345,14 @@ class FenceData{
 }
 class MyTextFormField extends StatefulWidget {
   final TextEditingController? controller;
+  @override
   final Key? key;
   final bool? isPasswordField;
   final bool isReadOnly;
   final String? hintText;
   final String? labelText;
   final String? helperText;
+  final String suffix;
   final FormFieldSetter<String>? onSaved;
   final FormFieldValidator<String>? validator;
   final ValueChanged<String>? onFieldSubmitted;
@@ -360,6 +368,7 @@ class MyTextFormField extends StatefulWidget {
     this.hintText,
     this.labelText,
     this.helperText,
+    this.suffix = '',
     this.onSaved,
     this.validator,
     this.width,
@@ -376,18 +385,38 @@ class MyTextFormField extends StatefulWidget {
 class _MyTextFormFieldState extends State<MyTextFormField> {
   bool _obscureText = true;
 
+  // Choose your keyboard type:
+ // final keyboardType = TextInputType.numberWithOptions(decimal: true);
+
+
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    List<TextInputFormatter>? inputFormatters;
+    if (widget.inputType == TextInputType.number ||
+        widget.inputType == const TextInputType.numberWithOptions(decimal: false)) {
+      inputFormatters = [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,}$'))];
+    } else if (widget.inputType ==
+        const TextInputType.numberWithOptions(decimal: true)) {
+      inputFormatters = [
+        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+      ];
+    } else {
+      inputFormatters = null; // No restriction
+    }
+
+    return SizedBox(
       width: widget.width,
       child: TextFormField(
         style: TextStyle(
             fontSize: 20,
             color: widget.foregroundColor
         ),
+
         readOnly: widget.isReadOnly,
         controller: widget.controller,
         keyboardType: widget.inputType,
+        inputFormatters: inputFormatters,
         key: widget.key,
         obscureText: widget.isPasswordField == true ? _obscureText : false,
         onSaved: widget.onSaved,
@@ -396,7 +425,7 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
         decoration: InputDecoration(
           enabledBorder: UnderlineInputBorder(
             borderSide: BorderSide(
-            color: Colors.white
+            color: Colors.grey
             ),
           ),
           focusedBorder: UnderlineInputBorder(
@@ -407,7 +436,7 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
 
           filled: true,
           fillColor: widget.backgroundColor,
-
+          suffix: Text(widget.suffix),
           hintText: widget.hintText,
           hintStyle: TextStyle(
               color: Colors.grey,
@@ -416,7 +445,7 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
 
           labelText: widget.labelText,
           labelStyle: TextStyle(
-            color: widget.foregroundColor,
+            color: Colors.grey,
             fontSize: 20,
           ),
 
@@ -631,7 +660,7 @@ class MyTextOption extends StatelessWidget {
   final String prefix;
   final String suffix;
 
-  MyTextOption({
+  MyTextOption({super.key, 
     required this.controller,
     required this.label,
     this.description = "",
@@ -836,8 +865,9 @@ class MyTextTileWithEditDelete extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: (){
-        if(onTapTile != null)
+        if(onTapTile != null) {
           onTapTile!();
+        }
         },
       child: Container(
 
@@ -1170,7 +1200,7 @@ class UserDataService extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-      GlobalMsg.show('update Userdata Fields:', '${e}');
+      GlobalMsg.show('update Userdata Fields:', '$e');
     }
   }
   Future<void> logout() async{
@@ -1180,11 +1210,11 @@ class UserDataService extends ChangeNotifier {
 
       notifyListeners();
     }catch (e){
-      GlobalMsg.show('Logout:', '${e}');
+      GlobalMsg.show('Logout:', '$e');
     }
   }
   void printHash() {
-    print(this.hashCode);
+    print(hashCode);
   }
 }
 
@@ -1300,7 +1330,7 @@ class SettingsService extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-      GlobalMsg.show('updateSettingFields:', '${e}');
+      GlobalMsg.show('updateSettingFields:', '$e');
     }
   }
 }
@@ -1309,11 +1339,11 @@ class SettingsService extends ChangeNotifier {
 // Widgets
 //---------------------------------------------------
 Widget ShowWelcomeMsg(BuildContext context) {
-  UserData? _userData = UserDataService().userdata;
+  UserData? userData = UserDataService().userdata;
 
-  if (_userData!.isLoggedIn) {
+  if (userData!.isLoggedIn) {
     return Text(
-      'Welcome ${_userData.displayName}',
+      'Welcome ${userData.displayName}',
       style: const TextStyle(
         color: Colors.black,
         fontSize: 20,

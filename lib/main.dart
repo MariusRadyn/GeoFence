@@ -1,12 +1,9 @@
 
- import 'package:firebase_auth/firebase_auth.dart';
  import 'package:firebase_core/firebase_core.dart';
  import 'package:flutter/material.dart';
- import 'package:geofence/homePage.dart';
  import 'package:geofence/splashScreen.dart';
  import 'package:geofence/utils.dart';
  import 'package:geofence/firebase_options.dart';
- import 'package:flutter/foundation.dart';
  import 'package:provider/provider.dart';
  import 'gpsServices.dart';
 

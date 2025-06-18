@@ -5,9 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 import 'trackingHistoryMap.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class TrackingHistoryPage extends StatefulWidget {
   const TrackingHistoryPage({super.key});
@@ -47,8 +45,6 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
     print(jsonEncode(_vehicles)); // Pretty-print JSON format
   }
   Future<List<Map<String, dynamic>>> getVehicles() async {
-    if(_auth.currentUser! == null) return List<Map<String, dynamic>>.empty();
-
     final QuerySnapshot snapshot = await FirebaseFirestore.instance
         .collection(CollectionUsers)
         .doc(_auth.currentUser!.uid)
@@ -206,7 +202,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
     GlobalSnackBar.show('Email sent');
   }
   void emailReport(BuildContext context) {
-    final TextEditingController _emailTextController = TextEditingController();
+    final TextEditingController emailTextController = TextEditingController();
 
     showDialog(
         context: context,
@@ -223,7 +219,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
           title: Text('Email Address',
             style: TextStyle(color: Colors.white)),
           content: TextField(
-            controller: _emailTextController,
+            controller: emailTextController,
             keyboardType: TextInputType.emailAddress,
             decoration: InputDecoration(
               labelText: 'Enter Email Address',
@@ -243,7 +239,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
                 style: TextStyle(color: Colors.grey),),
               onPressed: (){
                 Navigator.pop(context);
-                _sendReportToEmail(_emailTextController.text.trim());
+                _sendReportToEmail(emailTextController.text.trim());
               }
             ),
           ],
@@ -253,8 +249,6 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-
-
     return Scaffold(
       appBar: AppBar(
         backgroundColor: APP_BAR_COLOR,
@@ -264,7 +258,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
           Row(
             children: [
               // Date from
-              Text('${_selectedDateFrom!.toLocal().toString().split(' ')[0]}'),
+              Text(_selectedDateFrom.toLocal().toString().split(' ')[0]),
               IconButton(
                 icon: const Icon(
                   Icons.date_range,
@@ -279,7 +273,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
               SizedBox(width: 2),
 
               // Date To
-              Text('${_selectedDateTo!.toLocal().toString().split(' ')[0]}'),
+              Text(_selectedDateTo.toLocal().toString().split(' ')[0]),
               IconButton(
                 icon: const Icon(
                   Icons.date_range,
@@ -350,20 +344,20 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
             Column(
               children: [
                 MyTextTileWithEditDelete(
-                    text: 'Total',
-                    subtext:
-                        'Total Rebate: R${nrFormatter.format(_totalRebate)}\n'
-                        'Total Distance: ${nrFormatter.format(_totalKM)}km\n'
-                        'Total Liters: ${nrFormatter.format(_totalLiters)}L',
-                    onTapReport: (){
+                  text: 'Total',
+                  subtext:
+                      'Total Rebate: R${nrFormatter.format(_totalRebate)}\n'
+                      'Total Distance: ${nrFormatter.format(_totalKM)}km\n'
+                      'Total Liters: ${nrFormatter.format(_totalLiters)}L',
+
+                  onTapReport: (){
                      emailReport(context);
-                    },
+                  },
                 ),
                 Expanded(
-                      child: ListView.builder(
-
-                      itemCount: sessions.length,
-                      itemBuilder: (context, index) {
+                  child: ListView.builder(
+                    itemCount: sessions.length,
+                    itemBuilder: (context, index) {
 
                         var session = sessions[index];
                         String vehicleName = _getVehicleNameById(session['vehicle_id']) ?? "Unknown Vehicle";
@@ -386,8 +380,8 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
                                 text: DateFormat('yyyy-MM-dd (kk:mm) ').format(session['start_time'].toDate()),
                                 subtext:
                                   //'ID: ${session.id}\n'
-                                  'Vehicle: ${vehicleName}\n'
-                                  'Reg: ${vehicleReg}\n'
+                                  'Vehicle: $vehicleName\n'
+                                  'Reg: $vehicleReg\n'
                                   'Inside: ${nrFormatter.format(insideKM)} km\n'
                                   'Outside: ${nrFormatter.format(outsideKM)} km\n'
                                   'Liters Used: ${nrFormatter.format(litersUsed)} L\n'

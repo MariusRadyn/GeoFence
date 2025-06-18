@@ -1,13 +1,10 @@
 // Geo Fence Screen
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geofence/firebase.dart';
 import 'package:geofence/gpsServices.dart';
 import 'package:geofence/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter/foundation.dart';
 
 const double DRAW_WIDTH = 60;
 double _sheetPosition = 0.25;
@@ -36,7 +33,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
   int _polygonIdCounter = 0;
   LatLng _currentLocation = const LatLng(-29.6, 30.3);
   bool isGeoFenceSet = false;
-  int _currentIndex = 0;
+  final int _currentIndex = 0;
   bool _isStreetView = false;
   bool _isDrawerVisible = true;
   bool _isBotScrolDrawerVisible = false;
@@ -49,10 +46,10 @@ class _GeoFencePageState extends State<GeoFencePage> {
 
   // Drawer Pointers
   int _drawerPntr = 0;
-  static int _showMainDrawer = 0;
-  static int _showAddMarkerDrawer = 1;
-  static int _showDeleteMarkerDrawer = 2;
-  static int _showEditFenceDrawer = 3;
+  static final int _showMainDrawer = 0;
+  static final int _showAddMarkerDrawer = 1;
+  static final int _showDeleteMarkerDrawer = 2;
+  static final int _showEditFenceDrawer = 3;
 
   @override
   void initState() {
@@ -92,12 +89,12 @@ class _GeoFencePageState extends State<GeoFencePage> {
 
     if(_mapController != null) {
         _mapController?.animateCamera
-          (CameraUpdate.newLatLngZoom(_currentLocation!, 18),
+          (CameraUpdate.newLatLngZoom(_currentLocation, 18),
         );
     }
   }
   Future<void> _loadGeoFences() async {
-    UserData? _userData = UserDataService().userdata;
+    UserData? userData = UserDataService().userdata;
 
     setState(() {
       _isLoading = true;
@@ -105,7 +102,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       _markers.clear();
     });
     try {
-      final userId = _userData!.userID;// firebaseAuthService. _auth.currentUser!.uid;
+      final userId = userData!.userID;// firebaseAuthService. _auth.currentUser!.uid;
       final geoFencesSnapshot = await firestore
           .collection(CollectionUsers)
           .doc(userId)
@@ -120,7 +117,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
               LatLng(point.latitude, point.longitude)).toList();
 
           if (polygonPoints.length >= 3) {
-            final polygonId = 'polygon_${_polygonIdCounter}';
+            final polygonId = 'polygon_$_polygonIdCounter';
             final markerId = 'marker_${_polygonIdCounter++}';
 
             setState(() {
@@ -234,18 +231,19 @@ class _GeoFencePageState extends State<GeoFencePage> {
 
   }
   void _nextFence() {
-    if (_markers.length == 0) return;
+    if (_markers.isEmpty) return;
 
     setState(() {
-      if (_fencePntr == _markers.length)
+      if (_fencePntr == _markers.length) {
         _fencePntr = 0;
-      else
+      } else {
         _fencePntr++;
+      }
 
-      int _ptr = 0;
+      int ptr = 0;
 
       for (Marker mark in _markers) {
-        if (_ptr == _fencePntr) {
+        if (ptr == _fencePntr) {
           _mapController?.animateCamera(
             CameraUpdate.newLatLng(LatLng(mark.position.latitude, mark.position.longitude)),
           );
@@ -253,7 +251,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
           return;
         }
         else{
-          _ptr++;
+          ptr++;
         }
       }
     });
@@ -327,7 +325,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
   }
   Future<void> _saveGeoFenceToFirebase(BuildContext context, String name) async {
     //final _userData = Provider.of<UserData>(context, listen: false);
-    final _userData = UserDataService().userdata;
+    final userData = UserDataService().userdata;
 
     setState(() {
       _isLoading = true;
@@ -335,12 +333,12 @@ class _GeoFencePageState extends State<GeoFencePage> {
     });
 
     try {
-      final userId = _userData!.userID; // _auth.currentUser!.uid;
+      final userId = userData!.userID; // _auth.currentUser!.uid;
       final geoPointsList = _currentPolygonPoints
           .map((point) => GeoPoint(point.latitude, point.longitude))
           .toList();
 
-      if (geoPointsList.length == 0){
+      if (geoPointsList.isEmpty){
         myMessageBox(context, 'No Geofence points found');
       }
       else{
@@ -429,7 +427,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
   }
   Future<void> _deleteGeoFence(BuildContext context, String firestoreId, String name) async {
     //final _userData = Provider.of<UserData>(context, listen: false);
-    UserData? _userData = UserDataService().userdata;
+    UserData? userData = UserDataService().userdata;
 
     if(firestoreId == ""){
       myMessageBox(context, "Please select a Fence");
@@ -459,7 +457,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       });
 
       try {
-        final userId = _userData!.userID;// _auth.currentUser!.uid;
+        final userId = userData!.userID;// _auth.currentUser!.uid;
         await firestore
             .collection('users')
             .doc(userId)
@@ -850,7 +848,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    '${fenceData.name}',
+                                    fenceData.name,
                                     textAlign: TextAlign.left,
                                     style: const TextStyle(
                                         fontSize: 20,

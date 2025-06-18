@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:geofence/bluetooth.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -21,8 +20,8 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  TextEditingController _logPointPerMeterController = TextEditingController();
-  TextEditingController _rebateValueController = TextEditingController();
+  final TextEditingController _logPointPerMeterController = TextEditingController();
+  final TextEditingController _rebateValueController = TextEditingController();
   final FlutterTts _flutterTts = FlutterTts();
   bool _didInitListeners = false;
   String? bluetoothValue;
@@ -337,15 +336,15 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                           );
                         },
+                        style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                      ),
                         child: Text(
                           "Refresh",
                           style: TextStyle(
                               color: Colors.white
                           ),
                         ),
-                        style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                      ),
                     )
                   ],
                 ),

@@ -6,9 +6,9 @@ class BluetoothDeviceDropdown extends StatefulWidget {
   final Function(BluetoothDevice?)? onDeviceSelected;
 
   const BluetoothDeviceDropdown({
-    Key? key,
+    super.key,
     this.onDeviceSelected,
-  }) : super(key: key);
+  });
 
   @override
   State<BluetoothDeviceDropdown> createState() => _BluetoothDeviceDropdownState();
@@ -319,6 +319,8 @@ class _BluetoothDeviceDropdownState extends State<BluetoothDeviceDropdown> {
 
 // Example usage widget
 class BluetoothDeviceSelector extends StatefulWidget {
+  const BluetoothDeviceSelector({super.key});
+
   @override
   State<BluetoothDeviceSelector> createState() => _BluetoothDeviceSelectorState();
 }

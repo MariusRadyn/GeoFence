@@ -1,8 +1,5 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
-import 'package:geofence/signupPage.dart';
-import 'package:provider/provider.dart';
 import 'firebase.dart';
 import 'homePage.dart';
 
@@ -14,10 +11,10 @@ class profilePage extends StatefulWidget {
 }
 
 class _profilePageState extends State<profilePage> {
-  TextEditingController _displaynameControl = TextEditingController();
-  TextEditingController _emailController = TextEditingController();
-  TextEditingController _Control = TextEditingController();
-  TextEditingController _pwControl = TextEditingController();
+  final TextEditingController _displaynameControl = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _Control = TextEditingController();
+  final TextEditingController _pwControl = TextEditingController();
 
   @override
   void initState() {
@@ -142,7 +139,7 @@ class _profilePageState extends State<profilePage> {
   @override
   Widget build(BuildContext context) {
     //UserData _userData = Provider.of<UserData>(context, listen: false);
-    UserData? _userData = UserDataService().userdata;
+    UserData? userData = UserDataService().userdata;
 
     return Scaffold(
       backgroundColor: APP_BACKGROUND_COLOR,
@@ -207,13 +204,13 @@ class _profilePageState extends State<profilePage> {
     );
   }
 
-  void login(UserData? _userData) async {
-    FirebaseAuthService _auth = FirebaseAuthService();
+  void login(UserData? userData) async {
+    FirebaseAuthService auth = FirebaseAuthService();
 
     try {
       //User? user = await _auth.fireAuthSignIn(context, _emailControl.text, _pwControl.text);
 
-      if (_userData != null && _userData.isLoggedIn) {
+      if (userData != null && userData.isLoggedIn) {
 
         print('User logged in');
 
@@ -223,8 +220,8 @@ class _profilePageState extends State<profilePage> {
               builder: (context) => HomePage(),
             ));
       } else {
-        print(_userData!.errorMsg);
-        myMessageBox(context, _userData.errorMsg);
+        print(userData!.errorMsg);
+        myMessageBox(context, userData.errorMsg);
       }
     } catch (e) {
       print('Error: $e');

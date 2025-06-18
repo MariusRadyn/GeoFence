@@ -1,14 +1,11 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geofence/utils.dart';
-import 'package:location/location.dart' as loc;
 import 'package:permission_handler/permission_handler.dart' as perm;
 
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 Future<Position> determinePosition() async {
@@ -113,13 +110,13 @@ LocationSettings getLocationSettings() {
 
   return locationsettings;
 }
-Future<void>  getPolylinePoints(double _originLatitude, double _originLongitude, double _destLatitude, double _destLongitude) async {
+Future<void>  getPolylinePoints(double originLatitude, double originLongitude, double destLatitude, double destLongitude) async {
   PolylinePoints polylinePoints = PolylinePoints();
   PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
     googleApiKey: googleAPiKey,
     request: PolylineRequest(
-      origin: PointLatLng(_originLatitude, _originLongitude),
-      destination: PointLatLng(_destLatitude, _destLongitude),
+      origin: PointLatLng(originLatitude, originLongitude),
+      destination: PointLatLng(destLatitude, destLongitude),
       mode: TravelMode.driving,
       wayPoints: [PolylineWayPoint(location: "Sabo, Yaba Lagos Nigeria")],
     ),

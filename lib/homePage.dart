@@ -1,6 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/geofencePage.dart';
 import 'package:geofence/profilePage.dart';
@@ -9,7 +8,6 @@ import 'package:geofence/trackingHistoryPage.dart';
 //import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
-import 'bluetooth.dart';
 import 'vehiclesPage.dart';
 
 class HomePage extends StatefulWidget {
@@ -47,8 +45,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   void showSignUpScreen (BuildContext context){
-    double _width = MediaQuery.of(context).size.width * 0.8;
-    double _height = MediaQuery.of(context).size.height * 0.6;
+    double width = MediaQuery.of(context).size.width * 0.8;
+    double height = MediaQuery.of(context).size.height * 0.6;
 
     showDialog<void>(
       context: context,
@@ -59,8 +57,8 @@ class _HomePageState extends State<HomePage> {
               //  borderRadius: BorderRadius.circular(15),
               //),
               child: SizedBox(
-                width: _width > 500 ? 500 : _width, // Custom width
-                height: _height > 600 ? 600 : _height, // Custom height
+                width: width > 500 ? 500 : width, // Custom width
+                height: height > 600 ? 600 : height, // Custom height
 
                 child: Container(
                   decoration: BoxDecoration(
@@ -390,7 +388,6 @@ class _HomePageState extends State<HomePage> {
     required BuildContext context,
     required VoidCallback onPressed,
     required String iconPath,
-    String text="",
   }) {
     return GestureDetector(
       onTap: onPressed,
@@ -406,7 +403,7 @@ class _HomePageState extends State<HomePage> {
   }
   void loginWithEmail(BuildContext context) async {
     //final userData = Provider.of<UserData>(context, listen: false);
-    UserData? _userData = UserDataService().userdata;
+    UserData? userData = UserDataService().userdata;
 
     if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
       myMessageBox(context, 'Please enter both email and password.');
@@ -464,7 +461,7 @@ class _HomePageState extends State<HomePage> {
     try {
       UserCredential? userCred = await firebaseAuthService.signInWithGoogle();
 
-      if (userCred != null && userCred.user != null && userCred.user!.emailVerified) {
+      if (userCred.user != null && userCred.user!.emailVerified) {
 
         UserDataService().create(UserData(
           displayName:  userCred.user?.displayName ?? "",

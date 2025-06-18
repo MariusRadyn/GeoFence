@@ -8,10 +8,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as path;
 import 'package:image_picker/image_picker.dart';
 import 'package:geofence/utils.dart';
-import 'dart:io' show Platform;
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:provider/provider.dart';
 
 FirebaseStorage fireStorageInstance = FirebaseStorage.instance;
 List<Reference> fireAllSongsRef = [];
@@ -34,7 +31,7 @@ Future<void> fireStoreUploadImage(String inputSource) async {
 
     // Points to the root reference
     final storageRef = FirebaseStorage.instance.ref();
-    var spaceRef = storageRef.child("user1/recycle/" + fileName);
+    var spaceRef = storageRef.child("user1/recycle/$fileName");
     await spaceRef.putFile(
       imageFile,
       SettableMetadata(
@@ -104,18 +101,18 @@ Future<List<Reference>> fireStoreGetFilesList(String path) async {
   }
 }
 Future<String> fireStoreReadFile(int index) async {
-  final _storageRef = fireStorageInstance.ref().child(
+  final storageRef = fireStorageInstance.ref().child(
         fireAllSongsRef[index].fullPath,
       );
-  Uint8List? downloadedData = await _storageRef.getData();
+  Uint8List? downloadedData = await storageRef.getData();
   String text = utf8.decode(downloadedData as List<int>);
   return text;
 }
 Future<void> fireStoreWriteFile(String text, int index) async {
-  final _storageRef = fireStorageInstance.ref().child(
+  final storageRef = fireStorageInstance.ref().child(
         fireAllSongsRef[index].fullPath,
       );
-  _storageRef.putString(
+  storageRef.putString(
     text,
     metadata: SettableMetadata(contentLanguage: 'en'),
   );
@@ -125,7 +122,9 @@ Future<List<Reference>> fireStoreGetDirectoryList(String path) async {
   final listResult = await storageRef.listAll();
   List<Reference> dir = [];
 
-  for (var prefix in listResult.prefixes) dir.add(prefix);
+  for (var prefix in listResult.prefixes) {
+    dir.add(prefix);
+  }
   return dir;
 }
 Future<void> fireStoreDeleteFile(String ref) async {
@@ -241,7 +240,7 @@ class FirebaseAuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   Future<User?> fireAuthCreateUser(BuildContext context, String email, String password) async {
     //final _userData = Provider.of<UserData>(context, listen: false);
-    UserData? _userData = UserDataService().userdata;
+    UserData? userData = UserDataService().userdata;
 
     try {
       UserCredential credential = await _auth.createUserWithEmailAndPassword(
@@ -276,20 +275,20 @@ class FirebaseAuthService {
           ///  - Thrown if email/password accounts are not enabled. Enable
           ///    email/password accounts in the Firebase Console, under the Auth tab.
           case 'email-already-in-use':
-            _userData!.errorMsg = "Email already in use.";
+            userData!.errorMsg = "Email already in use.";
             break;
 
           case 'invalid-email':
-            _userData!.errorMsg = "Invalid Email.";
+            userData!.errorMsg = "Invalid Email.";
             break;
 
           case 'weak-password':
-            _userData!.errorMsg =
+            userData!.errorMsg =
                 "Weak Password. Must be at least 6 characters and contain a symbol.";
             break;
 
           default:
-            _userData!.errorMsg = e.code;
+            userData!.errorMsg = e.code;
         }
       }
       print("Firebase Auth Error: $e");
@@ -298,7 +297,7 @@ class FirebaseAuthService {
   }
   Future<User?> fireAuthSignIn(BuildContext context, String email, String password) async {
     //final _userData = Provider.of<UserData>(context, listen: false);
-    UserData? _userData = UserDataService().userdata;
+    UserData? userData = UserDataService().userdata;
 
     try {
       UserCredential credential = await _auth.signInWithEmailAndPassword(
@@ -341,11 +340,11 @@ class FirebaseAuthService {
           case 'invalid-email':
           case 'wrong-password':
           case 'invalid-credential':
-            _userData!.errorMsg = "Invalid email or password.";
+            userData!.errorMsg = "Invalid email or password.";
             break;
 
           default:
-            _userData!.errorMsg = e.code;
+            userData!.errorMsg = e.code;
         }
       }
 

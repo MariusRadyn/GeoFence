@@ -5,7 +5,7 @@ import 'package:geofence/utils.dart';
 import 'package:geofence/vehiclesAddPage.dart';
 
 class VehiclesPage extends StatefulWidget {
-  const VehiclesPage({Key? key}) : super(key: key);
+  const VehiclesPage({super.key});
 
   @override
   _VehiclesPageState createState() => _VehiclesPageState();
@@ -79,11 +79,13 @@ class _VehiclesPageState extends State<VehiclesPage> {
   }
   void _showVehicleDialog({DocumentSnapshot? vehicle}) {
     TextEditingController nameController = TextEditingController(
-        text: vehicle != null ? vehicle['name'] : '');
+        text: vehicle != null ? vehicle[SettingVehicleName] : '');
+
     TextEditingController fuelController = TextEditingController(
-        text: vehicle != null ? vehicle['fuelConsumption'].toString() : '');
+        text: vehicle != null ? vehicle[SettingVehicleFuelConsumption].toString() : '');
+
     TextEditingController regController = TextEditingController(
-        text: vehicle != null ? vehicle['registrationNumber'] : '');
+        text: vehicle != null ? vehicle[SettingVehicleReg] : '');
 
     showDialog(
       context: context,
@@ -105,6 +107,8 @@ class _VehiclesPageState extends State<VehiclesPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+
+              // Vehicle Name
               TextField(
                 style: const TextStyle(
                   color: Colors.white,
@@ -117,6 +121,8 @@ class _VehiclesPageState extends State<VehiclesPage> {
                 ),
 
               ),
+
+              // Fuel Consumption
               TextField(
                 style: const TextStyle(
                   color: Colors.white,
@@ -129,6 +135,8 @@ class _VehiclesPageState extends State<VehiclesPage> {
                 ),
                 keyboardType: TextInputType.number,
               ),
+
+              // Reg Number
               TextField(
                 style: const TextStyle(
                   color: Colors.white,
@@ -142,6 +150,8 @@ class _VehiclesPageState extends State<VehiclesPage> {
             ],
           ),
           actions: [
+
+            // Cancel Button
             TextButton(
               onPressed: () => Navigator.pop(context),
               child:const Text(
@@ -153,6 +163,8 @@ class _VehiclesPageState extends State<VehiclesPage> {
                 ),
               ),
             ),
+
+            // Save Button
             TextButton(
               onPressed: () async {
                 User? user = _auth.currentUser;
@@ -160,25 +172,25 @@ class _VehiclesPageState extends State<VehiclesPage> {
                   if (vehicle == null) {
                     // Add new vehicle
                     await _firestore
-                        .collection('users')
+                        .collection(CollectionUsers)
                         .doc(user.uid)
-                        .collection('vehicles')
+                        .collection(CollectionVehicles)
                         .add({
-                      'name': nameController.text,
-                      'fuelConsumption': double.parse(fuelController.text),
-                      'registrationNumber': regController.text,
+                      SettingVehicleName: nameController.text,
+                      SettingVehicleFuelConsumption : double.parse(fuelController.text),
+                      SettingVehicleReg: regController.text,
                     });
                   } else {
                     // Update existing vehicle
                     await _firestore
-                        .collection('users')
+                        .collection(CollectionUsers)
                         .doc(user.uid)
-                        .collection('vehicles')
+                        .collection(CollectionVehicles)
                         .doc(vehicle.id)
                         .update({
-                      'name': nameController.text,
-                      'fuelConsumption': double.parse(fuelController.text),
-                      'registrationNumber': regController.text,
+                      SettingVehicleName: nameController.text,
+                      SettingVehicleFuelConsumption : double.parse(fuelController.text),
+                      SettingVehicleReg: regController.text,
                     });
                   }
                   Navigator.pop(context);
@@ -219,8 +231,9 @@ class _VehiclesPageState extends State<VehiclesPage> {
               .snapshots(),
 
           builder: (context, snapshot) {
-            if (!snapshot.hasData)
+            if (!snapshot.hasData) {
               return Center(child: CircularProgressIndicator());
+            }
 
             var vehicles = snapshot.data!.docs;
             if (vehicles.isEmpty) {
@@ -246,9 +259,14 @@ class _VehiclesPageState extends State<VehiclesPage> {
                     MyTextTileWithEditDelete(
                       text: vehicle['name'],
                       subtext: 'Fuel Consumption: ${vehicle['fuelConsumption']} L/100km\nRegistration: ${vehicle['registrationNumber']}',
-                      onTapEdit: (){
-                        _editVehicle(vehicle);
-                      },
+                      onTapEdit: () {
+                        //_editVehicle(vehicle);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder:(context) => vehiclesAddPage(vehicle: vehicle,)
+                            ),
+                          );
+                        },
                       onTapDelete: (){
                         _deleteVehicle(vehicle);
                       } ,

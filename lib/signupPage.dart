@@ -4,7 +4,6 @@ import 'package:geofence/firebase.dart';
 import 'package:geofence/homePage.dart';
 //import 'package:teamplayerwebapp/theme/theme_manager.dart';
 import 'package:geofence/utils.dart';
-import 'package:provider/provider.dart';
 //import 'package:teamplayerwebapp/utils/helpers.dart';
 
 class signupPage extends StatefulWidget {
@@ -15,11 +14,11 @@ class signupPage extends StatefulWidget {
 }
 
 class _signupPageState extends State<signupPage> {
-  FirebaseAuthService _auth = FirebaseAuthService();
-  TextEditingController _userController = TextEditingController();
-  TextEditingController _emailController = TextEditingController();
-  TextEditingController _pwController = TextEditingController();
-  TextEditingController _pw2Controller = TextEditingController();
+  final FirebaseAuthService _auth = FirebaseAuthService();
+  final TextEditingController _userController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _pwController = TextEditingController();
+  final TextEditingController _pw2Controller = TextEditingController();
 
   @override
   void dispose() {
@@ -34,7 +33,7 @@ class _signupPageState extends State<signupPage> {
   @override
   Widget build(BuildContext context) {
     //UserData _userData = Provider.of<UserData>(context, listen: false);
-    UserData? _userData = UserDataService().userdata;
+    UserData? userData = UserDataService().userdata;
 
     return Scaffold(
       appBar: AppBar(
@@ -106,7 +105,7 @@ class _signupPageState extends State<signupPage> {
                                               Navigator.of(context).pop,
                                         )));
                               } else {
-                                signUp(_userData);
+                                signUp(userData);
                               }
                             },
                           ),
@@ -121,7 +120,7 @@ class _signupPageState extends State<signupPage> {
     );
   }
 
-  void signUp(UserData? _userData) async {
+  void signUp(UserData? userData) async {
     String username = _userController.text;
     String email = _emailController.text;
     String password = _pwController.text;
@@ -129,8 +128,8 @@ class _signupPageState extends State<signupPage> {
     User? user = await _auth.fireAuthCreateUser(context, email, password);
 
     if (user != null) {
-      _userData?.userID = user.uid;
-      _userData?.displayName = username;
+      userData?.userID = user.uid;
+      userData?.displayName = username;
 
       printMsg('User created successfully');
 

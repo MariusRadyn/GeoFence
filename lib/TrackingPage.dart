@@ -1,21 +1,18 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geofence/utils.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:provider/provider.dart';
 import 'gpsServices.dart';
 
 class TrackingPage extends StatefulWidget {
 
   const TrackingPage({
-    Key? key
+    super.key
     }
-      ) : super(key: key);
+      );
 
   @override
   _TrackingPageState createState() => _TrackingPageState();
@@ -24,20 +21,20 @@ class TrackingPage extends StatefulWidget {
 class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver {
   GoogleMapController? _mapController;
   Position? _currentPosition;
-  Set<Polygon> _geofences = {};
-  Set<Marker> _markers = {};
+  final Set<Polygon> _geofences = {};
+  final Set<Marker> _markers = {};
   final Set<Polygon> _polygons = {};
   int _polygonIdCounter = 0;
   StreamSubscription<Position>? _positionStream;
   String _statusMessage = "Not tracking";
-  List<FenceData> _geofenceList = [];
+  final List<FenceData> _geofenceList = [];
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   //final FirebaseAuth _auth = FirebaseAuth.instance;
   final FlutterTts _flutterTts = FlutterTts();
   bool _isLoading = false;
   bool _isTracking = false;
   bool _newTrackingStarted = false;
-  Map<String, bool> _insideGeofence = {};
+  final Map<String, bool> _insideGeofence = {};
   String? _selectedVehicleId;
   List<Map<String, dynamic>> _vehicles = [];
   String? _trackingSessionId;
@@ -199,7 +196,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
 
     if (_mapController != null) {
       _mapController?.animateCamera
-        (CameraUpdate.newLatLngZoom(_currentLocation!, 18),
+        (CameraUpdate.newLatLngZoom(_currentLocation, 18),
       );
     }
   }
@@ -232,7 +229,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
         _selectedVehicleId = vehicles[0]['id'];
       });
     } catch (e) {
-      GlobalMsg.show("Error", 'Error loading vehicles: $e\nUserID: ${userId}');
+      GlobalMsg.show("Error", 'Error loading vehicles: $e\nUserID: $userId');
     }
   }
   void _initTts() async {
@@ -552,18 +549,19 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     );
   }
   void _nextFence() {
-    if (_markers.length == 0) return;
+    if (_markers.isEmpty) return;
 
     setState(() {
-      if (_fencePntr == _markers.length)
+      if (_fencePntr == _markers.length) {
         _fencePntr = 0;
-      else
+      } else {
         _fencePntr++;
+      }
 
-      int _ptr = 0;
+      int ptr = 0;
 
       for (Marker mark in _markers) {
-        if (_ptr == _fencePntr) {
+        if (ptr == _fencePntr) {
           _mapController?.animateCamera(
             CameraUpdate.newLatLng(LatLng(mark.position.latitude, mark.position.longitude)),
           );
@@ -571,7 +569,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
           return;
         }
         else{
-          _ptr++;
+          ptr++;
         }
       }
     });
@@ -595,7 +593,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       appBar: AppBar(
         foregroundColor: Colors.white,
         backgroundColor: _isTracking ? Colors.redAccent : APP_BAR_COLOR,
-        title: MyAppbarTitle('$_statusMessage'),
+        title: MyAppbarTitle(_statusMessage),
         actions: [
           //_buildVehicleSelector(),
         ],
@@ -629,9 +627,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
                   mapType: MapType.normal,
                   markers: _markers,
                   polygons: _polygons,
-                  polylines: _pathPolyline != null
-                      ? _pathPolyline
-                      : {},
+                  polylines: _pathPolyline ?? {},
                   onMapCreated: (controller) {
                     _mapController = controller;
                   },
