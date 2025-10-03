@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "615271668557-c7hva0pvp2jmnf9ft19b922cil6pm4uh.apps.googleusercontent.com",
+          "client_id": "615271668557-cktmamku78slr5jo700ilj64ol9cv8pu.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.geofence.app",
-            "certificate_hash": "ac995b0a0666c0f84b3a6caa47429a74626aa33b"
+            "certificate_hash": "9c90fd03a46b7280043db75b66c81790afb17a01"
           }
         },
         {
