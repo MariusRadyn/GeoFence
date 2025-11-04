@@ -22,7 +22,7 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController2 = TextEditingController();
   final TextEditingController _userController = TextEditingController();
-
+  String connectedDevice = "No Connection";
 
   @override
   void initState() {
@@ -32,6 +32,9 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         UserDataService().userdata!.isLoggedIn = true;
       });
+    }
+    if(SettingsService().settings?.connectedDevice != null) {
+      connectedDevice = SettingsService().settings!.connectedDevice;
     }
   }
 
@@ -504,7 +507,26 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: APP_BAR_COLOR,
-        title: MyAppbarTitle('GeoFence V1.0'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('GeoFence ' + APP_VERSION ,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.normal,
+                fontFamily: 'Poppins',
+                color: Colors.white,
+              ),
+            ),Text(connectedDevice,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+                fontFamily: 'Poppins',
+                color: Colors.blueGrey,
+              ),
+            ),
+          ],
+        ),
         actions: [
           Consumer2<UserDataService, SettingsService>(
             builder: (context, userData, settings, child) {

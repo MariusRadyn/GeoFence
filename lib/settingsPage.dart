@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geofence/utils.dart';
@@ -19,25 +21,42 @@ class SettingsPage extends StatefulWidget {
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> {
+class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMixin{
+  bool Debug = false;
+  bool isLoading = true;
+  TabController? _tabControllerMain;
+  TabController? _tabControllerServers;
+
   final TextEditingController _logPointPerMeterController = TextEditingController();
   final TextEditingController _rebateValueController = TextEditingController();
   final FlutterTts _flutterTts = FlutterTts();
   bool _didInitListeners = false;
   String? bluetoothValue;
-  List<ScanResult> scanResults = [];
-  List<BluetoothDevice> pairedDevices = [];
   bool isScanning = false;
-  BluetoothDevice? connectedDevice;
+  bool isSetBTVehicleID = false;
+  bool isSetBTMonitor = false;
+
+  List<ScanResult> lstAvailableDevices = [];
+  ScanResult? selectedAvailableDevice;
+
+  final Map<String, Map<String, dynamic>> mapServerData = {};
+  List<DocumentSnapshot<Map<String, dynamic>>> lstServerData = [];
+
+  BluetoothDevice? pairedDevice;
   BluetoothDevice? selectedDevice;
+  BluetoothData bluetoothData = BluetoothData();
+  List<BluetoothDevice> lstPairedDevices = [
+    //   BluetoothDevice.fromId("00:11:22:33:44:55"),
+  ];
 
   @override
   void initState() {
     super.initState();
 
     _requestPermissions();
-    _getPairedDevices();
+    _getBondedDevices();
     _initTts();
+    _fetchServers();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -73,6 +92,9 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _logPointPerMeterController.dispose();
     _flutterTts.stop();
+    _tabControllerMain?.dispose();
+    _tabControllerServers?.dispose();
+
     FlutterBluePlus.stopScan();
 
     if (_didInitListeners) {
@@ -84,13 +106,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> updateSettingFields(Map<String, dynamic> updates) async {
     await SettingsService().updateFields(updates);
-    //await Setting
   }
-  
-// Method to update controller values
   void _updateControllerValues() {
     if(!mounted) return;
-    
+
     //final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     //if (!settingsProvider.isLoading && mounted) {
     //  setState(() {
@@ -108,6 +127,192 @@ class _SettingsPageState extends State<SettingsPage> {
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
   }
+  Future<void> _fetchServers() async {
+    try{
+      String? uid = FirebaseAuth.instance.currentUser?.uid;
+      if(uid == null) return;
+
+      final snapshot =  await  FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(uid)
+          .collection(CollectionServers)
+          .get();
+
+      setState(() {
+        lstServerData = snapshot.docs;
+        mapServerData.clear();
+
+        for (var doc in lstServerData) {
+          mapServerData[doc.id] = doc.data() ?? {};
+          print("Server Data: ");
+          print(doc.data());
+        }
+        print("lstServeData Len: ");
+        print(lstServerData.length);
+
+        if(lstServerData.length > 0) {
+          if(_tabControllerServers != null)  _tabControllerServers?.dispose();
+
+          _tabControllerServers = TabController(
+              length: lstServerData.length,
+              vsync: this
+          );
+        }
+
+        isLoading = false;
+      });
+    }
+    catch (e){
+      GlobalSnackBar.show('Load Server Data Failed: $e');
+      setState(() {isLoading = false;});
+    }
+  }
+  void _addServer() async {
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection(CollectionUsers)
+        .doc(uid)
+        .collection(CollectionServers)
+        .doc();
+
+    final newServer = {
+      SettingServerName: 'New Server',
+      SettingServerDesc: '',
+      SettingServerIpAdr: '192.168.100.1'
+    };
+
+    doc.set(newServer);
+    await _fetchServers();
+
+    setState(() { });
+
+    if (_tabControllerServers != null && lstServerData.isNotEmpty) {
+      final newIndex = lstServerData.indexWhere((d) => d.id == doc.id);
+      if (newIndex != -1) {
+        _tabControllerServers!.animateTo(newIndex);
+      }
+    }
+  }
+  Future<void> _deleteServer() async {
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      int index = _tabControllerServers!.index;
+      final docId = lstServerData[index].id;
+
+      // 1️⃣ Delete from Firestore
+      await FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(user?.uid)
+          .collection(CollectionServers)
+          .doc(docId)
+          .delete();
+
+      setState(() {
+        lstServerData.removeWhere((d) => d.id == docId);
+        mapServerData.remove(docId);
+
+        _tabControllerServers?.dispose();
+
+        if (lstServerData.isNotEmpty) {
+          _tabControllerServers = TabController(
+            length: lstServerData.length,
+            vsync: this,
+          );
+
+          // 5️⃣ Ensure a safe tab is selected
+          int newIndex = 0;
+          if (_tabControllerServers!.index >= lstServerData.length) {
+            newIndex = lstServerData.length - 1;
+          } else {
+            newIndex = _tabControllerServers!.index;
+          }
+          _tabControllerServers!.animateTo(newIndex);
+        } else {
+          _tabControllerServers = null;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Server Deleted')),
+        );
+      });
+    } catch (e) {
+      print('Error deleting Server: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete Server: $e')),
+      );
+    }
+  }
+  void _deleteServerDialog() async {
+    int index = _tabControllerServers!.index;
+    final server = lstServerData[index];
+
+    showDialog(
+        context: context,
+        builder: (context){
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: const BorderSide(
+                color: Colors.blue, // Border color
+                width: 2, // Border width
+              ),
+            ),
+            backgroundColor: APP_TILE_COLOR,
+            shadowColor: Colors.black,
+            title: const MyText(
+                text: "Delete",
+                color: Colors.white
+            ),
+            content: MyText(
+              text: "${server[SettingServerName]}\nAre you sure?",
+              color: Colors.grey,
+              fontsize: 18,
+            ),
+            actions: [
+              TextButton(
+                child: const MyText(
+                  text: 'No',
+                  fontsize: 20,
+                ),
+                onPressed: () => Navigator.pop(context),
+              ),
+              TextButton(
+                  child: const MyText(
+                    text: 'Yes',
+                    color:  Colors.white,
+                    fontsize: 20,
+                  ),
+
+                  onPressed: () async {
+                    _deleteServer();
+                    Navigator.pop(context);
+                  }
+              ),
+            ],
+          );
+        }
+    );
+  }
+  void _saveCurrentServer() async {
+    if(_tabControllerServers == null) return;
+
+    User? user = FirebaseAuth.instance.currentUser;
+    final currentIndex = _tabControllerServers!.index;
+    final serverDoc = lstServerData[currentIndex];
+    final settingsToSave = mapServerData[serverDoc.id]!;
+
+    await FirebaseFirestore.instance
+        .collection(CollectionUsers)
+        .doc(user?.uid)
+        .collection(CollectionServers)
+        .doc(serverDoc.id)
+        .update(settingsToSave);
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Saved')));
+  }
 
   // Bluetooth
   Future<void> _requestPermissions() async {
@@ -118,15 +323,71 @@ class _SettingsPageState extends State<SettingsPage> {
       Permission.location,
     ].request();
   }
-  Future<void> _getPairedDevices() async {
+  Future<void> _getBondedDevices() async {
     try {
       List<BluetoothDevice> devices = await FlutterBluePlus.bondedDevices;
+
+      // Sort by name (optional)
+      devices.sort((a, b) => (a.platformName ?? '').compareTo(b.platformName ?? ''));
+
       setState(() {
-        pairedDevices = devices;
+        lstPairedDevices = devices;
+
+        // Debug - Set Manual List
+        if(Debug){
+          lstPairedDevices = [
+            BluetoothDevice(
+              remoteId: DeviceIdentifier("00:11:22:33:44:55"),
+            ),
+            BluetoothDevice(
+              remoteId: DeviceIdentifier("AA:BB:CC:DD:EE:FF"),
+            ),
+          ];
+        }
       });
+
     } catch (e) {
       print('Error getting paired devices: $e');
     }
+  }
+  Future<void> _getPairedDevices() async {
+    try {
+      List<BluetoothDevice> devices = await FlutterBluePlus.connectedDevices;
+      setState(() {
+        lstPairedDevices = devices;
+
+        if(devices.length == 0){
+          lstPairedDevices = [
+            BluetoothDevice(remoteId: DeviceIdentifier("00:00:00:00:00:00")),
+          ];
+        }
+
+        // Debug - Set Manual List
+        if(Debug){
+          lstPairedDevices = [
+            BluetoothDevice(
+              remoteId: DeviceIdentifier("00:11:22:33:44:55"),
+            ),
+            BluetoothDevice(
+              remoteId: DeviceIdentifier("AA:BB:CC:DD:EE:FF"),
+            ),
+          ];
+        }
+      });
+    } catch (e) {
+      print('Error getting connected devices: $e');
+    }
+  }
+  void _getAvailableDevices() async {
+    lstAvailableDevices.clear();
+
+    FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+
+    FlutterBluePlus.scanResults.listen((results) {
+      setState(() {
+        lstAvailableDevices = results;
+      });
+    });
   }
   Future<void> _startScan() async {
     if (await FlutterBluePlus.isSupported == false) {
@@ -138,13 +399,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
     setState(() {
       isScanning = true;
-      scanResults.clear();
+      lstAvailableDevices.clear();
     });
 
     // Listen to scan results
     FlutterBluePlus.scanResults.listen((results) {
       setState(() {
-        scanResults = results;
+        lstAvailableDevices = results;
       });
     });
 
@@ -165,7 +426,7 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       await device.connect();
       setState(() {
-        connectedDevice = device;
+        //pairedDevice = device;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -183,24 +444,109 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
   Future<void> _disconnect() async {
-    if (connectedDevice != null) {
-      await connectedDevice!.disconnect();
+    if (pairedDevice != null) {
+      await pairedDevice!.disconnect();
       setState(() {
-        connectedDevice = null;
+        pairedDevice = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Disconnected')),
       );
     }
   }
+  void _showBluetoothDevicesPopup() {
+    showDialog(
+      context: context,
+      barrierDismissible: true, // tap outside to close
+      builder: (context) => Center(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.85,
+          height: MediaQuery.of(context).size.height * 0.8,
+          decoration: BoxDecoration(
+            color: APP_TILE_COLOR,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: lstPairedDevices.isEmpty
+                ? const Center(
+              child: MyText(
+                text: 'No Bluetooth devices found',
+                color: Colors.white,
+              ),
+            )
+                : ListView.builder(
+              padding: const EdgeInsets.all(10),
+              itemCount: lstPairedDevices.length,
+              itemBuilder: (context, index) {
+                final device = lstPairedDevices[index];
+
+                return Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  elevation: 2,
+                  color: APP_BACKGROUND_COLOR,
+                  shadowColor: Colors.blue,
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  child: ListTile(
+                    leading: const Icon(Icons.bluetooth, color: Colors.blue),
+                    title: MyText(
+                      fontsize: 14,
+                        text: device.platformName.isNotEmpty
+                        ? device.platformName
+                        : 'Unknown Device'),
+                    subtitle: MyText(
+                      fontsize: 12,
+                      color: Colors.grey,
+                      text: device.remoteId.str
+                    ),
+                    trailing: ElevatedButton(
+                      child: const Text('Select',
+                        style: TextStyle(
+                            color: Colors.white
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        backgroundColor: Colors.blue
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          if(isSetBTVehicleID){
+                            isSetBTVehicleID = false;
+                            selectedDevice = device;
+                          }
+
+                          if(isSetBTMonitor){
+                            isSetBTMonitor = false;
+                            selectedDevice = device;
+                          }
+                        });
+
+                        print('Selected: ${device.platformName}');
+                        Navigator.of(context).pop();
+                      },
+
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context){
-
     return Consumer<SettingsService>(
       builder: (context, settings, child) {
 
-        if (settings.isLoading) {
+        if (settings.isLoading || isLoading) {
           return Scaffold(
             appBar: AppBar(
               backgroundColor: APP_BAR_COLOR,
@@ -211,149 +557,602 @@ class _SettingsPageState extends State<SettingsPage> {
           );
         }
 
-        return Scaffold(
-          backgroundColor: APP_BACKGROUND_COLOR,
-          appBar: AppBar(
-            backgroundColor: APP_BAR_COLOR,
-            foregroundColor: Colors.white,
-            title: MyAppbarTitle('Settings'),
-            actions: [
-               IconButton(
-                 icon:const Icon(
-                   Icons.save,
-                   size: 30
-                 ),
-                 onPressed: () {
-                   settings.updateFields({
-                     SettingLogPointPerMeter: int.parse(_logPointPerMeterController.text),
-                     SettingRebateValue: double.parse(_rebateValueController.text),
-                   });
-                   GlobalSnackBar.show("Saved");
-                 },
-              ),
-            ],
-          ),
-          body: ListView(
+        return DefaultTabController(
+          length: 3,
+          child: Scaffold(
+            backgroundColor: APP_BACKGROUND_COLOR,
+            appBar: AppBar(
+              backgroundColor: APP_BAR_COLOR,
+              foregroundColor: Colors.white,
+              title: MyAppbarTitle('Settings'),
+              actions: [
 
-            children: [
-              const SizedBox(height: 20),
-
-              // Rebate Value
-              MyTextOption(
-                controller: _rebateValueController,
-                label: 'Rebate Value',
-                description: "Rebate value per kilometer",
-                prefix: 'R',
-              ),
-
-              const SizedBox(height: 10),
-
-              // logPointPerMeter
-              MyTextOption(
-                controller: _logPointPerMeterController,
-                label: 'Log Location Interval',
-                description: "Record a map location everytime you move this far in meters",
-                suffix: 'm',
-              ),
-
-              const SizedBox(height: 10),
-
-              // isVoicePromptOn
-              MyToggleOption(
-                  value: settings.settings!.isVoicePromptOn,
-                  label: 'Voice Prompt',
-                  subtitle: 'Allow me to give you vocal feedback',
-                  onChanged: (bool value)=>
-                  {
-                    //setState(() {
-                    //  _isVoicePromptOn = value;
-                    //}),
-                    settings.updateFields({SettingIsVoicePromptOn: value}),
-
-                    if(value) {
-                      _flutterTts.speak('Voice Prompt enabled'),
-                    },
-                  }
-              ),
-
-              const SizedBox(height: 10),
-
-              // Bluetooth
-
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text("Use the Bluetooth device in your vehicle to get vehicle ID"
-                    "Select from your Bluetooth paired list what Bluetooth device"
-                    "you connect to in this vehicle",
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white,),
-                softWrap: true,
+                // Save Button
+                 IconButton(
+                   icon:const Icon(
+                     Icons.save,
+                     size: 30
+                   ),
+                   onPressed: () {
+                     settings.updateFields({
+                       SettingLogPointPerMeter: int.parse(_logPointPerMeterController.text),
+                       SettingRebateValue: double.parse(_rebateValueController.text),
+                     });
+                     GlobalSnackBar.show("Saved");
+                   },
                 ),
-              ),
+              ],
+              bottom: TabBar(
+                labelColor: Colors.white,
+                  indicatorColor: Colors.blue,
+                  unselectedLabelColor: Colors.grey,
+                  tabs: [
+                    Tab(text: "General"),
+                    Tab(text: "Servers"),
+                    Tab(text: "Monitors",)
+                  ]),
+            ),
+            body: TabBarView( children: [
 
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButton<BluetoothDevice>(
+              // General Settings
+              ListView(
+                children: [
+                  const SizedBox(height: 20),
+
+                  // Rebate Value
+                  MyTextOption(
+                    controller: _rebateValueController,
+                    label: 'Rebate Value',
+                    description: "Rebate value per kilometer",
+                    prefix: 'R',
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // logPointPerMeter
+                  MyTextOption(
+                    controller: _logPointPerMeterController,
+                    label: 'Log Location Interval',
+                    description: "Record a map location everytime you move this far in meters",
+                    suffix: 'm',
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // isVoicePromptOn
+                  MyToggleOption(
+                      value: settings.settings!.isVoicePromptOn,
+                      label: 'Voice Prompt',
+                      subtitle: 'Allow me to give you vocal feedback',
+                      onChanged: (bool value)=>
+                      {
+                        //setState(() {
+                        //  _isVoicePromptOn = value;
+                        //}),
+                        settings.updateFields({SettingIsVoicePromptOn: value}),
+
+                        if(value) {
+                          _flutterTts.speak('Voice Prompt enabled'),
+                        },
+                      }
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Vehicle ID  - Bluetooth
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 20),
+                    child: MyTextHeader(text: "Vehicle ID"),
+                  ),
+
+                  // Hint Text
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20,2,20,5),
+                    child: Text("Use the Bluetooth device in your vehicle to get vehicle ID "
+                        "Select from your Bluetooth paired list what Bluetooth device "
+                        "you connect to in this vehicle",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,),
+                      softWrap: true,
+                    ),
+                  ),
+
+                  // Select Bluetooth Button
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20,vertical: 20),
+                    child: Theme(
+                      data: Theme.of(context).copyWith(
+                        // Set items list background color
+                          canvasColor: APP_TILE_COLOR
+                      ),
+                      child: DropdownButtonFormField<BluetoothDevice>(
                         value: selectedDevice,
                         style: TextStyle(color: Colors.white),
-                        hint: Text("Select bluetooth device",
-                                  style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
+                        decoration: InputDecoration(
+                          labelText: 'Select Bluetooth Device',
+                          labelStyle: TextStyle(color: Colors.grey),
+                          fillColor: APP_BACKGROUND_COLOR,
+                          filled: true,
+                          prefixIcon: const Icon(
+                            Icons.bluetooth,
+                            color: Colors.blueAccent,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey),
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                        ),
+                        hint: Text(lstPairedDevices.isEmpty ? 'No paired devices' : 'Choose a paired device',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+
+                        items: lstPairedDevices.map((BluetoothDevice device) {
+                          return DropdownMenuItem<BluetoothDevice>(
+                            value: device,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.bluetooth,
+                                  size: 20,
+                                  color: device.isConnected ? Colors.green : Colors.grey,
                                 ),
-                              ),
-                          items: pairedDevices.map((device) {
-                            String deviceName = device.platformName.isNotEmpty ? device.platformName : device.remoteId.toString();
-                            return DropdownMenuItem(
-                              value: device,
-                              child: Text(deviceName),
-                            );
-                          }).toList(),
-                          onChanged: (BluetoothDevice? newDevice) {
-                            setState(() {
-                              selectedDevice = newDevice;
-                            });
-                          },
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        device.platformName.isNotEmpty
+                                            ? device.platformName
+                                            : 'Unknown Device',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        device.remoteId.toString(),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (BluetoothDevice? device) {
+                          setState(() {
+                            if(device != null){
+                              selectedDevice = device;
+                              bluetoothData.id = device.remoteId.toString();
+                              bluetoothData.name = device.platformName;
+                            }
+                          });
+                          //if (onDeviceSelected != null) {
+                          //  onDeviceSelected!(device);
+                          //}
+                        },
+                        isExpanded: true,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              // Servers Settings
+              StreamBuilder(
+                stream:  FirebaseFirestore.instance
+                        .collection(CollectionUsers)
+                        .doc(FirebaseAuth.instance.currentUser?.uid)
+                        .collection(CollectionServers)
+                        .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final docs = snapshot.data!.docs;
+
+                  // Recreate controller if length changes
+                  _tabControllerServers ??= TabController(length: docs.length, vsync: this);
+                  if (_tabControllerServers!.length != docs.length) {
+                    _tabControllerServers = TabController(length: docs.length, vsync: this);
+                  }
+
+                  lstServerData = snapshot.data!.docs;
+
+                  return Scaffold(
+                    backgroundColor: APP_BACKGROUND_COLOR,
+                    floatingActionButton:
+                    FloatingActionButton(
+                      onPressed: _addServer,
+                      backgroundColor: COLOR_ORANGE,
+                      child: Icon(
+                        Icons.add,
+                        color: Colors.white,
                       ),
                     ),
 
-                    SizedBox(width: 10),
-
-                    ElevatedButton(
-                        onPressed: (){
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Scanning Bluetooth')),
-                          );
-                          //_getPairedDevices();
-                          Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context)=> BluetoothDeviceDropdown(),
+                    body: (lstServerData.isEmpty)
+                        ? Container(
+                            child: Center(
+                              child: Text('No Servers',
+                                style: TextStyle(color: Colors.grey),
                               ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                      ),
-                        child: Text(
-                          "Refresh",
-                          style: TextStyle(
-                              color: Colors.white
-                          ),
-                        ),
+                            ),
                     )
-                  ],
-                ),
-              )
+                    : Column(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            children: [
+                              TabBar(
+                                controller: _tabControllerServers,
+                                isScrollable: true,
+                                labelColor: Colors.white,
+                                unselectedLabelColor: Colors.grey,
+                                indicatorColor: Colors.blue,
+                                tabs: lstServerData
+                                    .map((server) => Tab(text: server[SettingServerName]))
+                                    .toList(),
+                              ),
+                              Expanded(
+                                child: TabBarView(
+                                  controller: _tabControllerServers,
+                                  children: lstServerData.map((server) {
 
-            ],
+                                    return Container(
+
+                                      color: APP_BACKGROUND_COLOR,
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+
+                                          // Name
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+                                            child: MyTextFormField(
+                                              backgroundColor: APP_BACKGROUND_COLOR,
+                                              foregroundColor: Colors.white,
+                                              controller: TextEditingController(text: server[SettingServerName]),
+                                              hintText: "Enter value here",
+                                              labelText: "Name",
+                                              onChanged: (value) {},
+                                              onFieldSubmitted: (value){
+                                                final vehicleDoc = lstServerData[_tabControllerServers!.index];
+                                                final docId = vehicleDoc.id;
+                                                setState(() {
+                                                  mapServerData[docId]?[SettingServerName] = value;
+                                                  _saveCurrentServer();
+                                                });
+                                              },
+                                            ),
+                                          ),
+
+                                          // Description
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+                                            child: MyTextFormField(
+                                              backgroundColor: APP_BACKGROUND_COLOR,
+                                              foregroundColor: Colors.white,
+                                              controller: TextEditingController(text: server[SettingServerDesc]),
+                                              hintText: "Enter value here",
+                                              labelText: "Description",
+                                              onChanged: (value) {
+
+                                              },
+                                              onFieldSubmitted: (value){
+                                                final vehicleDoc = lstServerData[_tabControllerServers!.index];
+                                                final docId = vehicleDoc.id;
+
+                                                setState(() {
+                                                  mapServerData[docId]?[SettingServerDesc] = value;
+                                                  _saveCurrentServer();
+                                                });
+                                              },
+                                            ),
+                                          ),
+
+                                          // IP Address
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+                                            child: MyTextFormField(
+                                              backgroundColor: APP_BACKGROUND_COLOR,
+                                              foregroundColor: Colors.white,
+                                              controller: TextEditingController(text: server[SettingServerIpAdr]),
+                                              hintText: "Enter value here",
+                                              labelText: "IP Address",
+                                              onChanged: (value) {
+
+                                              },
+                                              onFieldSubmitted: (value){
+                                                final vehicleDoc = lstServerData[_tabControllerServers!.index];
+                                                final docId = vehicleDoc.id;
+
+                                                setState(() {
+                                                  mapServerData[docId]?[SettingServerIpAdr] = value;
+                                                  _saveCurrentServer();
+                                                });
+                                              },
+                                            ),
+                                          ),
+
+                                          // Bluetooth Header
+                                          Padding
+                                            (
+                                            padding: EdgeInsets.fromLTRB(5,40,5,0),
+                                            child: MyTextHeader(
+                                              text: 'Bluetooth',
+                                              color: Colors.white,
+                                              fontsize: 16,
+                                            ),
+                                          ),
+
+                                          // Hint Text
+                                          Padding(
+                                            padding: const EdgeInsets.all(8.0),
+                                            child: Text("GeoFence supports multiple base stations. Each base station "
+                                                "has it's own server. In your phone bluetooth settings, connect to the server."
+                                                "Then select it from this list",
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey,),
+                                              softWrap: true,
+                                            ),
+                                          ),
+
+                                          // Bluetooth List
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 20),
+                                            child: Theme(
+                                              data: Theme.of(context).copyWith(
+                                                // Set items list background color
+                                                  canvasColor: APP_TILE_COLOR
+                                              ),
+                                              child: DropdownButtonFormField<BluetoothDevice>(
+                                                value: selectedDevice,
+                                                style: TextStyle(color: Colors.white),
+                                                decoration: InputDecoration(
+                                                  labelText: 'Select Bluetooth Device',
+                                                  labelStyle: TextStyle(color: Colors.grey),
+                                                  fillColor: APP_BACKGROUND_COLOR,
+                                                  filled: true,
+                                                  prefixIcon: const Icon(
+                                                    Icons.bluetooth,
+                                                    color: Colors.blueAccent,
+                                                  ),
+                                                  enabledBorder: OutlineInputBorder(
+                                                    borderSide: BorderSide(color: Colors.grey),
+                                                  ),
+                                                  border: OutlineInputBorder(
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    borderSide: BorderSide(color: Colors.grey),
+                                                  ),
+                                                  focusedBorder: OutlineInputBorder(
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    borderSide: BorderSide(color: Colors.grey),
+                                                  ),
+                                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                                                ),
+                                                hint: Text(lstPairedDevices.isEmpty ? 'No paired devices' : 'Choose a paired device',
+                                                  style: TextStyle(color: Colors.grey),
+                                                ),
+
+                                                items: lstPairedDevices.map((BluetoothDevice device) {
+                                                  return DropdownMenuItem<BluetoothDevice>(
+                                                    value: device,
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(
+                                                          Icons.bluetooth,
+                                                          size: 20,
+                                                          color: device.isConnected ? Colors.green : Colors.grey,
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Expanded(
+                                                          child: Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            children: [
+                                                              Text(
+                                                                device.platformName.isNotEmpty
+                                                                    ? device.platformName
+                                                                    : 'Unknown Device',
+                                                                style: const TextStyle(
+                                                                  fontWeight: FontWeight.w500,
+                                                                ),
+                                                              ),
+                                                              Text(
+                                                                device.remoteId.toString(),
+                                                                style: TextStyle(
+                                                                  fontSize: 12,
+                                                                  color: Colors.grey.shade600,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                }).toList(),
+                                                onChanged: (BluetoothDevice? device) {
+                                                  setState(() {
+                                                    if(device != null){
+                                                      selectedDevice = device;
+                                                      bluetoothData.id = device.remoteId.toString();
+                                                      bluetoothData.name = device.platformName;
+                                                    }
+                                                  });
+                                                  //if (onDeviceSelected != null) {
+                                                  //  onDeviceSelected!(device);
+                                                  //}
+                                                },
+                                                isExpanded: true,
+                                              ),
+                                            ),
+                                          ),
+
+                                          // Delete Button
+                                          FloatingActionButton(
+                                            onPressed: (){
+                                              _deleteServerDialog();
+                                              setState(() {
+                                                lstServerData.remove(server);
+                                              });
+                                            },
+                                            backgroundColor: COLOR_ORANGE,
+                                            child: const Icon(
+                                              Icons.delete_forever,color: Colors.white
+                                            ),
+                                        ),
+
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      ],
+                    ),
+                  );
+                }
+              ),
+
+              // Monitors
+              Center(
+                  child:  Text(
+                    "Map",style:
+                    TextStyle(color: Colors.white),
+                  ),
+              ),
+            ])
           ),
         );
       }
     );
   }
 }
+
+// lstServerData.map((doc){
+//   final _docId = doc.id;
+//   final server = mapServerData[_docId]!;
+//
+//   return ListView(
+//     padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 0),
+//     children: [
+//
+
+//       // Commented out
+//       Padding(
+//         padding: const EdgeInsets.fromLTRB(15,5,15,5),
+//         // child: Container(
+//         //   padding: const EdgeInsets.symmetric(vertical: 1,horizontal: 1),
+//         //   decoration: BoxDecoration(
+//         //     color: APP_BACKGROUND_COLOR,
+//         //     borderRadius: BorderRadius.circular(15),
+//         //     boxShadow: const [
+//         //       BoxShadow(
+//         //         color: Colors.black12,
+//         //         blurRadius: 8,
+//         //       ),
+//         //     ],
+//         //     border: Border.symmetric(
+//         //         vertical: BorderSide(color: Colors.blueGrey),
+//         //         horizontal: BorderSide(color: Colors.blueGrey)
+//         //     )
+//         //   ),
+//         //   height: 200,
+//         //     child: Stack(
+//         //       children: [
+//         //         Positioned.fill(
+//         //           right: 30,
+//         //             bottom: 10,
+//         //             top: 10,
+//         //             child: lstPairedDevices.isEmpty
+//         //                 ? const Center(child: MyText(
+//         //               text: "No devices added",
+//         //               color: Colors.grey,
+//         //               fontsize: 12,
+//         //             ))
+//         //                 : ListView.builder(
+//         //               itemCount: lstPairedDevices.length,
+//         //               itemBuilder: (context, index) {
+//         //                 final dev = lstPairedDevices[index];
+//         //                 return ListTile(
+//         //                   dense: true,
+//         //                   visualDensity: VisualDensity(horizontal: 0, vertical: -4),
+//         //                   leading: const Icon(
+//         //                       Icons.bluetooth,
+//         //                       color: Colors.blue
+//         //                   ),
+//         //                   title: MyText(
+//         //                     text:(dev.platformName.isEmpty ?? false)
+//         //                         ? dev.platformName
+//         //                         :"None",
+//         //                     fontsize: 14,
+//         //                     color: Colors.white,
+//         //                   ),
+//         //                   subtitle: MyText(
+//         //                     text:dev.remoteId.str,
+//         //                     color: Colors.grey,
+//         //                     fontsize: 12,
+//         //                   ),
+//         //                   trailing: IconButton(
+//         //                     icon: const Icon(Icons.delete, color: Colors.red),
+//         //                     onPressed: () {
+//         //                       setState(() {
+//         //                         lstPairedDevices.removeAt(index);
+//         //                       });
+//         //                     },
+//         //                   ),
+//         //                 );
+//         //               },
+//         //             ),
+//         //         ),
+//         //
+//         //         // Button
+//         //         Positioned(
+//         //             bottom: 10,
+//         //             right: 10,
+//         //             child: FloatingActionButton(
+//         //               backgroundColor: Colors.blue,
+//         //               foregroundColor: Colors.white,
+//         //
+//         //               mini: true,
+//         //               onPressed: () async {
+//         //                 this.isSetBTMonitor = true;
+//         //                 _showBluetoothDevicesPopup();
+//         //
+//         //                 setState(() {
+//         //                   if(selectedDevice != null) {lstPairedDevices.add(selectedDevice!); }
+//         //                 });
+//         //               },
+//         //               child: const Icon(Icons.add, color: Colors.white),
+//         //             )
+//         //
+//         //         )
+//         //       ],
+//         //     ),
+//       ),
+//     ]
+//   );
+// }).toList(),
+//),

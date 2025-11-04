@@ -5,12 +5,12 @@ import 'package:geofence/utils.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class vehiclesAddPage extends StatefulWidget {
-  final DocumentSnapshot? vehicle;
+  final DocumentSnapshot? vehicleSnapshot;
   final String? tabHeader;
 
   const vehiclesAddPage({
     super.key,
-    this.vehicle,
+    this.vehicleSnapshot,
     this.tabHeader,
   });
 
@@ -79,19 +79,19 @@ class _vehiclesAddPageState extends State<vehiclesAddPage> {
   }
   void loadSettings() {
     _vehicleNameController = TextEditingController(
-         text: widget.vehicle != null ? widget.vehicle![SettingVehicleName] : ''
+         text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleName] : ''
      );
 
      _fuelConsumptionController = TextEditingController(
-         text: widget.vehicle != null ? widget.vehicle![SettingVehicleFuelConsumption].toString() : ''
+         text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleFuelConsumption].toString() : ''
      );
 
      _vehicleRegController = TextEditingController(
-         text: widget.vehicle != null ? widget.vehicle![SettingVehicleReg] : ''
+         text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleReg] : ''
      );
 
-     _bluetoothDeviceName = widget.vehicle != null ? widget.vehicle![SettingVehicleBlueDeviceName] : "";
-     _bluetoothMAC = widget.vehicle != null ? widget.vehicle![SettingVehicleBlueMac] : "";
+     _bluetoothDeviceName = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleBlueDeviceName] : "";
+     _bluetoothMAC = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleBlueMac] : "";
   }
   void testBluetooth(){
     showDialog(
@@ -220,7 +220,7 @@ class _vehiclesAddPageState extends State<vehiclesAddPage> {
       appBar: AppBar(
         backgroundColor: APP_BAR_COLOR,
         foregroundColor: Colors.white,
-        title: MyAppbarTitle(widget.vehicle == null ? 'Add Vehicles' : 'Edit Vehicle'),
+        title: MyAppbarTitle(widget.vehicleSnapshot == null ? 'Add Vehicles' : 'Edit Vehicle'),
       ),
       body: Container(
         color: APP_BACKGROUND_COLOR,
@@ -471,7 +471,7 @@ class _vehiclesAddPageState extends State<vehiclesAddPage> {
         ),
       floatingActionButton: FloatingActionButton(
           onPressed: (){
-            saveVehicle(widget.vehicle);
+            saveVehicle(widget.vehicleSnapshot);
           },
         backgroundColor: COLOR_ORANGE,
         child: Icon(

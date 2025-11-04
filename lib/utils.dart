@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+const APP_VERSION = "1.1";
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool isDebug = true;
@@ -59,6 +62,7 @@ const CollectionGeoFences = 'geofences';
 const CollectionTrackingSessions = 'tracking_sessions';
 const CollectionLocations = 'locations';
 const CollectionVehicles = 'vehicles';
+const CollectionServers = 'servers';
 
 const FieldsSettings = 'settings';
 const FieldsUserData = 'userdata';
@@ -70,6 +74,7 @@ const SettingIsVoicePromptOn = 'isVoicePromptOn';
 const SettingLogPointPerMeter = 'logPointPerMeter';
 const SettingRebateValue = 'rebateValuePerLiter';
 const SettingDieselPrice = 'dieselPrice';
+const SettingConnectedDevice = 'connectedDevice';
 
 // Vehicle settings
 const SettingVehicleName = 'name';
@@ -77,6 +82,14 @@ const SettingVehicleFuelConsumption = 'fuelConsumption';
 const SettingVehicleReg = 'registrationNumber';
 const SettingVehicleBlueDeviceName = 'bluetoothDeviceName';
 const SettingVehicleBlueMac = 'bluetoothMAC';
+const SettingVehiclePicture = 'picture';
+
+// Servers Settings
+const SettingServerName = 'name';
+const SettingServerDesc = 'description';
+const SettingServerIpAdr = 'ipAdr';
+
+
 
 //---------------------------------------------------
 // Methods
@@ -343,6 +356,15 @@ class FenceData{
     this.polygonId = "",
   });
 }
+class BluetoothData{
+  String name;
+  String id;
+
+  BluetoothData({
+    this.name = "",
+    this.id = "",
+  });
+}
 class MyTextFormField extends StatefulWidget {
   final TextEditingController? controller;
   @override
@@ -356,6 +378,7 @@ class MyTextFormField extends StatefulWidget {
   final FormFieldSetter<String>? onSaved;
   final FormFieldValidator<String>? validator;
   final ValueChanged<String>? onFieldSubmitted;
+  final ValueChanged<String>? onChanged;
   final TextInputType? inputType;
   final double? width;
   final Color? backgroundColor;
@@ -373,6 +396,7 @@ class MyTextFormField extends StatefulWidget {
     this.validator,
     this.width,
     this.onFieldSubmitted,
+    this.onChanged,
     this.inputType,
     this.backgroundColor = Colors.white,
     this.foregroundColor = Colors.black,
@@ -384,11 +408,6 @@ class MyTextFormField extends StatefulWidget {
 }
 class _MyTextFormFieldState extends State<MyTextFormField> {
   bool _obscureText = true;
-
-  // Choose your keyboard type:
- // final keyboardType = TextInputType.numberWithOptions(decimal: true);
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -409,7 +428,7 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
       width: widget.width,
       child: TextFormField(
         style: TextStyle(
-            fontSize: 20,
+            fontSize: 15,
             color: widget.foregroundColor
         ),
 
@@ -420,6 +439,7 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
         key: widget.key,
         obscureText: widget.isPasswordField == true ? _obscureText : false,
         onSaved: widget.onSaved,
+        onChanged: widget.onChanged,
         validator: widget.validator,
         onFieldSubmitted: widget.onFieldSubmitted,
         decoration: InputDecoration(
@@ -635,8 +655,6 @@ class MyIcon extends StatelessWidget {
                 color: iconColor,
               ),
 
-              SizedBox(height: 1),
-
               Text(
                 text,
                 textAlign: TextAlign.center,
@@ -675,14 +693,14 @@ class MyTextOption extends StatelessWidget {
       padding: const EdgeInsets.only(left: 10.0, right: 10, bottom: 5),
       child: Container(
         padding: EdgeInsets.only(top: 10, bottom: 10,left: 15),
-        decoration: BoxDecoration(
-          gradient: MyTileGradient(),
-          border: Border.all(
-            color: Colors.grey,
-            width: 1
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
+        // decoration: BoxDecoration(
+        //   gradient: MyTileGradient(),
+        //   border: Border.all(
+        //     color: Colors.grey,
+        //     width: 1
+        //   ),
+        //   borderRadius: BorderRadius.circular(8),
+        // ),
         child: Row(
           //mainAxisAlignment: MainAxisAlignment.start,
           //crossAxisAlignment: CrossAxisAlignment.center,
@@ -777,14 +795,14 @@ class MyToggleOption extends StatelessWidget {
       padding: const EdgeInsets.only(left: 10.0, right: 10,bottom: 5),
       child: Container(
         padding: EdgeInsets.only(top: 8, bottom: 8),
-        decoration: BoxDecoration(
-          gradient: MyTileGradient(),
-          border: Border.all(
-              color: Colors.grey,
-              width: 1
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
+        // decoration: BoxDecoration(
+        //   gradient: MyTileGradient(),
+        //   border: Border.all(
+        //       color: Colors.grey,
+        //       width: 1
+        //   ),
+        //   borderRadius: BorderRadius.circular(8),
+        // ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -840,6 +858,39 @@ class MyText extends StatelessWidget {
         fontWeight: FontWeight.normal,
         fontSize: fontsize,
       ),
+    );
+  }
+}
+class MyTextHeader extends StatelessWidget {
+  final String text;
+  final double? fontsize;
+  final Color color;
+
+  const MyTextHeader({
+    required this.text,
+    this.fontsize = 16,
+    this.color = Colors.white,
+    super.key
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return  Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(text,
+          style: TextStyle(
+            fontSize: fontsize,
+            fontFamily: 'Poppins',
+            color: color,
+          ),
+          softWrap: true,
+        ),
+        Divider(
+          thickness: 2,
+          color: Colors.blue,
+        )
+      ],
     );
   }
 }
@@ -941,6 +992,307 @@ class MyTextTileWithEditDelete extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+class MyCircleIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const MyCircleIconButton({
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.all(10.0),
+          child: Icon(icon, color: Colors.white, size: 22),
+        ),
+      ),
+    );
+  }
+}
+class MyVehicleData extends StatefulWidget {
+  final DocumentSnapshot? vehicleSnapshot;
+  String bluetoothDeviceName = "";
+  String bluetoothMAC = "";
+  List<BluetoothDevice> pairedDevices = [];
+
+  MyVehicleData({
+    super.key,
+    required this.vehicleSnapshot,
+    this.bluetoothMAC = "",
+    this.bluetoothDeviceName = ""
+  });
+
+  @override
+  State<MyVehicleData> createState() => _MyVehiclesDataState();
+}
+class _MyVehiclesDataState extends State<MyVehicleData> {
+  TextEditingController vehicleNameController = TextEditingController();
+  TextEditingController fuelConsumptionController = TextEditingController();
+  TextEditingController vehicleRegController = TextEditingController();
+  BluetoothDevice? selectedDevice;
+  List<BluetoothDevice> pairedDevices = [
+    //   BluetoothDevice.fromId("00:11:22:33:44:55"),
+    //   BluetoothDevice.fromId("00:11:22:33:44:65"),
+    //   BluetoothDevice.fromId("00:11:22:33:44:75"),
+    //   BluetoothDevice.fromId("00:11:22:33:44:85"),
+    //   BluetoothDevice.fromId("00:11:22:33:44:95"),
+  ];
+
+  void loadSettings() {
+    vehicleNameController = TextEditingController(
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleName] : ''
+    );
+
+    fuelConsumptionController = TextEditingController(
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleFuelConsumption].toString() : ''
+    );
+
+    vehicleRegController = TextEditingController(
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleReg] : ''
+    );
+
+    widget.bluetoothDeviceName = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleBlueDeviceName] : "";
+    widget.bluetoothMAC = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleBlueMac] : "";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+
+    loadSettings();
+
+    return Container(
+      color: APP_BACKGROUND_COLOR,
+      child:  Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+
+          // Vehicle Info
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8,vertical: 5,),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+
+                // Header
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10, horizontal: 5),
+                  child: MyTextHeader(
+                    text: 'Vehicle Information',
+                    color: Colors.white,
+                    fontsize: 16,
+                  ),
+                ),
+
+                // Vehicle Name
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
+                  child: MyTextFormField(
+                    backgroundColor: APP_BACKGROUND_COLOR,
+                    foregroundColor: Colors.white,
+                    controller: vehicleNameController,
+                    hintText: "Enter value here",
+                    labelText: "Vehicle Name",
+                    onFieldSubmitted: (value){
+                    },
+                  ),
+                ),
+
+                // FuelConsumption
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
+                  child: MyTextFormField(
+                    backgroundColor: APP_BACKGROUND_COLOR,
+                    foregroundColor: Colors.white,
+                    controller: fuelConsumptionController,
+                    hintText: "Enter value here",
+                    labelText: "Consumption",
+                    suffix: "l/100Km",
+                    inputType: TextInputType.number,
+                    onFieldSubmitted: (value){
+                    },
+                  ),
+                ),
+
+                // Reg Number
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
+                  child: MyTextFormField(
+                    backgroundColor: APP_BACKGROUND_COLOR,
+                    foregroundColor: Colors.white,
+                    controller: vehicleRegController,
+                    hintText: "Enter value here",
+                    labelText: "Registration Number",
+                    onFieldSubmitted: (value){
+                    },
+                  ),
+                ),
+                SizedBox(height: 10),
+              ],
+            ),
+          ),
+
+          // Bluetooth
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+
+                // Header
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: 15,horizontal: 5),
+                  child: MyTextHeader(
+                    text:'Bluetooth',
+                    color: Colors.white,
+                    fontsize: 16,
+                    ),
+                  ),
+
+                // Help text
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  child: Text('Use bluetooth connection in the vehicle to get vehicle ID. '
+                      'Select which bluetooth connection to use in the vehicle. '
+                      'If the list is empty you need to pair to a bluetooth device first. '
+                      'The list is of paired devices, NOT connected devices ',
+                    softWrap: true,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 10),
+
+                // Test Bluetooth
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15.0),
+                  child: GestureDetector(
+                    child: Text("Test Bluetooth Connection",
+                      style: TextStyle(
+                        color: Colors.blue,
+                        fontSize: 14,
+                      ),
+                    ),
+
+                    onTap: (){
+                      //testBluetooth();
+                    },
+                  ),
+                ),
+
+                SizedBox(height: 10),
+
+                // Select Bluetooth
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 20),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      // Set items list background color
+                        canvasColor: APP_TILE_COLOR
+                    ),
+                    child: DropdownButtonFormField<BluetoothDevice>(
+                      value: selectedDevice,
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Select Bluetooth Device',
+                        labelStyle: TextStyle(color: Colors.grey),
+                        fillColor: APP_BACKGROUND_COLOR,
+                        filled: true,
+                        prefixIcon: const Icon(
+                          Icons.bluetooth,
+                          color: Colors.blueAccent,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                      ),
+                      hint: Text(pairedDevices.isEmpty ? 'No paired devices' : 'Choose a paired device',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+
+                      items: pairedDevices.map((BluetoothDevice device) {
+                        return DropdownMenuItem<BluetoothDevice>(
+                          value: device,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.bluetooth,
+                                size: 20,
+                                color: device.isConnected ? Colors.green : Colors.grey,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      device.platformName.isNotEmpty
+                                          ? device.platformName
+                                          : 'Unknown Device',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Text(
+                                      device.remoteId.toString(),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (BluetoothDevice? device) {
+                        setState(() {
+                          if(device != null){
+                            selectedDevice = device;
+                            widget.bluetoothMAC = device.remoteId.toString();
+                            widget.bluetoothDeviceName = device.platformName;
+                          }
+                        });
+                        //if (onDeviceSelected != null) {
+                        //  onDeviceSelected!(device);
+                        //}
+                      },
+                      isExpanded: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1223,12 +1575,16 @@ class Settings{
   int logPointPerMeter;
   double rebateValuePerLiter;
   double dieselPrice;
+  String connectedDevice;
+  List<ServerData>? serverData;
 
   Settings({
     required this.dieselPrice,
     required this.isVoicePromptOn,
     required this.logPointPerMeter,
-    required this.rebateValuePerLiter
+    required this.rebateValuePerLiter,
+    this.connectedDevice = "",
+    this.serverData
   });
 
   factory Settings.fromMap(Map<String, dynamic> map){
@@ -1237,6 +1593,12 @@ class Settings{
       dieselPrice: map['dieselPrice'] ?? 20,
       logPointPerMeter: map['logPointPerMeter'] ?? 10,
       rebateValuePerLiter: map['rebatePerLiter'] ?? 2.6,
+      connectedDevice: map['connectedDevice'] ?? "",
+      serverData: map['serverData'] != null
+        ? List<ServerData>.from(
+        (map['serverData'] as List)
+            .map((e) => ServerData.fromMap(e as Map<String, dynamic>)))
+        : null,
     );
   }
 
@@ -1245,7 +1607,9 @@ class Settings{
       'isVoicePromptOn': isVoicePromptOn,
       'dieselPrice': dieselPrice,
       'logPointPerMeter': logPointPerMeter,
-      'rebateValuePerLiter': rebateValuePerLiter
+      'rebateValuePerLiter': rebateValuePerLiter,
+      'connectedDevice': connectedDevice,
+      'serverData': serverData?.map((e) => e.toMap()).toList(),
     };
   }
 
@@ -1254,15 +1618,52 @@ class Settings{
     int? logPointPerMeter,
     double? rebateValuePerLiter,
     double? dieselPrice,
+    String? connectedDevice,
+    List<ServerData>? serverData,
   }){
     return Settings(
       isVoicePromptOn: isVoicePromptOn ?? this.isVoicePromptOn,
       logPointPerMeter: logPointPerMeter ?? this.logPointPerMeter,
       dieselPrice: dieselPrice ?? this.dieselPrice,
       rebateValuePerLiter: rebateValuePerLiter ?? this.rebateValuePerLiter,
+      connectedDevice: connectedDevice ?? this.connectedDevice,
+      serverData: serverData ?? this.serverData,
     );
   }
+
 }
+class ServerData {
+  String? name;
+  String? description;
+  String? bluetooth;
+  String? ipAddress;
+
+  ServerData({
+    this.name,
+    this.description,
+    this.bluetooth,
+    this.ipAddress,
+  });
+
+  factory ServerData.fromMap(Map<String, dynamic> map) {
+    return ServerData(
+      name: map['name'],
+      description: map['description'],
+      bluetooth: map['bluetooth'],
+      ipAddress: map['ipAddress'],
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'description': description,
+      'bluetooth': bluetooth,
+      'ipAddress': ipAddress,
+    };
+  }
+}
+
 class SettingsService extends ChangeNotifier {
   static final SettingsService _instance = SettingsService._internal();
   factory SettingsService() => _instance;
@@ -1292,17 +1693,35 @@ class SettingsService extends ChangeNotifier {
 
     isLoading = false;
   }
-  // Future<void> update(Settings newSettings) async {
-  //   final uid = FirebaseAuth.instance.currentUser?.uid;
-  //   if (uid == null) return;
-  //
-  //   _settings = newSettings;
-  //   await _db.collection(CollectionUsers).doc(uid).update({
-  //     CollectionSettings : newSettings.toMap(),
-  //   });
-  //
-  //   notifyListeners();
-  // }
+
+  Map<String, dynamic> flattenMap(Map<String, dynamic> map, [String prefix = '']) {
+    final result = <String, dynamic>{};
+    map.forEach((key, value) {
+      final newKey = prefix.isEmpty ? key : '$prefix.$key';
+      if (value is Map<String, dynamic>) {
+        result.addAll(flattenMap(value, newKey));
+      } else {
+        result[newKey] = value;
+      }
+    });
+    return result;
+  }
+  Future<void> updateServerFields(Map<String, dynamic> updates) async {
+    try{
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      await _db.collection(CollectionUsers)
+          .doc(uid)
+          .update(updates);
+
+      notifyListeners();
+    }
+    catch(e){
+      GlobalMsg.show('updateSettingFields:', '$e');
+    }
+  }
+
   Future<void> updateFields(Map<String, dynamic> updates) async {
     try {
       final current = _settings;
@@ -1313,6 +1732,8 @@ class SettingsService extends ChangeNotifier {
         logPointPerMeter: updates['logPointPerMeter'] ?? current.logPointPerMeter,
         rebateValuePerLiter: updates['rebateValuePerLiter'] ?? current.rebateValuePerLiter,
         dieselPrice: updates['dieselPrice'] ?? current.dieselPrice,
+        connectedDevice: updates['connectedDevice'] ?? current.connectedDevice,
+        serverData: updates['serverData'] ?? current.serverData,
       );
 
       _settings = updated;
