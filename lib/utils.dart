@@ -88,8 +88,15 @@ const SettingVehiclePicture = 'picture';
 const SettingServerName = 'name';
 const SettingServerDesc = 'description';
 const SettingServerIpAdr = 'ipAdr';
+const SettingServerBlueDeviceName = 'bluetoothDeviceName';
+const SettingServerBlueMac = 'bluetoothMAC';
 
 
+//---------------------------------------------------
+// Bluetooth
+//---------------------------------------------------
+const BT_SERVICE_UUID = 'f3a1c2d0-6b4e-4e9a-9f3e-8d2f1c9b7a1e';
+const BT_CHAR_UUID = 'c7b2e3f4-1a5d-4c3b-8e2f-9a6b1d8c2f3a';
 
 //---------------------------------------------------
 // Methods
@@ -334,6 +341,25 @@ class Grabber extends StatelessWidget {
       ),
     );
   }
+}
+//---------------------------------------------------
+// Dialog
+//---------------------------------------------------
+void MyAlertDialog(BuildContext context, String header, String message){
+  // Show popup with file path
+  showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(header),
+        content: Text(message),
+        actions: [
+         TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+  );
 }
 
 //---------------------------------------------------

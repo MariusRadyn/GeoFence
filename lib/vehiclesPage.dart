@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -8,6 +12,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/vehiclesAddPage.dart';
+import 'package:path_provider/path_provider.dart';
 
 class VehiclesPage extends StatefulWidget {
   const VehiclesPage({super.key});
@@ -17,18 +22,18 @@ class VehiclesPage extends StatefulWidget {
 }
 
 class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMixin{
-  bool isLoading = true;
+  bool _isLoading = true;
   TabController? _tabController;
-
   final ImagePicker _imagePicker = ImagePicker();
-
   final Map<String, Map<String, dynamic>> mapVehicleData = {};
   List<DocumentSnapshot<Map<String, dynamic>>> lstVehicleData = [];
-
-  BluetoothDevice? selectedDevice;
-  BluetoothData bluetoothData = BluetoothData();
-  List<BluetoothDevice> pairedDevices = [
-    //   BluetoothDevice.fromId("00:11:22:33:44:55"),
+  bool _isUploading = false;
+  double _uploadProgress = 0.0;
+  //BluetoothDevice? selectedDevice;
+  //BluetoothData bluetoothData = BluetoothData();
+  List<BluetoothDevice> lstPairedDevices = [
+    BluetoothDevice.fromId("00:11:22:33:44:55"),
+    BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
 
   void initState() {
@@ -50,7 +55,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
       devices.sort((a, b) => (a.platformName ?? '').compareTo(b.platformName ?? ''));
 
       setState(() {
-        pairedDevices = devices;
+        lstPairedDevices = devices;
       });
 
     } catch (e) {
@@ -86,13 +91,13 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
           );
         }
 
-        isLoading = false;
+        _isLoading = false;
 
       });
     }
     catch (e){
       GlobalSnackBar.show('Image upload failed: $e');
-      setState(() {isLoading = false;});
+      setState(() {_isLoading = false;});
     }
   }
   void _saveCurrentVehicle() async {
@@ -372,9 +377,11 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
       },
     );
   }
-  Future<void> _pickAndUploadImage({QueryDocumentSnapshot? vehicleDoc, ImageSource? source }) async {
-    if(source == null || vehicleDoc == null) return;
+  Future<void> _pickAndUploadImageOLD({ImageSource? source }) async {
+    if(source == null) return;
     try {
+      if(_tabController == null) return;
+      final vehicleDoc = lstVehicleData[_tabController!.index];
 
       final XFile? picked = await _imagePicker.pickImage(source: source!, imageQuality: 85);
       if (picked == null) return;
@@ -382,7 +389,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
       final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
       if (uid.isEmpty) return;
 
-      final String path = 'users/$uid/vehicles/${vehicleDoc.id}.jpg';
+      final String path = '$CollectionUsers/$uid/$CollectionVehicles/${vehicleDoc.id}.jpg';
       final Reference ref = FirebaseStorage.instance.ref().child(path);
       final File file = File(picked.path);
 
@@ -400,13 +407,192 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
       GlobalSnackBar.show('Image upload failed: $e');
     }
   }
+  Future<void> _pickAndUploadImage({ImageSource? source}) async {
+    if (source == null) return;
+
+    try {
+      if (_tabController == null) return;
+      final vehicleDoc = lstVehicleData[_tabController!.index];
+
+      final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+      if (uid.isEmpty) return;
+
+      // Pick File
+      final XFile? picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+
+      final String path =
+          '$CollectionUsers/$uid/$CollectionVehicles/${vehicleDoc.id}_${DateTime.now().millisecondsSinceEpoch}.png';
+      final Reference ref = FirebaseStorage.instance.ref().child(path);
+      final File file = File(picked.path);
+
+      // Show loading indicator
+      setState(() {
+        _isUploading = true;
+        _uploadProgress = 0.0;
+      });
+
+      // Delete old image From Firebase
+      final oldUrl = vehicleDoc[SettingVehiclePicture];
+      if (oldUrl != null && oldUrl.toString().isNotEmpty) {
+        try {
+          await FirebaseStorage.instance.refFromURL(oldUrl).delete();
+        } catch (e) {
+          // Ignore if file doesn't exist
+        }
+      }
+
+      // Delete old image From Firebase
+      final directory = await getApplicationDocumentsDirectory();
+      String filename = getFileNameFromUrl(oldUrl);
+      final localPath = '${directory.path}/$filename';
+      final localFile = File(localPath);
+      if (await localFile.exists()) {
+        localFile.delete();
+      }
+
+      // Upload with progress listener
+      final uploadTask = ref.putFile(file, SettableMetadata(contentType: 'image/png'));
+      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+        final progress = snapshot.bytesTransferred / snapshot.totalBytes;
+        setState(() => _uploadProgress = progress);
+      });
+
+      // Wait until upload completes
+      await uploadTask;
+      final String downloadUrl = await ref.getDownloadURL();
+
+      // Update Firestore with the new image URL
+      await FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(uid)
+          .collection(CollectionVehicles)
+          .doc(vehicleDoc.id)
+          .update({SettingVehiclePicture: downloadUrl});
+
+     await _fetchVehicles();
+
+      GlobalSnackBar.show('Image uploaded successfully!');
+    } on FirebaseException catch (e) {
+      GlobalSnackBar.show('Firebase error: ${e.message}');
+    } catch (e) {
+      GlobalSnackBar.show('Image upload failed: $e');
+    } finally {
+
+      // Hide loading indicator
+      setState(() {
+        _isUploading = false;
+        _uploadProgress = 0.0;
+      });
+    }
+  }
+
+//   BluetoothDevice getBluetoohName(String deviceId){
+//     FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+//     FlutterBluePlus.scanResults.listen((results) {
+//
+//       for (var r in results) {
+//       if (r.device.remoteId.str == "00:11:22:33:44:55") {
+//         print("Found: ${r.device.platformName}");
+//         return BluetoothDevice.fromId(r.device.remoteId.str);
+//       }
+//     }
+//   });
+// }
+  Future<ImageProvider<Object>?> _getVehicleImageProvider(BuildContext context, String vehicleId, String? downloadUrl ) async {
+    if(_isUploading) return null;
+
+    final directory = await getApplicationDocumentsDirectory();
+    String filename = getFileNameFromUrl(downloadUrl);
+    final localPath = '${directory.path}/$filename';
+    final localFile = File(localPath);
+
+    // Try local image first
+    if (await localFile.exists()) {
+      //MyAlertDialog(context, "Load from Path", localPath);
+      return FileImage(localFile);
+    }
+
+    // If no local file, download from Firebase
+    if (downloadUrl == null || downloadUrl.isEmpty) return null;
+
+    try {
+      await saveNetworkImageLocally(context, vehicleId, downloadUrl);
+      return NetworkImage(downloadUrl);
+
+    } catch (e) {
+      debugPrint('Download error: $e');
+      return null;
+    }
+  }
+  Future<File?> saveNetworkImageLocally(BuildContext context, String vehicleId, String downloadUrl) async {
+    try {
+      final networkImage = NetworkImage(downloadUrl);
+
+      // Load the image
+      final completer = Completer<ui.Image>();
+      networkImage.resolve(const ImageConfiguration()).addListener(
+        ImageStreamListener((ImageInfo info, bool _) {
+          completer.complete(info.image);
+        }),
+      );
+      final ui.Image image = await completer.future;
+
+      // Convert to bytes
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return null;
+
+      final bytes = byteData.buffer.asUint8List();
+
+      // Save to local file
+      final directory = await getApplicationDocumentsDirectory();
+      String filename = getFileNameFromUrl(downloadUrl);
+      final file = File('${directory.path}/$filename');
+      await file.writeAsBytes(bytes);
+
+      //MyAlertDialog(context, "Save to Path", '${directory.path}/$vehicleId.png');
+
+      return file;
+    } catch (e) {
+      debugPrint('Error saving network image: $e');
+      return null;
+    }
+  }
+  Future<void> _deleteLocalVehicleImage(String vehicleId) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final path = '${directory.path}/$vehicleId.jpg';
+    final file = File(path);
+    if (await file.exists()) await file.delete();
+  }
+  String getFileNameFromUrl(String? downloadUrl) {
+    try {
+      if(downloadUrl == null) return "";
+
+      final uri = Uri.parse(downloadUrl);
+      final segments = uri.pathSegments;
+
+      // The last segment is the file name URL-encoded
+      final encodedFileName = segments.last;
+      final fileName = Uri.decodeFull(encodedFileName); // decode %2F and other chars
+      int i = fileName.lastIndexOf('/');
+      String s = fileName.substring(i+1, fileName.length);
+
+      return s;
+    } catch (e) {
+      debugPrint('Error extracting file name: $e');
+      return '';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     User? user = FirebaseAuth.instance.currentUser;
 
-    if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.lightBlueAccent,));
     }
 
     if(lstVehicleData.length == 0) {
@@ -449,376 +635,441 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: APP_BAR_COLOR,
-        foregroundColor: Colors.white,
-        title: MyAppbarTitle('Vehicles'),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          indicatorColor: Colors.blueAccent,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.grey,
-          tabs: lstVehicleData
-              .map((doc) => Tab(text: doc['name'] ?? doc.id))
-              .toList(),
-        ),
-      ),
-      bottomNavigationBar: BottomAppBar(
-        color: APP_BAR_COLOR,
-        shape: const CircularNotchedRectangle(), // optional if using FAB
-        notchMargin: 0,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 1),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                // Save
-                Expanded(
-                  child: MyIcon(
-                    text: "Save",
-                    icon: Icons.save,
-                    iconColor: Colors.grey,
-                    textColor: Colors.white,
-                    iconSize: 25,
-                    onTap: (){
-                      _saveCurrentVehicle();
-                    },
-                  ),
-                ),
-                // Add
-                Expanded(
-                  child: MyIcon(
-                    text: "Add",
-                    icon: Icons.add,
-                    iconColor: Colors.grey,
-                    textColor: Colors.white,
-                    iconSize: 25,
-                    onTap: (){
-                      _addVehicle();
-                      },
-                  ),
-                ),
-                // Delete
-                Expanded(
-                  child: MyIcon(
-                    text: "Delete",
-                    icon: Icons.delete,
-                    iconColor: Colors.grey,
-                    textColor: Colors.white,
-                    iconSize: 25,
-                    onTap: (){
-                      _deleteVehicleDialog();
-                    },
-                  ),
-                )
-              ],
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(FirebaseAuth.instance.currentUser?.uid)
+          .collection(CollectionVehicles)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snapshot.data!.docs;
+        lstVehicleData = docs;
+
+        // Recreate controller if length changes
+        _tabController ??= TabController(length: docs.length, vsync: this);
+        if (_tabController!.length != docs.length) {
+          _tabController = TabController(length: docs.length, vsync: this);
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            backgroundColor: APP_BAR_COLOR,
+            foregroundColor: Colors.white,
+            title: MyAppbarTitle('Vehicles'),
+            bottom: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              indicatorColor: Colors.blueAccent,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.grey,
+              tabs: lstVehicleData
+                  .map((doc) => Tab(text: doc['name'] ?? doc.id))
+                  .toList(),
             ),
           ),
-        ),
-      ),
-      body: Container(
-        color: APP_BACKGROUND_COLOR,
-        child: TabBarView(
-          controller: _tabController,
-          children: lstVehicleData.map((doc){
-            final _docId = doc.id;
-            final vehicle = mapVehicleData[_docId]!;
-              return ListView(
-                 padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 0),
-                 children: [
-
-                   // Picture header Container
-                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                      child: Container(
-                         decoration: BoxDecoration(
-                           color: Colors.transparent,
-                           border: Border.all(color: Colors.transparent, width: 1),
-                           borderRadius: BorderRadius.circular(8),
-                         ),
-                         child: ClipRRect(
-                           borderRadius: BorderRadius.circular(8),
-                             child: Stack(
-                               children: [
-
-                                 // Vehicle Picture
-                                 Center(
-                                   child: Container(
-                                     padding: const EdgeInsets.all(4), // border thickness
-                                     decoration: BoxDecoration(
-                                       color: Colors.white, // border color
-                                       shape: BoxShape.circle,
-                                     ),
-                                     child: CircleAvatar(
-                                       radius: 80,
-                                       backgroundColor: Colors.grey.shade200,
-                                       backgroundImage: vehicle[SettingVehiclePicture] != null && vehicle[SettingVehiclePicture].isNotEmpty
-                                           ? NetworkImage(vehicle[SettingVehiclePicture])
-                                           : null,
-                                       child: (vehicle[SettingVehiclePicture] == null || vehicle[SettingVehiclePicture].isEmpty)
-                                           ? const Icon(Icons.directions_car, size: 60, color: Colors.grey)
-                                           : null,
-                                     ),
-                                   ),
-                                 ),
-
-                                 // Floating circular buttons on top-right
-                                 Positioned(
-                                   bottom: 8,
-                                   right: 8,
-                                   child: Column(
-                                     crossAxisAlignment: CrossAxisAlignment.end,
-                                     children: [
-                                       MyCircleIconButton(
-                                         icon: Icons.photo_camera,
-                                         onPressed: (){},
-                                         //onPressed: () => _pickAndUploadImage(vehicleDoc: vehicleDoc, source: ImageSource.camera),
-                                       ),
-
-                                       const SizedBox(height: 8),
-
-                                       MyCircleIconButton(
-                                         icon: Icons.photo_library,
-                                         onPressed: (){},
-                                         //onPressed: () => _pickAndUploadImage(vehicleDoc: vehicleDoc, source: ImageSource.gallery),
-                                       ),
-
-                                       const SizedBox(height: 8),
-
-                                       MyCircleIconButton(
-                                         icon: Icons.delete,
-                                         onPressed: () => (),
-                                       ),
-                                     ],
-                                   ),
-                                 ),
-                               ],
-                             ),
-                            ),
-                           ),
-                         ),
-
-                   SizedBox(height: 10),
-
-                   // Vehicle Info
-                   Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8,vertical: 5,),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-
-                          // Header
-                          Padding(
-                            padding: EdgeInsets.symmetric(vertical: 10, horizontal: 5),
-                            child: MyTextHeader(
-                              text: 'Vehicle Information',
-                              color: Colors.white,
-                              fontsize: 16,
-                            ),
-                          ),
-
-                          // Vehicle Name
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
-                            child: MyTextFormField(
-                              backgroundColor: APP_BACKGROUND_COLOR,
-                              foregroundColor: Colors.white,
-                              controller: TextEditingController(text: vehicle[SettingVehicleName]),
-                              hintText: "Enter value here",
-                              labelText: "Vehicle Name",
-                              onChanged: (value) {
-
-                                },
-                              onFieldSubmitted: (value){
-                                setState(() {
-                                  final vehicleDoc = lstVehicleData[_tabController!.index];
-                                  final docId = vehicleDoc.id;
-                                  mapVehicleData[docId]?['name'] = value;
-                                });
-                              },
-                            ),
-                          ),
-
-                          // FuelConsumption
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
-                            child: MyTextFormField(
-                              backgroundColor: APP_BACKGROUND_COLOR,
-                              foregroundColor: Colors.white,
-                              controller: TextEditingController(text:  vehicle[SettingVehicleFuelConsumption].toString()),
-                              hintText: "Enter value here",
-                              labelText: "Consumption",
-                              suffix: "l/100Km",
-                              inputType: TextInputType.number,
-                              onFieldSubmitted: (value){
-                              },
-                            ),
-                          ),
-
-                          // Reg Number
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
-                            child: MyTextFormField(
-                              backgroundColor: APP_BACKGROUND_COLOR,
-                              foregroundColor: Colors.white,
-                              controller: TextEditingController(text: vehicle[SettingVehicleReg]),
-                              hintText: "Enter value here",
-                              labelText: "Registration Number",
-                              onFieldSubmitted: (value){
-                              },
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                        ],
-                      ),
-                     ),
-
-                   // Bluetooth Header
-                   Padding(
-                    padding: EdgeInsets.symmetric(vertical: 15,horizontal: 5),
-                      child: MyTextHeader(
-                        text:'Bluetooth',
-                        color: Colors.white,
-                        fontsize: 16,
-                      ),
-                    ),
-
-                  // Help text
-                    Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    child: Text('Use bluetooth connection in the vehicle to get vehicle ID. '
-                        'Select which bluetooth connection to use in the vehicle. '
-                        'If the list is empty you need to pair to a bluetooth device first. '
-                        'The list is of paired devices, NOT connected devices ',
-                      softWrap: true,
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white
-                      ),
+          floatingActionButton: lstVehicleData.length ==0
+              ? FloatingActionButton(
+                onPressed: _addVehicle,
+                backgroundColor: COLOR_ORANGE,
+                mini: true,
+                child: Icon(
+                Icons.add,
+                color: Colors.white,
+                ),
+              )
+              : Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FloatingActionButton(
+                    onPressed: _deleteVehicleDialog,
+                    backgroundColor: COLOR_ORANGE,
+                    mini: true,
+                    isExtended: false,
+                    child: Icon(
+                      Icons.delete_forever,
+                      color: Colors.white,
                     ),
                   ),
 
-                    SizedBox(height: 10),
+                  SizedBox(height: 10),
 
-                   // Test Bluetooth
-                   Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 15.0),
-                      child: GestureDetector(
-                        child: Text("Test Bluetooth Connection",
-                          style: TextStyle(
-                            color: Colors.blue,
-                            fontSize: 14,
-                          ),
-                        ),
-
-                        onTap: (){
-                          //testBluetooth();
-                        },
-                      ),
+                  FloatingActionButton(
+                    onPressed: _addVehicle,
+                    backgroundColor: COLOR_ORANGE,
+                    mini: true,
+                    child: Icon(
+                      Icons.add,
+                      color: Colors.white,
                     ),
+                  ),
+                ],
+              ),
 
-                    SizedBox(height: 10),
+          body: Container(
+            color: APP_BACKGROUND_COLOR,
+            child: TabBarView(
+              controller: _tabController,
+              children: lstVehicleData.map((doc){
+                final _docId = doc.id;
+                final vehicle = mapVehicleData[_docId]!;
 
-                   // Select Bluetooth
-                   Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 20),
-                          child: Theme(
-                            data: Theme.of(context).copyWith(
-                              // Set items list background color
-                                canvasColor: APP_TILE_COLOR
-                            ),
-                            child: DropdownButtonFormField<BluetoothDevice>(
-                              value: selectedDevice,
-                              style: TextStyle(color: Colors.white),
-                              decoration: InputDecoration(
-                                labelText: 'Select Bluetooth Device',
-                                labelStyle: TextStyle(color: Colors.grey),
-                                fillColor: APP_BACKGROUND_COLOR,
-                                filled: true,
-                                prefixIcon: const Icon(
-                                  Icons.bluetooth,
-                                  color: Colors.blueAccent,
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.grey),
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.grey),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(color: Colors.grey),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                              ),
-                              hint: Text(pairedDevices.isEmpty ? 'No paired devices' : 'Choose a paired device',
-                                style: TextStyle(color: Colors.grey),
-                              ),
+                return FutureBuilder(
+                    future: _getVehicleImageProvider(context, _docId, vehicle[SettingVehiclePicture]),
+                    builder: (context, imgSnapshot) {
+                      if (imgSnapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator(color: Colors.lightBlueAccent));
+                      }
 
-                              items: pairedDevices.map((BluetoothDevice device) {
-                                return DropdownMenuItem<BluetoothDevice>(
-                                  value: device,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.bluetooth,
-                                        size: 20,
-                                        color: device.isConnected ? Colors.green : Colors.grey,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              device.platformName.isNotEmpty
-                                                  ? device.platformName
-                                                  : 'Unknown Device',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            Text(
-                                              device.remoteId.toString(),
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
+                      ImageProvider<Object> imageProvider;
+                      if (imgSnapshot.hasData) {
+                        imageProvider = imgSnapshot.data!;
+                      } else {
+                        imageProvider = const AssetImage('assets/red_pickup2.png');
+                      }
+
+                      return ListView(
+                         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 0),
+                         children: [
+
+                           // Picture header Container
+                           Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                              child: Container(
+                                 decoration: BoxDecoration(
+                                   color: Colors.transparent,
+                                   border: Border.all(color: Colors.transparent, width: 1),
+                                   borderRadius: BorderRadius.circular(8),
+                                 ),
+                                 child: ClipRRect(
+                                   borderRadius: BorderRadius.circular(8),
+                                     child: Stack(
+                                       children: [
+
+                                         // Vehicle Picture
+                                         Center(
+                                           child: Container(
+                                               padding: const EdgeInsets.all(4), // border thickness
+                                               decoration: BoxDecoration(
+                                                 color: Colors.white, // border color
+                                                 shape: BoxShape.circle,
+                                               ),
+                                               child:_isUploading
+                                                   ?  CircleAvatar(
+                                                        radius: 70,
+                                                        backgroundColor: Colors.grey.shade200,
+                                                        child: Center(
+                                                          child: Text('Uploading... ${(100 * _uploadProgress).toStringAsFixed(0)}%'),
+                                                        ),
+                                                   )
+                                                   :  CircleAvatar(
+                                                        radius: 70,
+                                                        backgroundColor: Colors.grey.shade200,
+                                                        backgroundImage: imageProvider,
+                                               ),
+                                             ),
+                                         ),
+
+                                         // Floating circular buttons on top-right
+                                         Positioned(
+                                           top:1,
+                                           bottom: 1,
+                                           right: 8,
+                                           child: Column(
+                                             crossAxisAlignment: CrossAxisAlignment.end,
+                                             children: [
+                                               MyCircleIconButton(
+                                                 icon: Icons.photo_camera,
+                                                 onPressed: () => _pickAndUploadImage(source: ImageSource.camera),
+                                               ),
+
+                                               const SizedBox(height: 5),
+
+                                               MyCircleIconButton(
+                                                 icon: Icons.photo_library,
+                                                 onPressed: () => _pickAndUploadImage(source: ImageSource.gallery),
+                                               ),
+
+                                               const SizedBox(height: 5),
+
+                                               MyCircleIconButton(
+                                                 icon: Icons.delete,
+                                                 onPressed: () => (),
+                                               ),
+                                             ],
+                                           ),
+                                         ),
+                                       ],
+                                     ),
+                                    ),
+                                   ),
+                                 ),
+
+                           SizedBox(height: 5),
+
+                           // Progress Bar
+                           _isUploading
+                               ? Padding(
+                                 padding: const EdgeInsets.symmetric(horizontal: 100),
+                                 child: LinearProgressIndicator(
+                                   value: _uploadProgress,
+                                   minHeight: 6,
+                                   valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+                                 ),
+                               )
+                              : SizedBox(height: 5),
+
+                           // Vehicle Info
+                           Padding(
+                              padding: const EdgeInsets.fromLTRB(8,0,8,5),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+
+                                  // Header
+                                  Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 5,vertical: 1 ),
+                                    child: MyTextHeader(
+                                      text: 'Vehicle Information',
+                                      color: Colors.white,
+                                      fontsize: 16,
+                                    ),
                                   ),
-                                );
-                              }).toList(),
-                              onChanged: (BluetoothDevice? device) {
-                                setState(() {
-                                  if(device != null){
-                                    selectedDevice = device;
-                                    bluetoothData.id = device.remoteId.toString();
-                                    bluetoothData.name = device.platformName;
-                                  }
-                                });
-                                //if (onDeviceSelected != null) {
-                                //  onDeviceSelected!(device);
-                                //}
-                              },
-                              isExpanded: true,
+
+                                  // Vehicle Name
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                                    child: MyTextFormField(
+                                      backgroundColor: APP_BACKGROUND_COLOR,
+                                      foregroundColor: Colors.white,
+                                      controller: TextEditingController(text: vehicle[SettingVehicleName]),
+                                      hintText: "Enter value here",
+                                      labelText: "Vehicle Name",
+                                      onChanged: (value) {
+
+                                        },
+                                      onFieldSubmitted: (value){
+                                        setState(() {
+                                          final vehicleDoc = lstVehicleData[_tabController!.index];
+                                          final docId = vehicleDoc.id;
+
+                                          setState(() {
+                                            mapVehicleData[docId]?[SettingVehicleName] = value;
+                                            _saveCurrentVehicle();
+                                          });
+                                        });
+                                      },
+                                    ),
+                                  ),
+
+                                  // FuelConsumption
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                                    child: MyTextFormField(
+                                      backgroundColor: APP_BACKGROUND_COLOR,
+                                      foregroundColor: Colors.white,
+                                      controller: TextEditingController(text:  vehicle[SettingVehicleFuelConsumption].toString()),
+                                      hintText: "Enter value here",
+                                      labelText: "Consumption",
+                                      suffix: "l/100Km",
+                                      inputType: TextInputType.number,
+                                      onFieldSubmitted: (value){
+                                        final vehicleDoc = lstVehicleData[_tabController!.index];
+                                        final docId = vehicleDoc.id;
+
+                                        setState(() {
+                                          mapVehicleData[docId]?[SettingVehicleFuelConsumption] = value;
+                                          _saveCurrentVehicle();
+                                        });
+                                      },
+                                    ),
+                                  ),
+
+                                  // Reg Number
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                                    child: MyTextFormField(
+                                      backgroundColor: APP_BACKGROUND_COLOR,
+                                      foregroundColor: Colors.white,
+                                      controller: TextEditingController(text: vehicle[SettingVehicleReg]),
+                                      hintText: "Enter value here",
+                                      labelText: "Registration Number",
+                                      onFieldSubmitted: (value) {
+                                        final vehicleDoc = lstVehicleData[_tabController!.index];
+                                        final docId = vehicleDoc.id;
+
+                                        setState(() {
+                                          mapVehicleData[docId]?[SettingVehicleReg] = value;
+                                          _saveCurrentVehicle();
+                                        });
+                                      }
+                                    ),
+                                  ),
+                                ],
+                              ),
+                             ),
+
+                           SizedBox(height: 10),
+
+                           // Vehicle ID Header
+                           Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 10),
+                              child: MyTextHeader(
+                                text:'Vehicle ID',
+                                color: Colors.white,
+                                fontsize: 16,
+                              ),
                             ),
-                          ),
-                   ),
-                 ],
-              );
-            },
-         ).toList(),
-       ),
-      ),
+
+                           SizedBox(height: 5),
+
+                           // Help text
+                           Padding(
+                             padding: const EdgeInsets.symmetric(horizontal: 15),
+                             child: Text('Use bluetooth connection in the vehicle to get vehicle ID. '
+                                 'Select which bluetooth connection to use in the vehicle. '
+                                 'If the list is empty you need to pair to a bluetooth device first. '
+                                 'The list is of paired devices, NOT connected devices ',
+                               softWrap: true,
+                               style: TextStyle(
+                                   fontSize: 12,
+                                   color: Colors.white
+                               ),
+                             ),
+                           ),
+
+                           SizedBox(height: 10),
+
+                           // Test Bluetooth
+                           Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 15.0),
+                              child: GestureDetector(
+                                child: Text("Test Bluetooth Connection",
+                                  style: TextStyle(
+                                    color: Colors.blue,
+                                    fontSize: 14,
+                                  ),
+                                ),
+
+                                onTap: (){
+                                  //testBluetooth();
+                                },
+                              ),
+                            ),
+
+                            SizedBox(height: 5),
+
+                           // Select Bluetooth
+                           Padding( padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 20),
+                              child: Theme(
+                                data: Theme.of(context).copyWith(canvasColor: APP_TILE_COLOR),
+                                child: DropdownButtonFormField<BluetoothDevice>(
+                                  value: (() {
+                                    final docMap = doc.data() ?? {};
+                                    String? savedMac = docMap[SettingServerBlueMac] as String?;
+                                    if (savedMac == null) return null;
+
+                                    // Find the matching paired device
+                                    return lstPairedDevices.firstWhereOrNull(
+                                          (d) => d.remoteId.toString() == savedMac,
+                                    );
+                                  })(),
+
+                                  style: TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    isDense: false,
+                                    labelText: 'Select Bluetooth',
+                                    labelStyle: TextStyle(color: Colors.grey),
+                                    fillColor: APP_BACKGROUND_COLOR,
+                                    filled: true,
+                                    prefixIcon: const Icon(
+                                      Icons.bluetooth,
+                                      color: Colors.blueAccent,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.grey),
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(color: Colors.grey),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(color: Colors.grey),
+                                    ),
+                                    //contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                                  ),
+                                  hint: Text(lstPairedDevices.isEmpty ? 'No paired devices' : 'Choose a paired device',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                  items: lstPairedDevices.map((BluetoothDevice device) {
+                                    return DropdownMenuItem<BluetoothDevice>(
+                                      value: device,
+                                      child: Row(
+                                        children: [
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                device.platformName.isNotEmpty
+                                                    ? device.platformName
+                                                    : 'Unknown Device',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w500,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+
+                                              // Padding(
+                                              //   padding: const EdgeInsets.all(8.0),
+                                              //   child: Text(
+                                              //     device.remoteId.toString(),
+                                              //     style: TextStyle(
+                                              //       fontSize: 12,
+                                              //       color: Colors.grey.shade600,
+                                              //     ),
+                                              //   ),
+                                              // ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (BluetoothDevice? device) {
+                                    setState(() {
+                                      final vehicleDoc = lstVehicleData[_tabController!.index];
+                                      final docId = vehicleDoc.id;
+
+                                      setState(() {
+                                        mapVehicleData[docId]?[SettingVehicleBlueDeviceName] = device?.platformName;
+                                        mapVehicleData[docId]?[SettingVehicleBlueMac] = device?.remoteId.toString();
+                                        _saveCurrentVehicle();
+                                      });
+                                    });
+                                    //if (onDeviceSelected != null) {
+                                    //  onDeviceSelected!(device);
+                                    //}
+                                  },
+                                  isExpanded: true,
+                                ),
+                              ),
+                           ),
+                         ],
+                      );
+                    }
+                  );
+                },
+             ).toList(),
+           ),
+          ),
+        );
+      }
     );
   }
 }

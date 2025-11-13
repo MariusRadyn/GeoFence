@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:nativewrappers/_internal/vm/lib/typed_data_patch.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:collection/collection.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -6,8 +10,9 @@ import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-
-import 'Bluetooth2.dart';
+//import 'package:lan_scanner/lan_scanner.dart';
+//import 'package:network_info_plus/network_info_plus.dart';
+//import 'Bluetooth2.dart';
 
 class SettingsPage extends StatefulWidget {
   final String userId;
@@ -44,17 +49,18 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
 
   BluetoothDevice? pairedDevice;
   BluetoothDevice? selectedDevice;
-  BluetoothData bluetoothData = BluetoothData();
+  //BluetoothData bluetoothData = BluetoothData();
   List<BluetoothDevice> lstPairedDevices = [
-    //   BluetoothDevice.fromId("00:11:22:33:44:55"),
+    BluetoothDevice.fromId("00:11:22:33:44:55"),
+    BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
+
 
   @override
   void initState() {
     super.initState();
 
-    _requestPermissions();
-    _getBondedDevices();
+    //_getBondedDevices();
     _initTts();
     _fetchServers();
 
@@ -313,6 +319,47 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Saved')));
   }
+  void _getIPAdress() async {
+    // String? _ipAddress;
+    // final List<Host> foundDevices = [];
+    // bool scanning = false;
+    //
+    // final info = NetworkInfo();
+    // final ip = await info.getWifiIP(); // e.g. "192.168.1.101"
+    // setState(() => _ipAddress = ip ?? 'Not connected to Wi-Fi');
+    //
+    // if(_ipAddress == null){
+    //   ScaffoldMessenger.of(context)
+    //       .showSnackBar(const SnackBar(content: Text('Not connected to WiFi')));
+    //   return;
+    // }
+    //
+    // String subnet =  _ipAddress!.substring(0, _ipAddress!.lastIndexOf("."));
+    // final scanner = LanScanner();
+    // final List<Host> hosts = await scanner.quickIcmpScanAsync(subnet);
+
+    // final stream = scanner.icmpScan(
+    //   subnet,
+    //   timeout: const Duration(milliseconds: 500),
+    //   progressCallback: (progress) {
+    //     // Optional: show progress
+    //     // print('Scanning ${subnet}.${progress.currIP}');
+    //   },
+    // );
+    //stream = scanner.icmpScan('$subnet.1', '$subnet.254');
+
+    // for (final device in hosts) {
+    //   if (device.) {
+    //     print('Found device: ${device.ip}:${device.port} ');
+    //     // Basic filter: Raspberry Pi often have hostname "raspberrypi" or vendor MAC etc.
+    //     if (device.ip.contains(subnet) && device.port == 22) {
+    //       // Example: SSH port 22 open => likely a Pi
+    //       foundDevices.add(device);
+    //       setState(() {});
+    //     }
+    //   }
+    // }
+  }
 
   // Bluetooth
   Future<void> _requestPermissions() async {
@@ -540,6 +587,36 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
       ),
     );
   }
+  Future<void> sendTextToDevice(BluetoothDevice device, String message) async {
+    List<BluetoothService> services = await device.discoverServices();
+    for (BluetoothService service in services) {
+      if (service.uuid.str.toLowerCase() == BT_SERVICE_UUID) {
+        for (BluetoothCharacteristic characteristic in service.characteristics) {
+          if (characteristic.uuid.toString().toLowerCase() == BT_CHAR_UUID) {
+            await characteristic.write(utf8.encode(message), withoutResponse: true);
+            print("Message sent: $message");
+          }
+        }
+      }
+    }
+  }
+  void connectBluetoothDevice(String mac) async {
+    FlutterBluePlus.startScan(timeout: Duration(seconds: 4));
+    print("Connecting... Bluetooth $mac");
+
+    for(BluetoothDevice bt in lstPairedDevices ){
+      if(bt.remoteId.str == mac){
+        String btNname = bt.platformName;
+        await FlutterBluePlus.stopScan();
+        await bt.connect();
+        print("Connected $btNname");
+        await sendTextToDevice(bt, "Hello Raspberry Pi!");
+        break;
+      }
+    }
+
+    print("BT Connection Not Found");
+  }
 
   @override
   Widget build(BuildContext context){
@@ -657,98 +734,6 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                       softWrap: true,
                     ),
                   ),
-
-                  // Select Bluetooth Button
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20,vertical: 20),
-                    child: Theme(
-                      data: Theme.of(context).copyWith(
-                        // Set items list background color
-                          canvasColor: APP_TILE_COLOR
-                      ),
-                      child: DropdownButtonFormField<BluetoothDevice>(
-                        value: selectedDevice,
-                        style: TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          labelText: 'Select Bluetooth Device',
-                          labelStyle: TextStyle(color: Colors.grey),
-                          fillColor: APP_BACKGROUND_COLOR,
-                          filled: true,
-                          prefixIcon: const Icon(
-                            Icons.bluetooth,
-                            color: Colors.blueAccent,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey),
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                        ),
-                        hint: Text(lstPairedDevices.isEmpty ? 'No paired devices' : 'Choose a paired device',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-
-                        items: lstPairedDevices.map((BluetoothDevice device) {
-                          return DropdownMenuItem<BluetoothDevice>(
-                            value: device,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.bluetooth,
-                                  size: 20,
-                                  color: device.isConnected ? Colors.green : Colors.grey,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        device.platformName.isNotEmpty
-                                            ? device.platformName
-                                            : 'Unknown Device',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        device.remoteId.toString(),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (BluetoothDevice? device) {
-                          setState(() {
-                            if(device != null){
-                              selectedDevice = device;
-                              bluetoothData.id = device.remoteId.toString();
-                              bluetoothData.name = device.platformName;
-                            }
-                          });
-                          //if (onDeviceSelected != null) {
-                          //  onDeviceSelected!(device);
-                          //}
-                        },
-                        isExpanded: true,
-                      ),
-                    ),
-                  ),
                 ],
               ),
 
@@ -765,6 +750,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                   }
 
                   final docs = snapshot.data!.docs;
+                  lstServerData = docs;
 
                   // Recreate controller if length changes
                   _tabControllerServers ??= TabController(length: docs.length, vsync: this);
@@ -772,20 +758,46 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                     _tabControllerServers = TabController(length: docs.length, vsync: this);
                   }
 
-                  lstServerData = snapshot.data!.docs;
-
                   return Scaffold(
                     backgroundColor: APP_BACKGROUND_COLOR,
-                    floatingActionButton:
-                    FloatingActionButton(
+                    floatingActionButton: lstServerData.isEmpty
+                        ? FloatingActionButton(
                       onPressed: _addServer,
                       backgroundColor: COLOR_ORANGE,
+                      mini: true,
                       child: Icon(
                         Icons.add,
                         color: Colors.white,
                       ),
-                    ),
+                    )
+                        : Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        FloatingActionButton(
+                          onPressed: _deleteServerDialog,
+                          backgroundColor: COLOR_ORANGE,
+                          mini: true,
+                          isExtended: false,
+                          child: Icon(
+                            Icons.delete_forever,
+                            color: Colors.white,
+                          ),
+                        ),
 
+                        SizedBox(height: 10),
+
+                        FloatingActionButton(
+                          onPressed: _addServer,
+                          backgroundColor: COLOR_ORANGE,
+                          mini: true,
+                          child: Icon(
+                            Icons.add,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
                     body: (lstServerData.isEmpty)
                         ? Container(
                             child: Center(
@@ -915,6 +927,26 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                                             ),
                                           ),
 
+                                          // Test Bluetooth
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 15.0),
+                                            child: GestureDetector(
+                                              child: Text("Test Bluetooth Connection",
+                                                style: TextStyle(
+                                                  color: Colors.blue,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+
+                                              onTap: (){
+                                                _getIPAdress();
+                                                // if(_tabControllerServers != null){
+                                                //  connectBluetoothDevice(lstServerData[_tabControllerServers!.index][SettingServerBlueMac]);
+                                                // }
+                                              },
+                                            ),
+                                          ),
+
                                           // Bluetooth List
                                           Padding(
                                             padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 20),
@@ -924,7 +956,16 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                                                   canvasColor: APP_TILE_COLOR
                                               ),
                                               child: DropdownButtonFormField<BluetoothDevice>(
-                                                value: selectedDevice,
+                                                value:  (() {
+                                                  final serverMap = server.data() ?? {};
+                                                  String? savedMac = serverMap[SettingServerBlueMac] as String?;
+                                                  if (savedMac == null) return null;
+
+                                                  // Find the matching paired device
+                                                  return lstPairedDevices.firstWhereOrNull(
+                                                        (d) => d.remoteId.toString() == savedMac,
+                                                  );
+                                                })(),
                                                 style: TextStyle(color: Colors.white),
                                                 decoration: InputDecoration(
                                                   labelText: 'Select Bluetooth Device',
@@ -957,12 +998,6 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                                                     value: device,
                                                     child: Row(
                                                       children: [
-                                                        Icon(
-                                                          Icons.bluetooth,
-                                                          size: 20,
-                                                          color: device.isConnected ? Colors.green : Colors.grey,
-                                                        ),
-                                                        const SizedBox(width: 8),
                                                         Expanded(
                                                           child: Column(
                                                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -974,12 +1009,13 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                                                                     : 'Unknown Device',
                                                                 style: const TextStyle(
                                                                   fontWeight: FontWeight.w500,
+                                                                  fontSize: 10,
                                                                 ),
                                                               ),
                                                               Text(
                                                                 device.remoteId.toString(),
                                                                 style: TextStyle(
-                                                                  fontSize: 12,
+                                                                  fontSize: 8,
                                                                   color: Colors.grey.shade600,
                                                                 ),
                                                               ),
@@ -992,11 +1028,14 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                                                 }).toList(),
                                                 onChanged: (BluetoothDevice? device) {
                                                   setState(() {
-                                                    if(device != null){
-                                                      selectedDevice = device;
-                                                      bluetoothData.id = device.remoteId.toString();
-                                                      bluetoothData.name = device.platformName;
-                                                    }
+                                                    final vehicleDoc = lstServerData[_tabControllerServers!.index];
+                                                    final docId = vehicleDoc.id;
+
+                                                    setState(() {
+                                                      mapServerData[docId]?[SettingServerBlueDeviceName] = device?.platformName;
+                                                      mapServerData[docId]?[SettingServerBlueMac] = device?.remoteId.toString();
+                                                      _saveCurrentServer();
+                                                    });
                                                   });
                                                   //if (onDeviceSelected != null) {
                                                   //  onDeviceSelected!(device);
@@ -1006,20 +1045,6 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                                               ),
                                             ),
                                           ),
-
-                                          // Delete Button
-                                          FloatingActionButton(
-                                            onPressed: (){
-                                              _deleteServerDialog();
-                                              setState(() {
-                                                lstServerData.remove(server);
-                                              });
-                                            },
-                                            backgroundColor: COLOR_ORANGE,
-                                            child: const Icon(
-                                              Icons.delete_forever,color: Colors.white
-                                            ),
-                                        ),
 
                                         ],
                                       ),
