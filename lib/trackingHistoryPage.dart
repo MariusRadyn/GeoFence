@@ -199,7 +199,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
     // } else {
     // throw 'Could not launch $uri';
     // }
-    GlobalSnackBar.show('Email sent');
+    MyGlobalSnackBar.show('Email sent');
   }
   void emailReport(BuildContext context) {
     final TextEditingController emailTextController = TextEditingController();

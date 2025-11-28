@@ -8,6 +8,8 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 const APP_VERSION = "1.1";
 
@@ -63,6 +65,7 @@ const CollectionTrackingSessions = 'tracking_sessions';
 const CollectionLocations = 'locations';
 const CollectionVehicles = 'vehicles';
 const CollectionServers = 'servers';
+const CollectionClients = 'clients';
 
 const FieldsSettings = 'settings';
 const FieldsUserData = 'userdata';
@@ -91,6 +94,12 @@ const SettingServerIpAdr = 'ipAdr';
 const SettingServerBlueDeviceName = 'bluetoothDeviceName';
 const SettingServerBlueMac = 'bluetoothMAC';
 
+// Clients Settings
+const SettingClientIpAdr = 'IPAdress';
+const MQTT_TOPIC_RESPONSE ="device/settings/response";
+const MQTT_TOPIC_REQUEST ="device/settings/request";
+const MQTT_NAME ="geoAndroidMqtt";
+const MQTT_PIN = "12345";
 
 //---------------------------------------------------
 // Bluetooth
@@ -164,23 +173,25 @@ Position latLngToPosition(LatLng latLng) {
   );
 }
 
-// NOT USED
 void myMessageBox (BuildContext context, String message) {
   showDialog(
     context: context,
     barrierDismissible: false, // Prevents accidental closing
-    builder: (context) => _myMessageBox(message: message),
+    builder: (context) => _myMessageBox(message: message ),
   );
 }
 class _myMessageBox extends StatelessWidget {
   final String message;
   final String header;
   final String image;
+  final Color borderColor;
 
-  const _myMessageBox({
+  _myMessageBox({
     required this.message,
     this.header = '',
-    this.image = ''
+    this.image = 'assets/warning.png',
+    this.borderColor = Colors.blueAccent,
+    super.key,
   });
 
   @override
@@ -191,8 +202,8 @@ class _myMessageBox extends StatelessWidget {
       backgroundColor: APP_TILE_COLOR,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(15),
-        side: const BorderSide(
-          color: Colors.blue, // Border color
+        side: BorderSide(
+          color: borderColor, // Border color
           width: 2, // Border width
         ),
       ),
@@ -1366,7 +1377,7 @@ class GlobalMsg {
     );
   }
 }
-class GlobalSnackBar {
+class MyGlobalSnackBar {
   static void show(String message) {
     final context = navigatorKey.currentState?.overlay?.context;
     if (context == null) return;
@@ -1435,8 +1446,25 @@ Future<T?> MyQuestionAlertBox<T> ({
         }
     );
 }
+class ClientIdManager {
+  static const _key = "mqtt_client_id";
+
+  static Future<String> getClientId() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? id = prefs.getString(_key);
+
+    if (id == null) {
+      // Generate a short unique ID (MQTT-safe)
+      id = "client_${const Uuid().v4().substring(0, 8)}";
+      await prefs.setString(_key, id);
+      MyGlobalSnackBar.show("MQTT DeviceID Generated: $id");
+    }
+
+    return id;
+  }
+}
 //---------------------------------------------------
-// Data Services
+// Services
 //---------------------------------------------------
 class UserData{
   String displayName = "";
@@ -1469,7 +1497,6 @@ class UserData{
       emailValidated: map['emailValidated'] ?? false,
     );
   }
-
   Map<String, dynamic> toMap(){
     return{
       'displayName': displayName,
@@ -1480,7 +1507,6 @@ class UserData{
       'emailValidated': emailValidated
     };
   }
-
   UserData copyWith({
     String? displayName,
     String? surname,
@@ -1595,7 +1621,6 @@ class UserDataService extends ChangeNotifier {
     print(hashCode);
   }
 }
-
 class Settings{
   bool isVoicePromptOn;
   int logPointPerMeter;
@@ -1689,7 +1714,6 @@ class ServerData {
     };
   }
 }
-
 class SettingsService extends ChangeNotifier {
   static final SettingsService _instance = SettingsService._internal();
   factory SettingsService() => _instance;
@@ -1781,7 +1805,6 @@ class SettingsService extends ChangeNotifier {
     }
   }
 }
-
 //---------------------------------------------------
 // Widgets
 //---------------------------------------------------
@@ -1912,3 +1935,4 @@ TextStyle MyTextStyle(){
       fontFamily: "Poppins"
   );
 }
+

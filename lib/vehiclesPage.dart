@@ -96,7 +96,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
       });
     }
     catch (e){
-      GlobalSnackBar.show('Image upload failed: $e');
+      MyGlobalSnackBar.show('Image upload failed: $e');
       setState(() {_isLoading = false;});
     }
   }
@@ -404,7 +404,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
           .update({SettingVehiclePicture: downloadUrl});
       setState(() {});
     } catch (e) {
-      GlobalSnackBar.show('Image upload failed: $e');
+      MyGlobalSnackBar.show('Image upload failed: $e');
     }
   }
   Future<void> _pickAndUploadImage({ImageSource? source}) async {
@@ -475,11 +475,11 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
 
      await _fetchVehicles();
 
-      GlobalSnackBar.show('Image uploaded successfully!');
+      MyGlobalSnackBar.show('Image uploaded successfully!');
     } on FirebaseException catch (e) {
-      GlobalSnackBar.show('Firebase error: ${e.message}');
+      MyGlobalSnackBar.show('Firebase error: ${e.message}');
     } catch (e) {
-      GlobalSnackBar.show('Image upload failed: $e');
+      MyGlobalSnackBar.show('Image upload failed: $e');
     } finally {
 
       // Hide loading indicator

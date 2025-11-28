@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:nativewrappers/_internal/vm/lib/typed_data_patch.dart';
+import 'package:mqtt_client/mqtt_client.dart';
+import 'package:mqtt_client/mqtt_server_client.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:collection/collection.dart';
@@ -10,6 +11,9 @@ import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+
+import 'Bluetooth2.dart';
+import 'MqttService.dart';
 //import 'package:lan_scanner/lan_scanner.dart';
 //import 'package:network_info_plus/network_info_plus.dart';
 //import 'Bluetooth2.dart';
@@ -49,7 +53,6 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
 
   BluetoothDevice? pairedDevice;
   BluetoothDevice? selectedDevice;
-  //BluetoothData bluetoothData = BluetoothData();
   List<BluetoothDevice> lstPairedDevices = [
     BluetoothDevice.fromId("00:11:22:33:44:55"),
     BluetoothDevice.fromId("11:11:22:33:44:55"),
@@ -169,7 +172,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
       });
     }
     catch (e){
-      GlobalSnackBar.show('Load Server Data Failed: $e');
+      MyGlobalSnackBar.show('Load Server Data Failed: $e');
       setState(() {isLoading = false;});
     }
   }
@@ -186,10 +189,12 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
     final newServer = {
       SettingServerName: 'New Server',
       SettingServerDesc: '',
-      SettingServerIpAdr: '192.168.100.1'
+      SettingServerIpAdr: '192.168.100.1',
+      SettingServerBlueMac: '',
+      SettingServerBlueDeviceName: '',
     };
 
-    doc.set(newServer);
+    await doc.set(newServer);
     await _fetchServers();
 
     setState(() { });
@@ -359,6 +364,38 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
     //     }
     //   }
     // }
+  }
+  Future<bool> _testMqttConnection(String ip)async{
+    final mqtt = MqttService(
+        ipAdr : ip,
+    );
+
+    await mqtt.init();
+
+    if(!await mqtt.connect()){
+      print("MQTT Connection FAILED");
+      MyGlobalSnackBar.show("MQTT Connection FAILED");
+      return false;
+    }
+    print("OK");
+
+    mqtt.listenForSettings((msg){
+      print("Settings received: $msg"); // ✅ msg is defined here
+    });
+
+    mqtt.requestSettings();
+    return true;
+  }
+  Future<bool> _xtestMqttConnection(String ip)async{
+    final mqtt = testMqttService(
+        ipAdr : ip,
+        clientId: MQTT_NAME,
+        mqttPin: MQTT_PIN
+    );
+
+    // Raspberry Pi IP
+    await mqtt.connect();
+    return true;
   }
 
   // Bluetooth
@@ -562,15 +599,14 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                       ),
                       onPressed: () {
                         setState(() {
-                          if(isSetBTVehicleID){
-                            isSetBTVehicleID = false;
                             selectedDevice = device;
-                          }
 
-                          if(isSetBTMonitor){
-                            isSetBTMonitor = false;
-                            selectedDevice = device;
-                          }
+                            final vehicleDoc = lstServerData[_tabControllerServers!.index];
+                            final docId = vehicleDoc.id;
+
+                            mapServerData[docId]?[SettingServerBlueDeviceName] = selectedDevice?.platformName;
+                            mapServerData[docId]?[SettingServerBlueMac] = selectedDevice?.remoteId.toString();
+                            _saveCurrentServer();
                         });
 
                         print('Selected: ${device.platformName}');
@@ -655,7 +691,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                        SettingLogPointPerMeter: int.parse(_logPointPerMeterController.text),
                        SettingRebateValue: double.parse(_rebateValueController.text),
                      });
-                     GlobalSnackBar.show("Saved");
+                     MyGlobalSnackBar.show("Saved");
                    },
                 ),
               ],
@@ -713,27 +749,6 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                         },
                       }
                   ),
-
-                  const SizedBox(height: 10),
-
-                  // Vehicle ID  - Bluetooth
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 20),
-                    child: MyTextHeader(text: "Vehicle ID"),
-                  ),
-
-                  // Hint Text
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20,2,20,5),
-                    child: Text("Use the Bluetooth device in your vehicle to get vehicle ID "
-                        "Select from your Bluetooth paired list what Bluetooth device "
-                        "you connect to in this vehicle",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,),
-                      softWrap: true,
-                    ),
-                  ),
                 ],
               ),
 
@@ -761,33 +776,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                   return Scaffold(
                     backgroundColor: APP_BACKGROUND_COLOR,
                     floatingActionButton: lstServerData.isEmpty
-                        ? FloatingActionButton(
-                      onPressed: _addServer,
-                      backgroundColor: COLOR_ORANGE,
-                      mini: true,
-                      child: Icon(
-                        Icons.add,
-                        color: Colors.white,
-                      ),
-                    )
-                        : Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                        FloatingActionButton(
-                          onPressed: _deleteServerDialog,
-                          backgroundColor: COLOR_ORANGE,
-                          mini: true,
-                          isExtended: false,
-                          child: Icon(
-                            Icons.delete_forever,
-                            color: Colors.white,
-                          ),
-                        ),
-
-                        SizedBox(height: 10),
-
-                        FloatingActionButton(
+                      ? FloatingActionButton(
                           onPressed: _addServer,
                           backgroundColor: COLOR_ORANGE,
                           mini: true,
@@ -795,17 +784,46 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                             Icons.add,
                             color: Colors.white,
                           ),
-                        ),
-                      ],
-                    ),
-                    body: (lstServerData.isEmpty)
+                        )
+                      : Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+
+                          // Delete
+                          FloatingActionButton(
+                            onPressed: _deleteServerDialog,
+                            backgroundColor: COLOR_ORANGE,
+                            mini: true,
+                            isExtended: false,
+                            child: Icon(
+                              Icons.delete_forever,
+                              color: Colors.white,
+                            ),
+                          ),
+
+                          SizedBox(height: 10),
+
+                          // Add
+                          FloatingActionButton(
+                            onPressed: _addServer,
+                            backgroundColor: COLOR_ORANGE,
+                            mini: true,
+                            child: Icon(
+                              Icons.add,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      body: (lstServerData.isEmpty)
                         ? Container(
                             child: Center(
                               child: Text('No Servers',
                                 style: TextStyle(color: Colors.grey),
                               ),
                             ),
-                    )
+                          )
                     : Column(
                       children: [
                         Expanded(
@@ -833,20 +851,34 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
+                                          // Hint Text
+                                          Padding(
+                                            padding: const EdgeInsets.all(8.0),
+                                            child: Text("GeoFence supports multiple base stations. Each base station "
+                                                "has it's own server. In your phone bluetooth settings, connect to the server."
+                                                "Then select it from this list",
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey,),
+                                              softWrap: true,
+                                            ),
+                                          ),
 
                                           // Name
                                           Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
                                             child: MyTextFormField(
+                                              isReadOnly: false,
                                               backgroundColor: APP_BACKGROUND_COLOR,
                                               foregroundColor: Colors.white,
                                               controller: TextEditingController(text: server[SettingServerName]),
-                                              hintText: "Enter value here",
+                                              hintText: "Server Name",
                                               labelText: "Name",
                                               onChanged: (value) {},
                                               onFieldSubmitted: (value){
                                                 final vehicleDoc = lstServerData[_tabControllerServers!.index];
                                                 final docId = vehicleDoc.id;
+
                                                 setState(() {
                                                   mapServerData[docId]?[SettingServerName] = value;
                                                   _saveCurrentServer();
@@ -879,173 +911,140 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                                             ),
                                           ),
 
+                                          // Bluetooth ID
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  child: MyTextFormField(
+                                                    isReadOnly: true,
+                                                    backgroundColor: APP_BACKGROUND_COLOR,
+                                                    foregroundColor: Colors.white,
+                                                    controller: TextEditingController(text: server[SettingServerBlueDeviceName]),
+                                                    hintText: "Bluetooth Identification",
+                                                    labelText: "Identification",
+                                                    onChanged: (value) {},
+                                                    onFieldSubmitted: (value){
+
+                                                    },
+                                                  ),
+                                                ),
+
+                                                SizedBox(width: 10),
+
+                                                // Bluetooth Button
+                                                OutlinedButton(
+                                                    child: Icon(Icons.bluetooth,color: Colors.lightBlueAccent),
+                                                    style: OutlinedButton.styleFrom(
+                                                      side: BorderSide(color: Colors.blue, width: 2),
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(8),
+                                                      ),
+                                                    ),
+                                                    onPressed: (){
+                                                      _showBluetoothDevicesPopup();
+                                                    }
+                                                )
+                                              ],
+                                            ),
+                                          ),
+
                                           // IP Address
                                           Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
                                             child: MyTextFormField(
+                                              isReadOnly: true,
                                               backgroundColor: APP_BACKGROUND_COLOR,
                                               foregroundColor: Colors.white,
                                               controller: TextEditingController(text: server[SettingServerIpAdr]),
-                                              hintText: "Enter value here",
+                                              hintText: "none",
                                               labelText: "IP Address",
-                                              onChanged: (value) {
-
-                                              },
-                                              onFieldSubmitted: (value){
-                                                final vehicleDoc = lstServerData[_tabControllerServers!.index];
-                                                final docId = vehicleDoc.id;
-
-                                                setState(() {
-                                                  mapServerData[docId]?[SettingServerIpAdr] = value;
-                                                  _saveCurrentServer();
-                                                });
-                                              },
+                                              onChanged: (value) {},
+                                              onFieldSubmitted: (value){},
                                             ),
                                           ),
 
-                                          // Bluetooth Header
-                                          Padding
-                                            (
-                                            padding: EdgeInsets.fromLTRB(5,40,5,0),
-                                            child: MyTextHeader(
-                                              text: 'Bluetooth',
-                                              color: Colors.white,
-                                              fontsize: 16,
-                                            ),
-                                          ),
-
-                                          // Hint Text
+                                          // Pull IP Address from Cloud
                                           Padding(
-                                            padding: const EdgeInsets.all(8.0),
-                                            child: Text("GeoFence supports multiple base stations. Each base station "
-                                                "has it's own server. In your phone bluetooth settings, connect to the server."
-                                                "Then select it from this list",
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey,),
-                                              softWrap: true,
-                                            ),
-                                          ),
-
-                                          // Test Bluetooth
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 15.0),
+                                            padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 10),
                                             child: GestureDetector(
-                                              child: Text("Test Bluetooth Connection",
+                                              child: Text("Request IP Address",
                                                 style: TextStyle(
                                                   color: Colors.blue,
                                                   fontSize: 14,
                                                 ),
                                               ),
 
-                                              onTap: (){
-                                                _getIPAdress();
-                                                // if(_tabControllerServers != null){
-                                                //  connectBluetoothDevice(lstServerData[_tabControllerServers!.index][SettingServerBlueMac]);
-                                                // }
+                                              onTap: () async {
+                                                final vehicleDoc = lstServerData[_tabControllerServers!.index];
+                                                final docId = vehicleDoc.id;
+                                                final bluetoothName = mapServerData[docId]?[SettingServerBlueDeviceName] ;
+
+                                                if(bluetoothName == ""){
+                                                  myMessageBox(
+                                                      context,
+                                                      "No Identification Selected");
+                                                  return;
+                                                }
+
+                                                final docSnap = await FirebaseFirestore.instance
+                                                    .collection(CollectionClients)
+                                                    .doc(bluetoothName)
+                                                    .get();
+
+                                                if(docSnap.data() == null){
+                                                  MyGlobalSnackBar.show('No IP Address Found for: $bluetoothName');
+                                                  return;
+                                                }
+                                                final ipAdr = docSnap.get(SettingClientIpAdr);
+                                                if(ipAdr == ""){
+                                                  MyGlobalSnackBar.show('No IP Address Found');
+                                                  return;
+                                                }
+
+                                                print('IP Address: $ipAdr');
+                                                MyGlobalSnackBar.show('IP Address: $ipAdr');
+
+                                                setState(() {
+                                                  mapServerData[docId]?[SettingServerIpAdr] = ipAdr;
+                                                  _saveCurrentServer();
+                                                });
                                               },
                                             ),
                                           ),
 
-                                          // Bluetooth List
+                                          // Test Connection
                                           Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 20),
-                                            child: Theme(
-                                              data: Theme.of(context).copyWith(
-                                                // Set items list background color
-                                                  canvasColor: APP_TILE_COLOR
-                                              ),
-                                              child: DropdownButtonFormField<BluetoothDevice>(
-                                                value:  (() {
-                                                  final serverMap = server.data() ?? {};
-                                                  String? savedMac = serverMap[SettingServerBlueMac] as String?;
-                                                  if (savedMac == null) return null;
-
-                                                  // Find the matching paired device
-                                                  return lstPairedDevices.firstWhereOrNull(
-                                                        (d) => d.remoteId.toString() == savedMac,
-                                                  );
-                                                })(),
-                                                style: TextStyle(color: Colors.white),
-                                                decoration: InputDecoration(
-                                                  labelText: 'Select Bluetooth Device',
-                                                  labelStyle: TextStyle(color: Colors.grey),
-                                                  fillColor: APP_BACKGROUND_COLOR,
-                                                  filled: true,
-                                                  prefixIcon: const Icon(
-                                                    Icons.bluetooth,
-                                                    color: Colors.blueAccent,
-                                                  ),
-                                                  enabledBorder: OutlineInputBorder(
-                                                    borderSide: BorderSide(color: Colors.grey),
-                                                  ),
-                                                  border: OutlineInputBorder(
-                                                    borderRadius: BorderRadius.circular(8),
-                                                    borderSide: BorderSide(color: Colors.grey),
-                                                  ),
-                                                  focusedBorder: OutlineInputBorder(
-                                                    borderRadius: BorderRadius.circular(8),
-                                                    borderSide: BorderSide(color: Colors.grey),
-                                                  ),
-                                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                                            padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 10),
+                                            child: GestureDetector(
+                                              child: Text("Test Server Connection",
+                                                style: TextStyle(
+                                                  color: Colors.blue,
+                                                  fontSize: 14,
                                                 ),
-                                                hint: Text(lstPairedDevices.isEmpty ? 'No paired devices' : 'Choose a paired device',
-                                                  style: TextStyle(color: Colors.grey),
-                                                ),
-
-                                                items: lstPairedDevices.map((BluetoothDevice device) {
-                                                  return DropdownMenuItem<BluetoothDevice>(
-                                                    value: device,
-                                                    child: Row(
-                                                      children: [
-                                                        Expanded(
-                                                          child: Column(
-                                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                                            mainAxisSize: MainAxisSize.min,
-                                                            children: [
-                                                              Text(
-                                                                device.platformName.isNotEmpty
-                                                                    ? device.platformName
-                                                                    : 'Unknown Device',
-                                                                style: const TextStyle(
-                                                                  fontWeight: FontWeight.w500,
-                                                                  fontSize: 10,
-                                                                ),
-                                                              ),
-                                                              Text(
-                                                                device.remoteId.toString(),
-                                                                style: TextStyle(
-                                                                  fontSize: 8,
-                                                                  color: Colors.grey.shade600,
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  );
-                                                }).toList(),
-                                                onChanged: (BluetoothDevice? device) {
-                                                  setState(() {
-                                                    final vehicleDoc = lstServerData[_tabControllerServers!.index];
-                                                    final docId = vehicleDoc.id;
-
-                                                    setState(() {
-                                                      mapServerData[docId]?[SettingServerBlueDeviceName] = device?.platformName;
-                                                      mapServerData[docId]?[SettingServerBlueMac] = device?.remoteId.toString();
-                                                      _saveCurrentServer();
-                                                    });
-                                                  });
-                                                  //if (onDeviceSelected != null) {
-                                                  //  onDeviceSelected!(device);
-                                                  //}
-                                                },
-                                                isExpanded: true,
                                               ),
+
+                                              onTap: () async {
+                                                final vehicleDoc = lstServerData[_tabControllerServers!.index];
+                                                final docId = vehicleDoc.id;
+                                                final bluetoothName = mapServerData[docId]?[SettingServerBlueDeviceName] ;
+                                                final ip = mapServerData[docId]?[SettingServerIpAdr] ;
+
+                                                if(ip == ""){
+                                                  myMessageBox(context, "No IP Address");
+                                                  return;
+                                                }
+                                                if(!await _testMqttConnection(ip)) {
+                                                  myMessageBox(context, "Wifi Connection FAILED" , b);
+                                                  return;
+                                                }
+
+                                                myMessageBox(context, "Wifi Connection PASSED");
+
+                                              },
                                             ),
                                           ),
-
                                         ],
                                       ),
                                     );

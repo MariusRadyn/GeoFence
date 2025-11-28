@@ -184,7 +184,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
 
     setState(() {
       _currentLocation = LatLng(pos.latitude, pos.longitude);
-      GlobalSnackBar.show('Got Location');
+      MyGlobalSnackBar.show('Got Location');
 
       _markers.add(
         Marker(
