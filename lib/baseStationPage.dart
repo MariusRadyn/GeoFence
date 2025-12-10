@@ -18,19 +18,19 @@ import 'MqttService.dart';
 //import 'package:network_info_plus/network_info_plus.dart';
 //import 'Bluetooth2.dart';
 
-class SettingsPage extends StatefulWidget {
+class BaseStationPage extends StatefulWidget {
   final String userId;
 
-  const SettingsPage({
+  const BaseStationPage({
     super.key,
     required this.userId
   });
 
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  State<BaseStationPage> createState() => _BaseStationState();
 }
 
-class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMixin{
+class _BaseStationState extends State<BaseStationPage> with TickerProviderStateMixin{
   bool Debug = false;
   bool isLoading = true;
   TabController? _tabControllerMain;
@@ -64,7 +64,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   void initState() {
     super.initState();
 
-    //_getBondedDevices();
+    _getBondedDevices();
     _initTts();
     _fetchServers();
 
@@ -84,14 +84,12 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
 
     if (!mounted) return;
     _settingsService = Provider.of<SettingsService>(context, listen: false);
-
     //final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
 
     // You could set up listeners here or perform one-time operations
     // that depend on inherited widgets
     if (!_didInitListeners) {
       SettingsService().addListener(_updateControllerValues);
-      //settingsProvider.addListener(_updateControllerValues);
       _didInitListeners = true;
     }
 
@@ -325,47 +323,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Saved')));
   }
-  void _getIPAdress() async {
-    // String? _ipAddress;
-    // final List<Host> foundDevices = [];
-    // bool scanning = false;
-    //
-    // final info = NetworkInfo();
-    // final ip = await info.getWifiIP(); // e.g. "192.168.1.101"
-    // setState(() => _ipAddress = ip ?? 'Not connected to Wi-Fi');
-    //
-    // if(_ipAddress == null){
-    //   ScaffoldMessenger.of(context)
-    //       .showSnackBar(const SnackBar(content: Text('Not connected to WiFi')));
-    //   return;
-    // }
-    //
-    // String subnet =  _ipAddress!.substring(0, _ipAddress!.lastIndexOf("."));
-    // final scanner = LanScanner();
-    // final List<Host> hosts = await scanner.quickIcmpScanAsync(subnet);
 
-    // final stream = scanner.icmpScan(
-    //   subnet,
-    //   timeout: const Duration(milliseconds: 500),
-    //   progressCallback: (progress) {
-    //     // Optional: show progress
-    //     // print('Scanning ${subnet}.${progress.currIP}');
-    //   },
-    // );
-    //stream = scanner.icmpScan('$subnet.1', '$subnet.254');
-
-    // for (final device in hosts) {
-    //   if (device.) {
-    //     print('Found device: ${device.ip}:${device.port} ');
-    //     // Basic filter: Raspberry Pi often have hostname "raspberrypi" or vendor MAC etc.
-    //     if (device.ip.contains(subnet) && device.port == 22) {
-    //       // Example: SSH port 22 open => likely a Pi
-    //       foundDevices.add(device);
-    //       setState(() {});
-    //     }
-    //   }
-    // }
-  }
   Future<bool> _testMqttConnection(String ip)async{
     final mqtt = MqttService(
         ipAdr : ip,
@@ -385,17 +343,6 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
     });
 
     mqtt.requestSettings();
-    return true;
-  }
-  Future<bool> _xtestMqttConnection(String ip)async{
-    final mqtt = testMqttService(
-        ipAdr : ip,
-        clientId: MQTT_NAME,
-        mqttPin: MQTT_PIN
-    );
-
-    // Raspberry Pi IP
-    await mqtt.connect();
     return true;
   }
 
@@ -678,7 +625,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
             appBar: AppBar(
               backgroundColor: APP_BAR_COLOR,
               foregroundColor: Colors.white,
-              title: MyAppbarTitle('Settings'),
+              title: MyAppbarTitle('Base Stations'),
               actions: [
 
                 // Save Button
@@ -696,65 +643,8 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                    },
                 ),
               ],
-              bottom: TabBar(
-                labelColor: Colors.white,
-                  indicatorColor: Colors.blue,
-                  unselectedLabelColor: Colors.grey,
-                  tabs: [
-                    Tab(text: "General"),
-                    Tab(text: "Servers"),
-                    Tab(text: "Monitors",)
-                  ]),
             ),
-            body: TabBarView( children: [
-
-              // General Settings
-              ListView(
-                children: [
-                  const SizedBox(height: 20),
-
-                  // Rebate Value
-                  MyTextOption(
-                    controller: _rebateValueController,
-                    label: 'Rebate Value',
-                    description: "Rebate value per kilometer",
-                    prefix: 'R',
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // logPointPerMeter
-                  MyTextOption(
-                    controller: _logPointPerMeterController,
-                    label: 'Log Location Interval',
-                    description: "Record a map location everytime you move this far in meters",
-                    suffix: 'm',
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // isVoicePromptOn
-                  MyToggleOption(
-                      value: settings.settings!.isVoicePromptOn,
-                      label: 'Voice Prompt',
-                      subtitle: 'Allow me to give you vocal feedback',
-                      onChanged: (bool value)=>
-                      {
-                        //setState(() {
-                        //  _isVoicePromptOn = value;
-                        //}),
-                        settings.updateFields({SettingIsVoicePromptOn: value}),
-
-                        if(value) {
-                          _flutterTts.speak('Voice Prompt enabled'),
-                        },
-                      }
-                  ),
-                ],
-              ),
-
-              // Servers Settings
-              StreamBuilder(
+            body: StreamBuilder(
                 stream:  FirebaseFirestore.instance
                         .collection(CollectionUsers)
                         .doc(FirebaseAuth.instance.currentUser?.uid)
@@ -778,6 +668,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                     backgroundColor: APP_BACKGROUND_COLOR,
                     floatingActionButton: lstServerData.isEmpty
                       ? FloatingActionButton(
+                          heroTag: "action1",
                           onPressed: _addServer,
                           backgroundColor: COLOR_ORANGE,
                           mini: true,
@@ -793,6 +684,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
 
                           // Delete
                           FloatingActionButton(
+                            heroTag: "action2",
                             onPressed: _deleteServerDialog,
                             backgroundColor: COLOR_ORANGE,
                             mini: true,
@@ -1060,18 +952,10 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                   );
                 }
               ),
-
-              // Monitors
-              Center(
-                  child:  Text(
-                    "Map",style:
-                    TextStyle(color: Colors.white),
-                  ),
-              ),
-            ])
           ),
         );
       }
     );
   }
 }
+

@@ -99,6 +99,8 @@ flutter:
     - assets/report.png
     - assets/appicon_blue.png
     - assets/red_pickup2.png
+    - assets/iot.png
+    - assets/base_station.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

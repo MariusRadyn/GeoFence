@@ -489,19 +489,6 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
       });
     }
   }
-
-//   BluetoothDevice getBluetoohName(String deviceId){
-//     FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
-//     FlutterBluePlus.scanResults.listen((results) {
-//
-//       for (var r in results) {
-//       if (r.device.remoteId.str == "00:11:22:33:44:55") {
-//         print("Found: ${r.device.platformName}");
-//         return BluetoothDevice.fromId(r.device.remoteId.str);
-//       }
-//     }
-//   });
-// }
   Future<ImageProvider<Object>?> _getVehicleImageProvider(BuildContext context, String vehicleId, String? downloadUrl ) async {
     if(_isUploading) return null;
 
@@ -600,7 +587,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
         appBar: AppBar(
           backgroundColor: APP_BAR_COLOR,
           foregroundColor: Colors.white,
-          title: MyAppbarTitle('Vehicles'),
+          title: MyAppbarTitle('Monitors'),
         ),
         bottomNavigationBar: BottomAppBar(
           color: APP_BAR_COLOR,
@@ -630,7 +617,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
           ),
         ),
         body: Center(
-          child: Text("No Vehicles Found"),
+          child: Text("No Monitors Found"),
         ),
       );
     }
@@ -673,6 +660,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
           ),
           floatingActionButton: lstVehicleData.length ==0
               ? FloatingActionButton(
+                heroTag: "action1",
                 onPressed: _addVehicle,
                 backgroundColor: COLOR_ORANGE,
                 mini: true,
@@ -686,6 +674,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   FloatingActionButton(
+                    heroTag: "action2",
                     onPressed: _deleteVehicleDialog,
                     backgroundColor: COLOR_ORANGE,
                     mini: true,

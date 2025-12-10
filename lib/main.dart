@@ -53,7 +53,6 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
         navigatorKey: navigatorKey,
-        //color: COLOR_BLACK_LIGHT,
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primaryColor: Colors.blueGrey,

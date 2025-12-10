@@ -93,6 +93,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+
             // Animated App Icon
             AnimatedBuilder(
               animation: _controller,
@@ -111,6 +112,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               },
             ),
             const SizedBox(height: 20),
+
             // Animated App Name
             AnimatedBuilder(
               animation: _controller,

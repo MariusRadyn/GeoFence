@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/TrackingPage.dart';
+import 'package:geofence/baseStationPage.dart';
 import 'package:geofence/geofencePage.dart';
 import 'package:geofence/profilePage.dart';
 import 'package:geofence/settingsPage.dart';
@@ -500,9 +501,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
+    final userDataService = context.watch<UserDataService>();
+    final settingsService = context.watch<SettingsService>();
+
+    final isLoading =
+        userDataService.userdata == null ||
+            (settingsService.isLoading && userDataService.isLoading);
 
     return Scaffold(
       appBar: AppBar(
@@ -528,27 +534,27 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
         actions: [
-          Consumer2<UserDataService, SettingsService>(
-            builder: (context, userData, settings, child) {
-
-              if (userData.userdata == null) {
-                if ((settings.isLoading && userData.isLoading)) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                          color: Colors.blue,
-                          strokeWidth: 2
-                      ),
-                    ),
-                  );
-                }
-              }
-
-              if (userData.firebaseError){
-                //GlobalSnackBar.show("Firebase Error");
-              }
-              return Row(
+          // Consumer2<UserDataService, SettingsService>(
+          //   builder: (context, userData, settings, child) {
+          //
+          //     if (userData.userdata == null) {
+          //       if ((settings.isLoading && userData.isLoading)) {
+          //         return const Padding(
+          //           padding: EdgeInsets.symmetric(horizontal: 16),
+          //           child: Center(
+          //             child: CircularProgressIndicator(
+          //                 color: Colors.blue,
+          //                 strokeWidth: 2
+          //             ),
+          //           ),
+          //         );
+          //       }
+          //     }
+          //
+          //     if (userData.firebaseError){
+          //       //GlobalSnackBar.show("Firebase Error");
+          //     }
+              Row(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -558,13 +564,7 @@ class _HomePageState extends State<HomePage> {
                       padding: const EdgeInsets.only(right: 10, top: 2, bottom: 2),
                       child: GestureDetector(
                         onTap: () {
-                          if (userData.userdata != null){
-                           if( userData.userdata!.isLoggedIn) {
-                             // GlobalMsg.show(
-                             //     "Profile", "Userid: ${userData.userdata?.userID}\n"
-                             //     "UserName: ${userData.userdata?.displayName}\n"
-                             //      "email: ${userData.userdata?.email}"
-                             // );
+                          if (isLoading){
                              Navigator.push(
                                  context,
                                  MaterialPageRoute(
@@ -574,10 +574,6 @@ class _HomePageState extends State<HomePage> {
                           } else {
                             showLoginScreen(context);
                             }
-                          }
-                          else{
-                            showLoginScreen(context);
-                          }
                         },
 
                         // Profile Pic
@@ -586,8 +582,8 @@ class _HomePageState extends State<HomePage> {
                           backgroundColor: Colors.white,
                           child: CircleAvatar(
                             radius: 18,
-                            backgroundImage: userData.userdata?.isLoggedIn == true
-                                ? NetworkImage(userData.userdata!.photoURL) as ImageProvider
+                            backgroundImage: isLoading == false
+                                ? NetworkImage(userDataService.userdata!.photoURL) as ImageProvider
                                 : AssetImage(picPROFILE),
                           ),
                         ),
@@ -611,13 +607,23 @@ class _HomePageState extends State<HomePage> {
                       },
                     ),
                   ],
-              );
-            },
-          ),
+              ),
+            //},
+          //),
         ],
       ),
       backgroundColor: APP_BACKGROUND_COLOR,
-      body: SingleChildScrollView(
+      body: isLoading
+        ? const Scaffold(
+            backgroundColor: APP_BACKGROUND_COLOR,
+            body: Center(
+            child: CircularProgressIndicator(
+              color: Colors.blue,
+              strokeWidth: 2
+              ),
+            ),
+         )
+      : SingleChildScrollView(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
@@ -641,10 +647,19 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 10),
 
+            MyCustomTileWithPic(
+              imagePath: 'assets/base_station.png',
+              header: 'Base Stations',
+              description: 'Add multiple base stations that acts as master network controllers.',
+              widget: BaseStationPage(userId: UserDataService().userdata!.userID),
+            ),
+
+            const SizedBox(height: 10),
+
             const MyCustomTileWithPic(
-              imagePath: 'assets/red_pickup2.png',
-              header: 'Vehicles',
-              description: 'Add all the vehicles in your fleet',
+              imagePath: 'assets/iot.png',
+              header: 'iOT Monitors',
+              description: 'Add multiple iOT monitors for various use cases',
               widget: VehiclesPage(),
             ),
 
