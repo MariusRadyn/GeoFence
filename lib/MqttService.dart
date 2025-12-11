@@ -13,14 +13,16 @@ class MqttService {
   final String mqttPin;
 
   late MqttServerClient client;
+  final Map<String, List<void Function(String)>> _topicCallbacks = {};
+  StreamSubscription? _updatesSubscription;
+  final Set<String> _subscribedTopics = {};
 
   MqttService({
     required this.ipAdr,
     this.port = 1883,
-    this.mqttPin = ""
+    this.mqttPin = "",
   }){}
 
-  /// Call this BEFORE connect()
   Future<void> init() async {
     _clientId = await ClientIdManager.getClientId();
 
@@ -39,37 +41,8 @@ class MqttService {
     client.connectTimeoutPeriod = 4000;
     client.autoReconnect = true;
     client.resubscribeOnAutoReconnect = true;
-
-    client.connectionMessage = MqttConnectMessage()
-        .withClientIdentifier(_clientId)
-        .startClean();
-        //.withWillQos(MqttQos.atLeastOnce);
   }
 
-  /// Connect to Raspberry Pi MQTT
-  Future<bool> connect() async {
-    try {
-
-      client.connectionMessage = MqttConnectMessage()
-          .withClientIdentifier("geoAndroidMqtt")
-          .startClean();
-          //.withWillQos(MqttQos.atLeastOnce);
-
-      print("Connecting to MQTT broker... $ipAdr");
-      await client.connect();
-    } catch (e) {
-      print("Error connecting: $e");
-      return false;
-    }
-
-    if (client.connectionStatus!.state == MqttConnectionState.connected) {
-      print("Connected successfully!");
-      return true;
-    } else {
-      print("Connection failed");
-      return false;
-    }
-  }
 
   // -----------------------------------------------------------
   // CALLBACKS
@@ -88,6 +61,22 @@ class MqttService {
   void _onAutoReconnected() {
     print("Auto-reconnected successfully");
   }
+  void onMessage(String topic, void Function(String message) callback) {
+    // Add subscription only once
+    String _topic = topic + "/" + _clientId;
+
+    if (!_subscribedTopics.contains(_topic)) {
+      client.subscribe(_topic, MqttQos.atLeastOnce);
+      _subscribedTopics.add(_topic); // ← set it here
+      print("Subscribed to topic: $_topic");
+    }
+
+    // Store callback
+    _topicCallbacks.putIfAbsent(topic, () => []);
+    _topicCallbacks[topic]!.add(callback);
+
+    print("Callback registered for topic: $topic");
+  }
 
   // -----------------------------------------------------------
   // MANUAL RECONNECT TIMER (failsafe)
@@ -97,13 +86,105 @@ class MqttService {
 
     _reconnectTimer = Timer.periodic(Duration(seconds: 5), (t) {
       print("Reconnecting to MQTT…");
-    //  connect();
+      connect();
     });
   }
 
   // -----------------------------------------------------------
   // SUBSCRIBE + LISTEN
   // -----------------------------------------------------------
+
+  /// Listen for settings responses from Raspberry Pi
+  void listenForSettings(void Function(Map<String, dynamic>) onSettingsReceived) {
+      subscribe(MQTT_TOPIC_RESPONSE);
+      //final topic = "$MQTT_TOPIC_RESPONSE/$_clientId";
+      //client.subscribe(topic, MqttQos.atLeastOnce);
+      //print("Subscribing: $MQTT_TOPIC_RESPONSE");
+
+      print("Listening: $MQTT_TOPIC_RESPONSE");
+      client.updates!.listen((messages) {
+        final mqttMsg = messages[0].payload as MqttPublishMessage;
+        final payload = MqttPublishPayload.bytesToStringAsString(
+          mqttMsg.payload.message,
+        );
+
+        print("Received MQTT message: $payload");
+
+        try {
+          final jsonData = jsonDecode(payload);
+          onSettingsReceived(jsonData);
+        } catch (_) {
+          print("Invalid JSON received");
+        }
+      });
+    }
+  void tx(String msg, String topic) {
+    final payload = jsonEncode({
+      "clientId": _clientId,
+      "data": msg
+    });
+
+    final builder = MqttClientPayloadBuilder();
+    builder.addString(payload);
+
+    client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
+    print("MQTT TX: $payload $topic");
+  }
+  void setupMessageListener() {
+    _updatesSubscription = client.updates!.listen((List<MqttReceivedMessage<MqttMessage>> messages) {
+      final recMsg = messages.first;
+      final topic = recMsg.topic;
+
+      final payload = MqttPublishPayload.bytesToStringAsString(
+        (recMsg.payload as MqttPublishMessage).payload.message,
+      );
+
+      // Send to your registered callbacks
+      _dispatchMessage(topic, payload);
+    });
+  }
+  void _dispatchMessage(String topic, String message) {
+    if (_topicCallbacks.containsKey(topic)) {
+      for (final cb in _topicCallbacks[topic]!) {
+        cb(message); // invoke callback
+      }
+    }
+  }
+
+  // -----------------------------------------------------------
+  // Commands
+  // -----------------------------------------------------------
+  Future<bool> connect() async {
+    try {
+      client.connectionMessage = MqttConnectMessage()
+          .withClientIdentifier(_clientId)
+          .startClean()
+          .withWillTopic(MQTT_TOPIC_WILL)
+          .withWillMessage('offline')
+          .withWillQos(MqttQos.atLeastOnce);
+
+      print("Connecting to MQTT broker... $ipAdr");
+      await client.connect();
+
+      if (client.connectionStatus!.state == MqttConnectionState.connected) {
+        print("Connected successfully!");
+        return true;
+
+      } else {
+        print("Connection failed");
+      }
+
+    } catch (e) {
+      print("Error connecting: $e");
+
+    }
+    return false;
+  }
+  void publish(String topic, Map<String, dynamic> data) {
+    final builder = MqttClientPayloadBuilder();
+    builder.addString(jsonEncode(data));
+    client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
+  }
   void listen(String topic, void Function(String message) callback) {
     client.subscribe(topic, MqttQos.atLeastOnce);
 
@@ -116,118 +197,31 @@ class MqttService {
       callback(payload);
     });
   }
-
-  /// Listen for settings responses from Raspberry Pi
-  void listenForSettings(void Function(Map<String, dynamic>) onSettingsReceived) {
-    final topic = "$MQTT_TOPIC_RESPONSE/$_clientId";
-    client.subscribe(topic, MqttQos.atLeastOnce);
-    print("Subscribing: $MQTT_TOPIC_RESPONSE");
-
-
-    print("Listening: $MQTT_TOPIC_RESPONSE");
-    client.updates!.listen((messages) {
-      final mqttMsg = messages[0].payload as MqttPublishMessage;
-      final payload = MqttPublishPayload.bytesToStringAsString(
-        mqttMsg.payload.message,
-      );
-
-      print("Received MQTT message: $payload");
-
-      try {
-        final jsonData = jsonDecode(payload);
-        onSettingsReceived(jsonData);
-      } catch (_) {
-        print("Invalid JSON received");
-      }
-    });
+  void subscribe(String topic){
+    //final topic = "$MQTT_TOPIC_RESPONSE/$_clientId";
+    final _topic = "$topic/$_clientId";
+    client.subscribe(_topic, MqttQos.atLeastOnce);
+    print("Subscribing: $_topic");
   }
+  Future<void> disconnect() async {
+    // 1. Cancel the updates listener
+    await _updatesSubscription?.cancel();
+    _updatesSubscription = null;
 
-  /// Request settings from Raspberry Pi
-  void requestSettings() {
+    // 2. Clear topic callbacks
+    _topicCallbacks.clear();
+    _subscribedTopics.clear();
 
-    final payload = jsonEncode({
-      "clientId": _clientId,
-    });
+    // 3. Optional: unsubscribe from all topics
+    for (final topic in _subscribedTopics) {
+      client.unsubscribe(topic);
+    }
 
-    final builder = MqttClientPayloadBuilder();
-    builder.addString(payload);
-
-    print("Requesting: $MQTT_TOPIC_REQUEST");
-    client.publishMessage(MQTT_TOPIC_REQUEST, MqttQos.atLeastOnce, builder.payload!);
-
-    print("Requested settings from Raspberry Pi");
-  }
-
-
-  // -----------------------------------------------------------
-  // PUBLISH
-  // -----------------------------------------------------------
-  void publish(String topic, Map<String, dynamic> data) {
-    final builder = MqttClientPayloadBuilder();
-    builder.addString(jsonEncode(data));
-    client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
+    // 4. Disconnect the client
+    _reconnectTimer?.cancel();
+    client.disconnect();
   }
 
 }
 
-class testMqttService {
-  String ipAdr = '';
-  late MqttServerClient client;
-  final int port;
-  final String clientId;
-  final String mqttPin;
 
-  testMqttService({
-    required this.ipAdr,
-    this.port = 1883,
-    this.clientId = "",
-    this.mqttPin = ""
-  }){
-    client = MqttServerClient(ipAdr, 'flutter_client');
-    client.port = 1883;
-    client.keepAlivePeriod = 20;
-    client.logging(on: false);
-  }
-
-  Future<void> connect() async {
-    client.onDisconnected = () => print("MQTT Disconnected");
-    client.onConnected = () => print("MQTT Connected $ipAdr");
-    client.onSubscribed = (topic) => print("Subscribed to $topic");
-
-    final connMessage = MqttConnectMessage()
-        .withClientIdentifier("geoAndroidMqtt")
-        .startClean();
-
-    client.connectionMessage = connMessage;
-
-    try {
-      await client.connect();
-    } catch (e) {
-      print("Error: $e");
-      client.disconnect();
-    }
-
-    print("Subscribe: $MQTT_TOPIC_RESPONSE");
-
-    if (client.connectionStatus!.state == MqttConnectionState.connected) {
-      client.subscribe(MQTT_TOPIC_RESPONSE, MqttQos.atLeastOnce);
-
-      client.updates!.listen((messages) {
-        final MqttReceivedMessage recMsg = messages[0];
-        final MqttPublishMessage payload = recMsg.payload;
-        final String text =
-        MqttPublishPayload.bytesToStringAsString(payload.payload.message);
-
-        print("RX from MQTT: $text");
-      });
-
-      publish("Hello from Flutter!");
-    }
-  }
-  void publish(String msg) {
-    final builder = MqttClientPayloadBuilder();
-    builder.addString(msg);
-
-    client.publishMessage(MQTT_TOPIC_REQUEST, MqttQos.atLeastOnce, builder.payload!);
-  }
-}

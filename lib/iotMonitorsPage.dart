@@ -11,22 +11,21 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geofence/utils.dart';
-import 'package:geofence/vehiclesAddPage.dart';
 import 'package:path_provider/path_provider.dart';
 
-class VehiclesPage extends StatefulWidget {
-  const VehiclesPage({super.key});
+class IotMonitorsPage extends StatefulWidget {
+  const IotMonitorsPage({super.key});
 
   @override
-  _VehiclesPageState createState() => _VehiclesPageState();
+  _IotMonitorsPageState createState() => _IotMonitorsPageState();
 }
 
-class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMixin{
+class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderStateMixin{
   bool _isLoading = true;
   TabController? _tabController;
   final ImagePicker _imagePicker = ImagePicker();
   final Map<String, Map<String, dynamic>> mapVehicleData = {};
-  List<DocumentSnapshot<Map<String, dynamic>>> lstVehicleData = [];
+  List<DocumentSnapshot<Map<String, dynamic>>> lstMonitorData = [];
   bool _isUploading = false;
   double _uploadProgress = 0.0;
   //BluetoothDevice? selectedDevice;
@@ -74,19 +73,19 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
           .get();
 
       setState(() {
-        lstVehicleData = snapshot.docs;
+        lstMonitorData = snapshot.docs;
         mapVehicleData.clear();
 
-        for (var doc in lstVehicleData) {
+        for (var doc in lstMonitorData) {
           mapVehicleData[doc.id] = doc.data() ?? {};
         }
 
-        if(lstVehicleData.length > 0) {
+        if(lstMonitorData.length > 0) {
           if(_tabController != null){
             _tabController?.dispose();
           }
             _tabController = TabController(
-            length: lstVehicleData.length,
+            length: lstMonitorData.length,
             vsync: this
           );
         }
@@ -105,7 +104,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
 
     User? user = FirebaseAuth.instance.currentUser;
     final currentIndex = _tabController!.index;
-    final vehicleDoc = lstVehicleData[currentIndex];
+    final vehicleDoc = lstMonitorData[currentIndex];
     final settingsToSave = mapVehicleData[vehicleDoc.id]!;
 
     await FirebaseFirestore.instance
@@ -138,8 +137,8 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
     doc.set(newVehicle);
     await _fetchVehicles();
 
-    if (_tabController != null && lstVehicleData.isNotEmpty) {
-      final newIndex = lstVehicleData.indexWhere((d) => d.id == doc.id);
+    if (_tabController != null && lstMonitorData.isNotEmpty) {
+      final newIndex = lstMonitorData.indexWhere((d) => d.id == doc.id);
       if (newIndex != -1) {
         _tabController!.animateTo(newIndex);
       }
@@ -152,7 +151,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
     try {
       User? user = FirebaseAuth.instance.currentUser;
       int index = _tabController!.index;
-      final docId = lstVehicleData[index].id;
+      final docId = lstMonitorData[index].id;
 
       // 1️⃣ Delete from Firestore
       await FirebaseFirestore.instance
@@ -163,21 +162,21 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
           .delete();
 
       setState(() {
-        lstVehicleData.removeWhere((d) => d.id == docId);
+        lstMonitorData.removeWhere((d) => d.id == docId);
         mapVehicleData.remove(docId);
 
         _tabController?.dispose();
 
-        if (lstVehicleData.isNotEmpty) {
+        if (lstMonitorData.isNotEmpty) {
           _tabController = TabController(
-            length: lstVehicleData.length,
+            length: lstMonitorData.length,
             vsync: this,
           );
 
           // 5️⃣ Ensure a safe tab is selected
           int newIndex = 0;
-          if (_tabController!.index >= lstVehicleData.length) {
-            newIndex = lstVehicleData.length - 1;
+          if (_tabController!.index >= lstMonitorData.length) {
+            newIndex = lstMonitorData.length - 1;
           } else {
             newIndex = _tabController!.index;
           }
@@ -195,7 +194,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
   }
   void _deleteVehicleDialog() async {
     int index = _tabController!.index;
-    final vehicle = lstVehicleData[index];
+    final vehicle = lstMonitorData[index];
 
     showDialog(
         context: context,
@@ -381,7 +380,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
     if(source == null) return;
     try {
       if(_tabController == null) return;
-      final vehicleDoc = lstVehicleData[_tabController!.index];
+      final vehicleDoc = lstMonitorData[_tabController!.index];
 
       final XFile? picked = await _imagePicker.pickImage(source: source!, imageQuality: 85);
       if (picked == null) return;
@@ -412,7 +411,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
 
     try {
       if (_tabController == null) return;
-      final vehicleDoc = lstVehicleData[_tabController!.index];
+      final vehicleDoc = lstMonitorData[_tabController!.index];
 
       final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
       if (uid.isEmpty) return;
@@ -579,10 +578,10 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
     User? user = FirebaseAuth.instance.currentUser;
 
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.lightBlueAccent,));
+      return MyProgressCircle();
     }
 
-    if(lstVehicleData.length == 0) {
+    if(lstMonitorData.length == 0) {
       return Scaffold(
         appBar: AppBar(
           backgroundColor: APP_BAR_COLOR,
@@ -590,7 +589,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
           title: MyAppbarTitle('Monitors'),
         ),
         bottomNavigationBar: BottomAppBar(
-          color: APP_BAR_COLOR,
+          color: APP_BACKGROUND_COLOR,
           shape: const CircularNotchedRectangle(), // optional if using FAB
           notchMargin: 0,
           child: SafeArea(
@@ -630,11 +629,11 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return MyProgressCircle();
         }
 
         final docs = snapshot.data!.docs;
-        lstVehicleData = docs;
+        lstMonitorData = docs;
 
         // Recreate controller if length changes
         _tabController ??= TabController(length: docs.length, vsync: this);
@@ -646,19 +645,19 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
           appBar: AppBar(
             backgroundColor: APP_BAR_COLOR,
             foregroundColor: Colors.white,
-            title: MyAppbarTitle('Vehicles'),
+            title: MyAppbarTitle('Monitors'),
             bottom: TabBar(
               controller: _tabController,
               isScrollable: true,
               indicatorColor: Colors.blueAccent,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.grey,
-              tabs: lstVehicleData
+              tabs: lstMonitorData
                   .map((doc) => Tab(text: doc['name'] ?? doc.id))
                   .toList(),
             ),
           ),
-          floatingActionButton: lstVehicleData.length ==0
+          floatingActionButton: lstMonitorData.length ==0
               ? FloatingActionButton(
                 heroTag: "action1",
                 onPressed: _addVehicle,
@@ -703,7 +702,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
             color: APP_BACKGROUND_COLOR,
             child: TabBarView(
               controller: _tabController,
-              children: lstVehicleData.map((doc){
+              children: lstMonitorData.map((doc){
                 final _docId = doc.id;
                 final vehicle = mapVehicleData[_docId]!;
 
@@ -711,15 +710,10 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
                     future: _getVehicleImageProvider(context, _docId, vehicle[SettingVehiclePicture]),
                     builder: (context, imgSnapshot) {
                       if (imgSnapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator(color: Colors.lightBlueAccent));
+                        return MyProgressCircle();
                       }
 
-                      ImageProvider<Object> imageProvider;
-                      if (imgSnapshot.hasData) {
-                        imageProvider = imgSnapshot.data!;
-                      } else {
-                        imageProvider = const AssetImage('assets/red_pickup2.png');
-                      }
+                      ImageProvider<Object> imageProvider = imgSnapshot.data ?? const AssetImage('assets/red_pickup2.png');
 
                       return ListView(
                          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 0),
@@ -843,7 +837,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
                                         },
                                       onFieldSubmitted: (value){
                                         setState(() {
-                                          final vehicleDoc = lstVehicleData[_tabController!.index];
+                                          final vehicleDoc = lstMonitorData[_tabController!.index];
                                           final docId = vehicleDoc.id;
 
                                           setState(() {
@@ -867,7 +861,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
                                       suffix: "l/100Km",
                                       inputType: TextInputType.number,
                                       onFieldSubmitted: (value){
-                                        final vehicleDoc = lstVehicleData[_tabController!.index];
+                                        final vehicleDoc = lstMonitorData[_tabController!.index];
                                         final docId = vehicleDoc.id;
 
                                         setState(() {
@@ -888,7 +882,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
                                       hintText: "Enter value here",
                                       labelText: "Registration Number",
                                       onFieldSubmitted: (value) {
-                                        final vehicleDoc = lstVehicleData[_tabController!.index];
+                                        final vehicleDoc = lstMonitorData[_tabController!.index];
                                         final docId = vehicleDoc.id;
 
                                         setState(() {
@@ -950,7 +944,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
                               ),
                             ),
 
-                            SizedBox(height: 5),
+                           SizedBox(height: 5),
 
                            // Select Bluetooth
                            Padding( padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 20),
@@ -1013,17 +1007,6 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
                                                   fontSize: 12,
                                                 ),
                                               ),
-
-                                              // Padding(
-                                              //   padding: const EdgeInsets.all(8.0),
-                                              //   child: Text(
-                                              //     device.remoteId.toString(),
-                                              //     style: TextStyle(
-                                              //       fontSize: 12,
-                                              //       color: Colors.grey.shade600,
-                                              //     ),
-                                              //   ),
-                                              // ),
                                             ],
                                           ),
                                         ],
@@ -1032,7 +1015,7 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
                                   }).toList(),
                                   onChanged: (BluetoothDevice? device) {
                                     setState(() {
-                                      final vehicleDoc = lstVehicleData[_tabController!.index];
+                                      final vehicleDoc = lstMonitorData[_tabController!.index];
                                       final docId = vehicleDoc.id;
 
                                       setState(() {
@@ -1049,6 +1032,8 @@ class _VehiclesPageState extends State<VehiclesPage> with TickerProviderStateMix
                                 ),
                               ),
                            ),
+
+
                          ],
                       );
                     }

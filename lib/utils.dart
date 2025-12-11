@@ -43,6 +43,8 @@ const APP_BAR_COLOR = Color.fromARGB(255, 0, 36, 52);
 const APP_BACKGROUND_COLOR = COLOR_DARK_BLUE;
 const APP_TILE_COLOR = Color.fromARGB(255, 21, 34, 52);
 const DRAWER_COLOR = Color.fromARGB(255, 33, 137, 215);
+const PROGRESS_CIRCLE_COLOR = Colors.lightBlueAccent ;
+
 
 final FirebaseAuthService firebaseAuthService = FirebaseAuthService();
 final FirebaseFirestore firestore = FirebaseFirestore.instance;
@@ -98,6 +100,7 @@ const SettingServerBlueMac = 'bluetoothMAC';
 const SettingClientIpAdr = 'IPAdress';
 const MQTT_TOPIC_RESPONSE ="device/settings/response";
 const MQTT_TOPIC_REQUEST ="device/settings/request";
+const MQTT_TOPIC_WILL ="device/lastwill";
 const MQTT_NAME ="geoAndroidMqtt";
 const MQTT_PIN = "12345";
 
@@ -1463,6 +1466,7 @@ class ClientIdManager {
     return id;
   }
 }
+
 //---------------------------------------------------
 // Services
 //---------------------------------------------------
@@ -1914,7 +1918,13 @@ LinearGradient MyTileGradientBlue() {
     ],
   );
 }
-
+Widget MyProgressCircle() {
+  return Center(
+      child: CircularProgressIndicator(
+          color: PROGRESS_CIRCLE_COLOR
+      )
+  );
+}
 //---------------------------------------------------
 // Styles
 //---------------------------------------------------

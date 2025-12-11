@@ -9,7 +9,7 @@ import 'package:geofence/trackingHistoryPage.dart';
 //import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
-import 'vehiclesPage.dart';
+import 'iotMonitorsPage.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -534,94 +534,67 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
         actions: [
-          // Consumer2<UserDataService, SettingsService>(
-          //   builder: (context, userData, settings, child) {
-          //
-          //     if (userData.userdata == null) {
-          //       if ((settings.isLoading && userData.isLoading)) {
-          //         return const Padding(
-          //           padding: EdgeInsets.symmetric(horizontal: 16),
-          //           child: Center(
-          //             child: CircularProgressIndicator(
-          //                 color: Colors.blue,
-          //                 strokeWidth: 2
-          //             ),
-          //           ),
-          //         );
-          //       }
-          //     }
-          //
-          //     if (userData.firebaseError){
-          //       //GlobalSnackBar.show("Firebase Error");
-          //     }
-              Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
+          Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+
+                // Profile Pic
+                Padding(
+                  padding: const EdgeInsets.only(right: 10, top: 2, bottom: 2),
+                  child: GestureDetector(
+                    onTap: () {
+                      if (isLoading){
+                         Navigator.push(
+                             context,
+                             MaterialPageRoute(
+                             builder: (context) => profilePage(),
+                          ),
+                         );
+                      } else {
+                        showLoginScreen(context);
+                        }
+                    },
 
                     // Profile Pic
-                    Padding(
-                      padding: const EdgeInsets.only(right: 10, top: 2, bottom: 2),
-                      child: GestureDetector(
-                        onTap: () {
-                          if (isLoading){
-                             Navigator.push(
-                                 context,
-                                 MaterialPageRoute(
-                                 builder: (context) => profilePage(),
-                              ),
-                             );
-                          } else {
-                            showLoginScreen(context);
-                            }
-                        },
-
-                        // Profile Pic
-                        child: CircleAvatar(
-                          radius: 20,
-                          backgroundColor: Colors.white,
-                          child: CircleAvatar(
-                            radius: 18,
-                            backgroundImage: isLoading == false
-                                ? NetworkImage(userDataService.userdata!.photoURL) as ImageProvider
-                                : AssetImage(picPROFILE),
-                          ),
-                        ),
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.white,
+                      child: CircleAvatar(
+                        radius: 18,
+                        backgroundImage: isLoading == false
+                            ? NetworkImage(userDataService.userdata!.photoURL) as ImageProvider
+                            : AssetImage(picPROFILE),
                       ),
                     ),
+                  ),
+                ),
 
-                    // Settings
-                    IconButton(
-                      icon: const Icon(
-                        Icons.settings,
-                        size: 40,
-                        color: Colors.grey,
+                // Settings
+                IconButton(
+                  icon: const Icon(
+                    Icons.settings,
+                    size: 40,
+                    color: Colors.grey,
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SettingsPage(userId: UserDataService().userdata!.userID),
                       ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SettingsPage(userId: UserDataService().userdata!.userID),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-              ),
-            //},
-          //),
+                    );
+                  },
+                ),
+              ],
+          ),
         ],
       ),
       backgroundColor: APP_BACKGROUND_COLOR,
       body: isLoading
-        ? const Scaffold(
+        ? Scaffold(
             backgroundColor: APP_BACKGROUND_COLOR,
-            body: Center(
-            child: CircularProgressIndicator(
-              color: Colors.blue,
-              strokeWidth: 2
-              ),
-            ),
+            body: MyProgressCircle(),
          )
       : SingleChildScrollView(
         child: Column(
@@ -660,7 +633,7 @@ class _HomePageState extends State<HomePage> {
               imagePath: 'assets/iot.png',
               header: 'iOT Monitors',
               description: 'Add multiple iOT monitors for various use cases',
-              widget: VehiclesPage(),
+              widget: IotMonitorsPage(),
             ),
 
             const SizedBox(height: 10),
