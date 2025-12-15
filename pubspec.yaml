@@ -101,6 +101,10 @@ flutter:
     - assets/red_pickup2.png
     - assets/iot.png
     - assets/base_station.png
+    - assets/distanceWheel.jpg
+    - assets/noImage.jpg
+    - assets/tractor.jpg
+    - assets/generator.jpg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

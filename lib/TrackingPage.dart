@@ -209,7 +209,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       final vehiclesSnapshot = await _firestore
           .collection(CollectionUsers)
           .doc(userId)
-          .collection(CollectionVehicles)
+          .collection(CollectionMonitors)
           .get();
 
       List<Map<String, dynamic>> vehicles = [];

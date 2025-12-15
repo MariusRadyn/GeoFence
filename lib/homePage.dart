@@ -23,7 +23,7 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController2 = TextEditingController();
   final TextEditingController _userController = TextEditingController();
-  String connectedDevice = "No Connection";
+
 
   @override
   void initState() {
@@ -33,9 +33,6 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         UserDataService().userdata!.isLoggedIn = true;
       });
-    }
-    if(SettingsService().settings?.connectedDevice != null) {
-      connectedDevice = SettingsService().settings!.connectedDevice;
     }
   }
 
@@ -523,7 +520,9 @@ class _HomePageState extends State<HomePage> {
                 fontFamily: 'Poppins',
                 color: Colors.white,
               ),
-            ),Text(connectedDevice,
+            ),Text( settingsService.settings?.connectedDevice.isEmpty ?? true
+                ? "No Connection"
+                : settingsService.settings!.connectedDevice,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.normal,

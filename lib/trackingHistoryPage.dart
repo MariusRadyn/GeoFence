@@ -48,7 +48,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
     final QuerySnapshot snapshot = await FirebaseFirestore.instance
         .collection(CollectionUsers)
         .doc(_auth.currentUser!.uid)
-        .collection(CollectionVehicles)
+        .collection(CollectionMonitors)
         .get();
 
     return snapshot.docs.map((doc) {

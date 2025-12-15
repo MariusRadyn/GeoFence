@@ -11,6 +11,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import 'MqttService.dart';
+
 const APP_VERSION = "1.1";
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -18,6 +20,7 @@ bool isDebug = true;
 String debugLog = '';
 
 const String  googleAPiKey = String.fromEnvironment('MAPS_API_KEY');
+final Mqtt_Service = MqttService();
 
 // keytool -keystore C:\Users\mradyn\.android\debug.keystore -list
 // PW android
@@ -45,7 +48,6 @@ const APP_TILE_COLOR = Color.fromARGB(255, 21, 34, 52);
 const DRAWER_COLOR = Color.fromARGB(255, 33, 137, 215);
 const PROGRESS_CIRCLE_COLOR = Colors.lightBlueAccent ;
 
-
 final FirebaseAuthService firebaseAuthService = FirebaseAuthService();
 final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
@@ -65,7 +67,7 @@ const CollectionUsers = 'users';
 const CollectionGeoFences = 'geofences';
 const CollectionTrackingSessions = 'tracking_sessions';
 const CollectionLocations = 'locations';
-const CollectionVehicles = 'vehicles';
+const CollectionMonitors = 'vehicles';
 const CollectionServers = 'servers';
 const CollectionClients = 'clients';
 
@@ -81,13 +83,29 @@ const SettingRebateValue = 'rebateValuePerLiter';
 const SettingDieselPrice = 'dieselPrice';
 const SettingConnectedDevice = 'connectedDevice';
 
-// Vehicle settings
-const SettingVehicleName = 'name';
-const SettingVehicleFuelConsumption = 'fuelConsumption';
-const SettingVehicleReg = 'registrationNumber';
-const SettingVehicleBlueDeviceName = 'bluetoothDeviceName';
-const SettingVehicleBlueMac = 'bluetoothMAC';
-const SettingVehiclePicture = 'picture';
+// Monitor settings
+const SettingMonName = 'name';
+const SettingMonFuelConsumption = 'fuelConsumption';
+const SettingMonReg = 'registrationNumber';
+const SettingMonBlueDeviceName = 'bluetoothDeviceName';
+const SettingMonBlueMac = 'bluetoothMAC';
+const SettingMonPicture = 'picture';
+const SettingMonType = 'type';
+const SettingMonID = 'monitorId';
+const SettingMonTicksPerM = 'ticksPerM';
+const SettingMonDefaultTicksPerM = '20'; // Default value when new Monitor is created
+
+// Monitor Types
+const String MonTypeVehicle = "Vehicle";
+const String MonTypeMobileMachineMon = "Mobile Machine";
+const String MonTypeStationaryMachineMon = "Stationary Machine";
+const String MonTypeWheel = "Distance Wheel";
+const List<String> SettingMonitorTypeList = [
+  MonTypeVehicle,
+  MonTypeMobileMachineMon,
+  MonTypeStationaryMachineMon,
+  MonTypeWheel,
+];
 
 // Servers Settings
 const SettingServerName = 'name';
@@ -98,9 +116,11 @@ const SettingServerBlueMac = 'bluetoothMAC';
 
 // Clients Settings
 const SettingClientIpAdr = 'IPAdress';
-const MQTT_TOPIC_RESPONSE ="device/settings/response";
-const MQTT_TOPIC_REQUEST ="device/settings/request";
-const MQTT_TOPIC_WILL ="device/lastwill";
+const MQTT_TOPIC_FROM_IOT = "mqtt/from/iot";
+const MQTT_TOPIC_TO_IOT = "mqtt/to/iot";
+const MQTT_TOPIC_TO_ANDROID = "mqtt/to/android";
+const MQTT_TOPIC_FROM_ANDROID = "mqtt/from/android";
+const MQTT_TOPIC_WILL = "mqtt/will";
 const MQTT_NAME ="geoAndroidMqtt";
 const MQTT_PIN = "12345";
 
@@ -175,7 +195,6 @@ Position latLngToPosition(LatLng latLng) {
     isMocked: false,
   );
 }
-
 void myMessageBox (BuildContext context, String message) {
   showDialog(
     context: context,
@@ -468,8 +487,9 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
       width: widget.width,
       child: TextFormField(
         style: TextStyle(
-            fontSize: 15,
-            color: widget.foregroundColor
+          fontSize: 15,
+          color: widget.foregroundColor,
+          fontFamily: 'Poppins',
         ),
 
         readOnly: widget.isReadOnly,
@@ -499,14 +519,16 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
           suffix: Text(widget.suffix),
           hintText: widget.hintText,
           hintStyle: TextStyle(
-              color: Colors.grey,
+            color: Colors.grey,
             fontSize: 16,
+            fontFamily: 'Poppins',
           ),
 
           labelText: widget.labelText,
           labelStyle: TextStyle(
             color: Colors.grey,
             fontSize: 20,
+            fontFamily: 'Poppins',
           ),
 
           suffixIcon: GestureDetector(
@@ -1093,19 +1115,19 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
 
   void loadSettings() {
     vehicleNameController = TextEditingController(
-        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleName] : ''
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingMonName] : ''
     );
 
     fuelConsumptionController = TextEditingController(
-        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleFuelConsumption].toString() : ''
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingMonFuelConsumption].toString() : ''
     );
 
     vehicleRegController = TextEditingController(
-        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleReg] : ''
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingMonReg] : ''
     );
 
-    widget.bluetoothDeviceName = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleBlueDeviceName] : "";
-    widget.bluetoothMAC = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingVehicleBlueMac] : "";
+    widget.bluetoothDeviceName = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingMonBlueDeviceName] : "";
+    widget.bluetoothMAC = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingMonBlueMac] : "";
   }
 
   @override
@@ -1466,6 +1488,68 @@ class ClientIdManager {
     return id;
   }
 }
+class MyDropdown extends StatelessWidget {
+  final ValueChanged<String?>? onChange;
+  final String value;
+
+  const MyDropdown({
+    super.key,
+    required this.onChange,
+    required this.value
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      dropdownColor: APP_BAR_COLOR,
+      decoration: InputDecoration(
+        labelText: "Monitor Type",
+        labelStyle: TextStyle(color: Colors.grey, fontSize: 22),
+        enabledBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.blue)
+        ),
+
+        focusedBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: Colors.blue, width: 2),
+        ),
+      ),
+      //value: SettingMonitorTypeList.contains(monitor[SettingMonitorType]) ? monitor[SettingMonitorType] : null,
+      value: value,
+      hint: const Text("Select Monitor Type",
+        style: TextStyle(
+          color: Colors.grey,
+          fontFamily: 'Poppins',
+          fontSize: 15,
+        ),
+      ),
+      items: SettingMonitorTypeList.map((type) {
+        return DropdownMenuItem(
+          value: type,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(type,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontFamily: 'Poppins',
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+      onChanged: onChange,
+      // onChanged: (value) {
+      //   final vehicleDoc = lstMonitorData[_tabController!.index];
+      //   final docId = vehicleDoc.id;
+      //
+      //   setState(() {
+      //     mapMonitorData[docId]?[SettingMonitorType] = value;
+      //     _saveCurrentMonitor();
+      //   });
+      //},
+    );
+  }
+}
 
 //---------------------------------------------------
 // Services
@@ -1726,7 +1810,9 @@ class SettingsService extends ChangeNotifier {
   Settings? _settings;
   Settings? get settings => _settings;
   bool isLoading = false;
-
+  bool isBaseStationConnected = false;
+  String connectedBaseStationName = "";
+  List<bool> lstIsWifiConnected = [];
   final _db = FirebaseFirestore.instance;
 
   Future<void> load() async {
@@ -1747,7 +1833,6 @@ class SettingsService extends ChangeNotifier {
 
     isLoading = false;
   }
-
   Map<String, dynamic> flattenMap(Map<String, dynamic> map, [String prefix = '']) {
     final result = <String, dynamic>{};
     map.forEach((key, value) {
@@ -1760,23 +1845,7 @@ class SettingsService extends ChangeNotifier {
     });
     return result;
   }
-  Future<void> updateServerFields(Map<String, dynamic> updates) async {
-    try{
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
-
-      await _db.collection(CollectionUsers)
-          .doc(uid)
-          .update(updates);
-
-      notifyListeners();
-    }
-    catch(e){
-      GlobalMsg.show('updateSettingFields:', '$e');
-    }
-  }
-
-  Future<void> updateFields(Map<String, dynamic> updates) async {
+  Future<void> updateFireSettingsFields(Map<String, dynamic> updates) async {
     try {
       final current = _settings;
       if (current == null) return;
@@ -1807,6 +1876,38 @@ class SettingsService extends ChangeNotifier {
     } catch (e) {
       GlobalMsg.show('updateSettingFields:', '$e');
     }
+  }
+  void setBaseStationName(String name) {
+    connectedBaseStationName = name;
+    notifyListeners();        // IMPORTANT
+  }
+  /// Add a WiFi name
+  void addWifi(bool val) {
+      lstIsWifiConnected.add(val);
+      notifyListeners();
+  }
+  /// Init a WiFi name
+  void initWifi(int index, bool val) {
+    lstIsWifiConnected = List<bool>.filled(index, val);
+    //notifyListeners();
+  }
+  /// Set a WiFi name
+  void setWifi(int index, bool val) {
+    lstIsWifiConnected[index] = val;
+    notifyListeners();
+  }
+  /// Remove a WiFi name
+  void removeWifi(int index) {
+    lstIsWifiConnected.removeAt (index);
+    notifyListeners();
+  }
+
+  /// Clear the list
+  void clearWifiList() {
+    for(int i=0; i < lstIsWifiConnected.length; i++) {
+      lstIsWifiConnected[i] = false;
+    }
+    notifyListeners();
   }
 }
 //---------------------------------------------------
@@ -1925,6 +2026,7 @@ Widget MyProgressCircle() {
       )
   );
 }
+
 //---------------------------------------------------
 // Styles
 //---------------------------------------------------

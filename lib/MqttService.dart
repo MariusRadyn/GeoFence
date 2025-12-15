@@ -7,7 +7,7 @@ import 'package:mqtt_client/mqtt_server_client.dart';
 Timer? _reconnectTimer;
 
 class MqttService {
-  final String ipAdr;
+  String ipAdr;
   final int port;
   late String _clientId;
   final String mqttPin;
@@ -18,7 +18,7 @@ class MqttService {
   final Set<String> _subscribedTopics = {};
 
   MqttService({
-    required this.ipAdr,
+    this.ipAdr = "",
     this.port = 1883,
     this.mqttPin = "",
   }){}
@@ -79,7 +79,7 @@ class MqttService {
   }
 
   // -----------------------------------------------------------
-  // MANUAL RECONNECT TIMER (failsafe)
+  // Methods
   // -----------------------------------------------------------
   void _scheduleReconnect() {
     if (_reconnectTimer?.isActive ?? false) return;
@@ -89,19 +89,13 @@ class MqttService {
       connect();
     });
   }
-
-  // -----------------------------------------------------------
-  // SUBSCRIBE + LISTEN
-  // -----------------------------------------------------------
-
-  /// Listen for settings responses from Raspberry Pi
   void listenForSettings(void Function(Map<String, dynamic>) onSettingsReceived) {
-      subscribe(MQTT_TOPIC_RESPONSE);
+      subscribe(MQTT_TOPIC_TO_ANDROID);
       //final topic = "$MQTT_TOPIC_RESPONSE/$_clientId";
       //client.subscribe(topic, MqttQos.atLeastOnce);
       //print("Subscribing: $MQTT_TOPIC_RESPONSE");
 
-      print("Listening: $MQTT_TOPIC_RESPONSE");
+      print("Listening: $MQTT_TOPIC_TO_ANDROID");
       client.updates!.listen((messages) {
         final mqttMsg = messages[0].payload as MqttPublishMessage;
         final payload = MqttPublishPayload.bytesToStringAsString(

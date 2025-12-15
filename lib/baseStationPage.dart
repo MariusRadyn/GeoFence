@@ -36,7 +36,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   bool isLoading = true;
   TabController? _tabControllerMain;
   TabController? _tabControllerServers;
-  late SettingsService _settingsService;
 
   final TextEditingController _logPointPerMeterController = TextEditingController();
   final TextEditingController _rebateValueController = TextEditingController();
@@ -51,8 +50,8 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   ScanResult? selectedAvailableDevice;
   List<bool> lstIsWifConnected = [];
 
-  final Map<String, Map<String, dynamic>> mapServerData = {};
-  List<DocumentSnapshot<Map<String, dynamic>>> lstServerData = [];
+  final Map<String, Map<String, dynamic>> mapBaseStationsData = {};
+  List<DocumentSnapshot<Map<String, dynamic>>> lstBaseStationsData = [];
 
   BluetoothDevice? pairedDevice;
   BluetoothDevice? selectedDevice;
@@ -83,20 +82,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
-    if (!mounted) return;
-    _settingsService = Provider.of<SettingsService>(context, listen: false);
-    //final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-
-    // You could set up listeners here or perform one-time operations
-    // that depend on inherited widgets
-    if (!_didInitListeners) {
-      SettingsService().addListener(_updateControllerValues);
-      _didInitListeners = true;
-    }
-
-    // You can also immediately update values based on current provider state
-    _updateControllerValues();
   }
 
   @override
@@ -107,26 +92,13 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     _tabControllerServers?.dispose();
 
     FlutterBluePlus.stopScan();
-
-    if (_didInitListeners) {
-     _settingsService.removeListener(_updateControllerValues);
-    }
     super.dispose();
   }
 
   Future<void> updateSettingFields(Map<String, dynamic> updates) async {
-    await SettingsService().updateFields(updates);
+    await SettingsService().updateFireSettingsFields(updates);
   }
-  void _updateControllerValues() {
-    if(!mounted) return;
 
-    //final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-    //if (!settingsProvider.isLoading && mounted) {
-    //  setState(() {
-    //    _logPointPerMeterController.text = (settingsProvider.LogPointPerMeter).toString();
-    //  });
-    //}
-  }
   void getVoices() async {
     List<dynamic> voices = await _flutterTts.getVoices;
     print("Available Voices: $voices");
@@ -149,22 +121,22 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
           .get();
 
       setState(() {
-        lstServerData = snapshot.docs;
-        mapServerData.clear();
+        lstBaseStationsData = snapshot.docs;
+        mapBaseStationsData.clear();
 
-        for (var doc in lstServerData) {
-          mapServerData[doc.id] = doc.data() ?? {};
+        for (var doc in lstBaseStationsData) {
+          mapBaseStationsData[doc.id] = doc.data() ?? {};
           print("Server Data: ");
           print(doc.data());
         }
         print("lstServeData Len: ");
-        print(lstServerData.length);
+        print(lstBaseStationsData.length);
 
-        if(lstServerData.length > 0) {
+        if(lstBaseStationsData.length > 0) {
           if(_tabControllerServers != null)  _tabControllerServers?.dispose();
 
           _tabControllerServers = TabController(
-              length: lstServerData.length,
+              length: lstBaseStationsData.length,
               vsync: this
           );
         }
@@ -200,8 +172,8 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
     setState(() { });
 
-    if (_tabControllerServers != null && lstServerData.isNotEmpty) {
-      final newIndex = lstServerData.indexWhere((d) => d.id == doc.id);
+    if (_tabControllerServers != null && lstBaseStationsData.isNotEmpty) {
+      final newIndex = lstBaseStationsData.indexWhere((d) => d.id == doc.id);
       if (newIndex != -1) {
         _tabControllerServers!.animateTo(newIndex);
       }
@@ -211,7 +183,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     try {
       User? user = FirebaseAuth.instance.currentUser;
       int index = _tabControllerServers!.index;
-      final docId = lstServerData[index].id;
+      final docId = lstBaseStationsData[index].id;
 
       // 1️⃣ Delete from Firestore
       await FirebaseFirestore.instance
@@ -222,21 +194,21 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
           .delete();
 
       setState(() {
-        lstServerData.removeWhere((d) => d.id == docId);
-        mapServerData.remove(docId);
+        lstBaseStationsData.removeWhere((d) => d.id == docId);
+        mapBaseStationsData.remove(docId);
 
         _tabControllerServers?.dispose();
 
-        if (lstServerData.isNotEmpty) {
+        if (lstBaseStationsData.isNotEmpty) {
           _tabControllerServers = TabController(
-            length: lstServerData.length,
+            length: lstBaseStationsData.length,
             vsync: this,
           );
 
           // 5️⃣ Ensure a safe tab is selected
           int newIndex = 0;
-          if (_tabControllerServers!.index >= lstServerData.length) {
-            newIndex = lstServerData.length - 1;
+          if (_tabControllerServers!.index >= lstBaseStationsData.length) {
+            newIndex = lstBaseStationsData.length - 1;
           } else {
             newIndex = _tabControllerServers!.index;
           }
@@ -258,7 +230,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   }
   void _deleteServerDialog() async {
     int index = _tabControllerServers!.index;
-    final server = lstServerData[index];
+    final server = lstBaseStationsData[index];
 
     showDialog(
         context: context,
@@ -307,13 +279,13 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
         }
     );
   }
-  void _saveCurrentServer() async {
+  void _saveCurrentBaseStation() async {
     if(_tabControllerServers == null) return;
 
     User? user = FirebaseAuth.instance.currentUser;
     final currentIndex = _tabControllerServers!.index;
-    final serverDoc = lstServerData[currentIndex];
-    final settingsToSave = mapServerData[serverDoc.id]!;
+    final serverDoc = lstBaseStationsData[currentIndex];
+    final settingsToSave = mapBaseStationsData[serverDoc.id]!;
 
     await FirebaseFirestore.instance
         .collection(CollectionUsers)
@@ -325,7 +297,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Saved')));
   }
-  Future<bool> canWifiConnect(String ip, int port) async {
+  Future<bool> isWifiConnected(String ip, int port) async {
     try {
       final socket = await Socket.connect(ip, port, timeout: Duration(seconds: 2));
       socket.destroy();
@@ -334,30 +306,35 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
       return false;  // Cannot reach Pi
     }
   }
-  Future<bool> _testMqttConnection(String ip)async{
-    if(await canWifiConnect(ip, 1883)) print("Wifi Pass");
-    else {
+  Future<bool> mqttConnect(String ip)async{
+    if(SettingsService().isBaseStationConnected == true){
+      SettingsService().isBaseStationConnected = false;
+      SettingsService().connectedBaseStationName = "";
+      SettingsService().clearWifiList();
+      Mqtt_Service.disconnect();
+      MyGlobalSnackBar.show("Disconnected");
+      return true;
+    }
+    if(!await isWifiConnected(ip, 1883))
+    {
       print("Wifi Fail");
       return false;
     }
 
-    final mqtt = MqttService(ipAdr : ip);
-    await mqtt.init();
+    Mqtt_Service.ipAdr = ip;
+    await Mqtt_Service.init();
 
-    if(!await mqtt.connect()){
+    if(!await Mqtt_Service.connect()){
       MyGlobalSnackBar.show("MQTT Connection FAILED");
       return false;
     }
 
-    mqtt.setupMessageListener();
-
-    // Callback
-    mqtt.onMessage(MQTT_TOPIC_RESPONSE, (msg) {
-      print("Settings received: $msg");
+    // Callback Listener
+    Mqtt_Service.setupMessageListener();
+    Mqtt_Service.onMessage(MQTT_TOPIC_TO_ANDROID, (msg) {
+      print("MQTT RX: $msg");
     });
 
-    mqtt.tx("#SET_REQ",MQTT_TOPIC_REQUEST);
-    mqtt.disconnect();
     return true;
   }
 
@@ -564,12 +541,12 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                         setState(() {
                             selectedDevice = device;
 
-                            final vehicleDoc = lstServerData[_tabControllerServers!.index];
+                            final vehicleDoc = lstBaseStationsData[_tabControllerServers!.index];
                             final docId = vehicleDoc.id;
 
-                            mapServerData[docId]?[SettingServerBlueDeviceName] = selectedDevice?.platformName;
-                            mapServerData[docId]?[SettingServerBlueMac] = selectedDevice?.remoteId.toString();
-                            _saveCurrentServer();
+                            mapBaseStationsData[docId]?[SettingServerBlueDeviceName] = selectedDevice?.platformName;
+                            mapBaseStationsData[docId]?[SettingServerBlueMac] = selectedDevice?.remoteId.toString();
+                            _saveCurrentBaseStation();
                         });
 
                         print('Selected: ${device.platformName}');
@@ -618,21 +595,20 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   }
 
   @override
-  Widget build(BuildContext context){
-    return Consumer<SettingsService>(
-      builder: (context, settings, child) {
-
-        if (settings.isLoading || isLoading) {
-          return Scaffold(
-            appBar: AppBar(
-              backgroundColor: APP_BAR_COLOR,
-              foregroundColor: Colors.white,
-              title: MyAppbarTitle('Settings'),
-            ),
-            body: MyProgressCircle(),
-          );
-        }
-
+        Widget build(BuildContext context){
+          return Consumer<SettingsService>(
+              builder: (context, settings, child) {
+                if (isLoading) {
+                return Scaffold(
+                  appBar: AppBar(
+                    backgroundColor: APP_BAR_COLOR,
+                    foregroundColor: Colors.white,
+                    title: MyAppbarTitle('Base Stations'),
+                  ),
+                  backgroundColor: APP_BACKGROUND_COLOR,
+                  body: MyProgressCircle(),
+                );
+                }
         return StreamBuilder(
           stream:  FirebaseFirestore.instance
                   .collection(CollectionUsers)
@@ -645,11 +621,11 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
             }
 
             final docs = snapshot.data!.docs;
-            lstServerData = docs;
+            lstBaseStationsData = docs;
 
             // Initialize wifi list correctly
-            if (lstIsWifConnected.length != docs.length) {
-              lstIsWifConnected = List<bool>.filled(docs.length, false);
+            if (settings.lstIsWifiConnected.length != docs.length) {
+              settings.initWifi(docs.length, false);
             }
 
             // Recreate controller if length changes
@@ -665,7 +641,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                 title: MyAppbarTitle('Base Stations'),
               ),
               backgroundColor: APP_BACKGROUND_COLOR,
-              floatingActionButton: lstServerData.isEmpty
+              floatingActionButton: lstBaseStationsData.isEmpty
 
                 // No Base Stations (Floating Buttons)
                 ? FloatingActionButton(
@@ -712,7 +688,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                     ),
                   ],
                 ),
-                body: (lstServerData.isEmpty)
+                body: (lstBaseStationsData.isEmpty)
 
                     // (Body) No Base Stations
                     ? Container(
@@ -733,15 +709,15 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                           labelColor: Colors.white,
                           unselectedLabelColor: Colors.grey,
                           indicatorColor: Colors.blue,
-                          tabs: lstServerData
+                          tabs: lstBaseStationsData
                               .map((server) => Tab(text: server[SettingServerName]))
                               .toList(),
                         ),
                           Expanded(
                             child: TabBarView(
                               controller: _tabControllerServers,
-                              children: List.generate(lstServerData.length, (index)  {
-                                final server = lstServerData[index];
+                              children: List.generate(lstBaseStationsData.length, (index)  {
+                                final server = lstBaseStationsData[index];
                                 return SingleChildScrollView(
                                   padding: const EdgeInsets.all(5),
                                   child: Column(
@@ -773,12 +749,12 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                           labelText: "Name",
                                           onChanged: (value) {},
                                           onFieldSubmitted: (value){
-                                            final vehicleDoc = lstServerData[index];
+                                            final vehicleDoc = lstBaseStationsData[index];
                                             final docId = vehicleDoc.id;
 
                                             setState(() {
-                                              mapServerData[docId]?[SettingServerName] = value;
-                                              _saveCurrentServer();
+                                              mapBaseStationsData[docId]?[SettingServerName] = value;
+                                              _saveCurrentBaseStation();
                                             });
                                           },
                                         ),
@@ -797,12 +773,12 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
                                           },
                                           onFieldSubmitted: (value){
-                                            final vehicleDoc = lstServerData[index];
+                                            final vehicleDoc = lstBaseStationsData[index];
                                             final docId = vehicleDoc.id;
 
                                             setState(() {
-                                              mapServerData[docId]?[SettingServerDesc] = value;
-                                              _saveCurrentServer();
+                                              mapBaseStationsData[docId]?[SettingServerDesc] = value;
+                                              _saveCurrentBaseStation();
                                             });
                                           },
                                         ),
@@ -874,9 +850,9 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                           ),
 
                                           onTap: () async {
-                                            final vehicleDoc = lstServerData[_tabControllerServers!.index];
+                                            final vehicleDoc = lstBaseStationsData[_tabControllerServers!.index];
                                             final docId = vehicleDoc.id;
-                                            final bluetoothName = mapServerData[docId]?[SettingServerBlueDeviceName] ;
+                                            final bluetoothName = mapBaseStationsData[docId]?[SettingServerBlueDeviceName] ;
 
                                             if(bluetoothName == ""){
                                               myMessageBox(
@@ -904,44 +880,53 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                             MyGlobalSnackBar.show('IP Address: $ipAdr');
 
                                             setState(() {
-                                              mapServerData[docId]?[SettingServerIpAdr] = ipAdr;
-                                              _saveCurrentServer();
+                                              mapBaseStationsData[docId]?[SettingServerIpAdr] = ipAdr;
+                                              _saveCurrentBaseStation();
                                             });
                                           },
                                         ),
                                       ),
 
+                                      // Connect Button
                                       Row(
                                         children: [
                                           InkWell(
                                             onTap: () async {
-                                              final vehicleDoc = lstServerData[index];
+                                              final vehicleDoc = lstBaseStationsData[index];
                                               final docId = vehicleDoc.id;
-                                              final bluetoothName = mapServerData[docId]?[SettingServerBlueDeviceName] ;
-                                              final ip = mapServerData[docId]?[SettingServerIpAdr] ;
+                                              final bluetoothName = mapBaseStationsData[docId]?[SettingServerBlueDeviceName] ;
+                                              final ip = mapBaseStationsData[docId]?[SettingServerIpAdr] ;
 
                                               if(ip == ""){
                                                 myMessageBox(context, "No IP Address");
                                                 return;
                                               }
-                                              if(!await _testMqttConnection(ip)) {
+                                              if(!await mqttConnect(ip)) {
                                               myMessageBox(context, "Wifi Connection FAILED");
                                               setState(() {
-                                                lstIsWifConnected[index] = false;
+                                                settings.setWifi(index, true);
+                                                settings.isBaseStationConnected = false;
+                                                settings.setBaseStationName("");
                                               });
                                               return;
                                               }
 
-                                              myMessageBox(context, "Wifi Connection PASSED");
+                                              // Connection Successful
                                               setState(() {
-                                                lstIsWifConnected[index] = true;
+                                                settings.setWifi(index, true);
+                                                settings.isBaseStationConnected = true;
+                                                settings.setBaseStationName(server[SettingServerBlueDeviceName]);
+                                              });
+
+                                              settings.updateFireSettingsFields({
+                                                SettingConnectedDevice: server[SettingServerBlueDeviceName]
                                               });
                                             },
                                             child: Row(children: [
                                               Icon(
                                                 Icons.connected_tv,
                                                 size: 50,
-                                                color: lstIsWifConnected[index] == true ? Colors.lightGreenAccent : Colors.lightBlueAccent ,
+                                                color: settings.lstIsWifiConnected[index] == true ? Colors.lightGreenAccent : Colors.lightBlueAccent ,
                                               ),
                                               SizedBox(width: 10),
                                               Text("Connect",

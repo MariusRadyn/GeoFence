@@ -115,7 +115,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   }
 
   Future<void> updateSettingFields(Map<String, dynamic> updates) async {
-    await SettingsService().updateFields(updates);
+    await SettingsService().updateFireSettingsFields(updates);
   }
   void _updateControllerValues() {
     if(!mounted) return;
@@ -177,36 +177,6 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
       setState(() {isLoading = false;});
     }
   }
-  void _addServer() async {
-    String? uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    final doc = await FirebaseFirestore.instance
-        .collection(CollectionUsers)
-        .doc(uid)
-        .collection(CollectionServers)
-        .doc();
-
-    final newServer = {
-      SettingServerName: 'New Server',
-      SettingServerDesc: '',
-      SettingServerIpAdr: '192.168.100.1',
-      SettingServerBlueMac: '',
-      SettingServerBlueDeviceName: '',
-    };
-
-    await doc.set(newServer);
-    await _fetchServers();
-
-    setState(() { });
-
-    if (_tabControllerServers != null && lstServerData.isNotEmpty) {
-      final newIndex = lstServerData.indexWhere((d) => d.id == doc.id);
-      if (newIndex != -1) {
-        _tabControllerServers!.animateTo(newIndex);
-      }
-    }
-  }
   Future<void> _deleteServer() async {
     try {
       User? user = FirebaseAuth.instance.currentUser;
@@ -256,302 +226,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
       );
     }
   }
-  void _deleteServerDialog() async {
-    int index = _tabControllerServers!.index;
-    final server = lstServerData[index];
 
-    showDialog(
-        context: context,
-        builder: (context){
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(
-                color: Colors.blue, // Border color
-                width: 2, // Border width
-              ),
-            ),
-            backgroundColor: APP_TILE_COLOR,
-            shadowColor: Colors.black,
-            title: const MyText(
-                text: "Delete",
-                color: Colors.white
-            ),
-            content: MyText(
-              text: "${server[SettingServerName]}\nAre you sure?",
-              color: Colors.grey,
-              fontsize: 18,
-            ),
-            actions: [
-              TextButton(
-                child: const MyText(
-                  text: 'No',
-                  fontsize: 20,
-                ),
-                onPressed: () => Navigator.pop(context),
-              ),
-              TextButton(
-                  child: const MyText(
-                    text: 'Yes',
-                    color:  Colors.white,
-                    fontsize: 20,
-                  ),
-
-                  onPressed: () async {
-                    _deleteServer();
-                    Navigator.pop(context);
-                  }
-              ),
-            ],
-          );
-        }
-    );
-  }
-  void _saveCurrentServer() async {
-    if(_tabControllerServers == null) return;
-
-    User? user = FirebaseAuth.instance.currentUser;
-    final currentIndex = _tabControllerServers!.index;
-    final serverDoc = lstServerData[currentIndex];
-    final settingsToSave = mapServerData[serverDoc.id]!;
-
-    await FirebaseFirestore.instance
-        .collection(CollectionUsers)
-        .doc(user?.uid)
-        .collection(CollectionServers)
-        .doc(serverDoc.id)
-        .update(settingsToSave);
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Saved')));
-  }
-
-
-  // Bluetooth
-  Future<void> _requestPermissions() async {
-    await [
-      Permission.bluetooth,
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.location,
-    ].request();
-  }
-  Future<void> _getBondedDevices() async {
-    try {
-      List<BluetoothDevice> devices = await FlutterBluePlus.bondedDevices;
-
-      // Sort by name (optional)
-      devices.sort((a, b) => (a.platformName ?? '').compareTo(b.platformName ?? ''));
-
-      setState(() {
-        lstPairedDevices = devices;
-
-        // Debug - Set Manual List
-        if(Debug){
-          lstPairedDevices = [
-            BluetoothDevice(
-              remoteId: DeviceIdentifier("00:11:22:33:44:55"),
-            ),
-            BluetoothDevice(
-              remoteId: DeviceIdentifier("AA:BB:CC:DD:EE:FF"),
-            ),
-          ];
-        }
-      });
-
-    } catch (e) {
-      print('Error getting paired devices: $e');
-    }
-  }
-  Future<void> _getPairedDevices() async {
-    try {
-      List<BluetoothDevice> devices = await FlutterBluePlus.connectedDevices;
-      setState(() {
-        lstPairedDevices = devices;
-
-        if(devices.length == 0){
-          lstPairedDevices = [
-            BluetoothDevice(remoteId: DeviceIdentifier("00:00:00:00:00:00")),
-          ];
-        }
-
-        // Debug - Set Manual List
-        if(Debug){
-          lstPairedDevices = [
-            BluetoothDevice(
-              remoteId: DeviceIdentifier("00:11:22:33:44:55"),
-            ),
-            BluetoothDevice(
-              remoteId: DeviceIdentifier("AA:BB:CC:DD:EE:FF"),
-            ),
-          ];
-        }
-      });
-    } catch (e) {
-      print('Error getting connected devices: $e');
-    }
-  }
-  void _getAvailableDevices() async {
-    lstAvailableDevices.clear();
-
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
-
-    FlutterBluePlus.scanResults.listen((results) {
-      setState(() {
-        lstAvailableDevices = results;
-      });
-    });
-  }
-  Future<void> _startScan() async {
-    if (await FlutterBluePlus.isSupported == false) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Bluetooth not supported')),
-      );
-      return;
-    }
-
-    setState(() {
-      isScanning = true;
-      lstAvailableDevices.clear();
-    });
-
-    // Listen to scan results
-    FlutterBluePlus.scanResults.listen((results) {
-      setState(() {
-        lstAvailableDevices = results;
-      });
-    });
-
-    // Start scanning
-    await FlutterBluePlus.startScan(timeout: Duration(seconds: 10));
-
-    setState(() {
-      isScanning = false;
-    });
-  }
-  Future<void> _stopScan() async {
-    await FlutterBluePlus.stopScan();
-    setState(() {
-      isScanning = false;
-    });
-  }
-  Future<void> _connectToDevice(BluetoothDevice device) async {
-    try {
-      await device.connect();
-      setState(() {
-        //pairedDevice = device;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Connected to ${device.name}')),
-      );
-
-      // Discover services after connection
-      List<BluetoothService> services = await device.discoverServices();
-      print('Discovered ${services.length} services');
-
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to connect: $e')),
-      );
-    }
-  }
-  Future<void> _disconnect() async {
-    if (pairedDevice != null) {
-      await pairedDevice!.disconnect();
-      setState(() {
-        pairedDevice = null;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Disconnected')),
-      );
-    }
-  }
-  void _showBluetoothDevicesPopup() {
-    showDialog(
-      context: context,
-      barrierDismissible: true, // tap outside to close
-      builder: (context) => Center(
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.85,
-          height: MediaQuery.of(context).size.height * 0.8,
-          decoration: BoxDecoration(
-            color: APP_TILE_COLOR,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: lstPairedDevices.isEmpty
-                ? const Center(
-              child: MyText(
-                text: 'No Bluetooth devices found',
-                color: Colors.white,
-              ),
-            )
-                : ListView.builder(
-              padding: const EdgeInsets.all(10),
-              itemCount: lstPairedDevices.length,
-              itemBuilder: (context, index) {
-                final device = lstPairedDevices[index];
-
-                return Card(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  elevation: 2,
-                  color: APP_BACKGROUND_COLOR,
-                  shadowColor: Colors.blue,
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  child: ListTile(
-                    leading: const Icon(Icons.bluetooth, color: Colors.blue),
-                    title: MyText(
-                      fontsize: 14,
-                        text: device.platformName.isNotEmpty
-                        ? device.platformName
-                        : 'Unknown Device'),
-                    subtitle: MyText(
-                      fontsize: 12,
-                      color: Colors.grey,
-                      text: device.remoteId.str
-                    ),
-                    trailing: ElevatedButton(
-                      child: const Text('Select',
-                        style: TextStyle(
-                            color: Colors.white
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        backgroundColor: Colors.blue
-                      ),
-                      onPressed: () {
-                        setState(() {
-                            selectedDevice = device;
-
-                            final vehicleDoc = lstServerData[_tabControllerServers!.index];
-                            final docId = vehicleDoc.id;
-
-                            mapServerData[docId]?[SettingServerBlueDeviceName] = selectedDevice?.platformName;
-                            mapServerData[docId]?[SettingServerBlueMac] = selectedDevice?.remoteId.toString();
-                            _saveCurrentServer();
-                        });
-
-                        print('Selected: ${device.platformName}');
-                        Navigator.of(context).pop();
-                      },
-
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
   Future<void> sendTextToDevice(BluetoothDevice device, String message) async {
     List<BluetoothService> services = await device.discoverServices();
     for (BluetoothService service in services) {
@@ -616,7 +291,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                      size: 30
                    ),
                    onPressed: () {
-                     settings.updateFields({
+                     settings.updateFireSettingsFields({
                        SettingLogPointPerMeter: int.parse(_logPointPerMeterController.text),
                        SettingRebateValue: double.parse(_rebateValueController.text),
                      });
@@ -672,7 +347,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                         //setState(() {
                         //  _isVoicePromptOn = value;
                         //}),
-                        settings.updateFields({SettingIsVoicePromptOn: value}),
+                        settings.updateFireSettingsFields({SettingIsVoicePromptOn: value}),
 
                         if(value) {
                           _flutterTts.speak('Voice Prompt enabled'),
