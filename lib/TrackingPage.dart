@@ -5,6 +5,7 @@ import 'package:geofence/utils.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
 import 'gpsServices.dart';
 
 class TrackingPage extends StatefulWidget {
@@ -17,8 +18,8 @@ class TrackingPage extends StatefulWidget {
   @override
   _TrackingPageState createState() => _TrackingPageState();
 }
-
 class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver {
+  late SettingsService settings;
   GoogleMapController? _mapController;
   Position? _currentPosition;
   final Set<Polygon> _geofences = {};
@@ -57,14 +58,23 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     _initializeTracking();
 
-    Future.microtask(() async {
-      if (!mounted) return;
+    //Future.microtask(() async {
+    //  if (!mounted) return;
+    //});
 
-      setState(() {
-        _distanceFilter = SettingsService().settings!.logPointPerMeter;
-        _isVoicePromptOn = SettingsService().settings!.isVoicePromptOn;
-      });
+    //WidgetsBinding.instance.addPostFrameCallback((_) {
+    //});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    settings = context.read<SettingsService>();
+    setState(() {
+      _distanceFilter = settings.fireSettings!.logPointPerMeter;
+      _isVoicePromptOn = settings.fireSettings!.isVoicePromptOn;
     });
+
   }
 
   @override
@@ -77,7 +87,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Handle app state changes
+
     if (state == AppLifecycleState.resumed) {
       // Resume tracking when app is resumed
       if (_trackingSessionId != null && _positionStream == null) {
@@ -311,7 +321,6 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     //   }
     // });
   }
-
   void _onPositionUpdate(Position position) async {
     bool insideAny = false;
     LatLng previousPosition;
@@ -505,7 +514,6 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
         });
       }
     }
-
   Widget _buildVehicleSelector() {
     return Card(
       color: APP_TILE_COLOR,

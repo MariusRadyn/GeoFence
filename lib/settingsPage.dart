@@ -35,7 +35,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   bool isLoading = true;
   TabController? _tabControllerMain;
   TabController? _tabControllerServers;
-  late SettingsService _settingsService;
+  late SettingsService settings;
 
   final TextEditingController _logPointPerMeterController = TextEditingController();
   final TextEditingController _rebateValueController = TextEditingController();
@@ -70,10 +70,11 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      settings = context.read<SettingsService>();
 
-        setState(() {
-          _logPointPerMeterController.text = SettingsService().settings!.logPointPerMeter.toString();
-          _rebateValueController.text = SettingsService().settings!.rebateValuePerLiter.toString();
+      setState(() {
+          _logPointPerMeterController.text = settings.fireSettings!.logPointPerMeter.toString();
+          _rebateValueController.text = settings.fireSettings!.rebateValuePerLiter.toString();
         });
     });
   }
@@ -83,17 +84,17 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
     super.didChangeDependencies();
 
     if (!mounted) return;
-    _settingsService = Provider.of<SettingsService>(context, listen: false);
+    //_settingsService = Provider.of<SettingsService>(context, listen: false);
 
     //final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
 
     // You could set up listeners here or perform one-time operations
     // that depend on inherited widgets
-    if (!_didInitListeners) {
-      SettingsService().addListener(_updateControllerValues);
+    //if (!_didInitListeners) {
+    //  SettingsService().addListener(_updateControllerValues);
       //settingsProvider.addListener(_updateControllerValues);
-      _didInitListeners = true;
-    }
+    //  _didInitListeners = true;
+    //}
 
     // You can also immediately update values based on current provider state
     _updateControllerValues();
@@ -109,7 +110,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
     FlutterBluePlus.stopScan();
 
     if (_didInitListeners) {
-     _settingsService.removeListener(_updateControllerValues);
+     //_settingsService.removeListener(_updateControllerValues);
     }
     super.dispose();
   }
@@ -260,123 +261,119 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context){
-    return Consumer<SettingsService>(
-      builder: (context, settings, child) {
 
-        if (settings.isLoading || isLoading) {
-          return Scaffold(
-            appBar: AppBar(
-              backgroundColor: APP_BAR_COLOR,
-              foregroundColor: Colors.white,
-              title: MyAppbarTitle('Settings'),
+    if (settings.isLoading || isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: APP_BAR_COLOR,
+          foregroundColor: Colors.white,
+          title: MyAppbarTitle('Settings'),
+        ),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        backgroundColor: APP_BACKGROUND_COLOR,
+        appBar: AppBar(
+          backgroundColor: APP_BAR_COLOR,
+          foregroundColor: Colors.white,
+          title: MyAppbarTitle('Settings'),
+          actions: [
+
+            // Save Button
+             IconButton(
+               icon:const Icon(
+                 Icons.save,
+                 size: 30
+               ),
+               onPressed: () {
+                 settings.updateFireSettingsFields({
+                   SettingLogPointPerMeter: int.parse(_logPointPerMeterController.text),
+                   SettingRebateValue: double.parse(_rebateValueController.text),
+                 });
+                 MyGlobalSnackBar.show("Saved");
+               },
             ),
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+          ],
+          bottom: TabBar(
+            labelColor: Colors.white,
+              indicatorColor: Colors.blue,
+              unselectedLabelColor: Colors.grey,
+              tabs: [
+                Tab(text: "General"),
+                Tab(text: "Servers"),
+                Tab(text: "Monitors",)
+              ]),
+        ),
+        body: TabBarView(
+            children: [
 
-        return DefaultTabController(
-          length: 3,
-          child: Scaffold(
-            backgroundColor: APP_BACKGROUND_COLOR,
-            appBar: AppBar(
-              backgroundColor: APP_BAR_COLOR,
-              foregroundColor: Colors.white,
-              title: MyAppbarTitle('Settings'),
-              actions: [
+          // General Settings
+          ListView(
+            children: [
+              const SizedBox(height: 20),
 
-                // Save Button
-                 IconButton(
-                   icon:const Icon(
-                     Icons.save,
-                     size: 30
-                   ),
-                   onPressed: () {
-                     settings.updateFireSettingsFields({
-                       SettingLogPointPerMeter: int.parse(_logPointPerMeterController.text),
-                       SettingRebateValue: double.parse(_rebateValueController.text),
-                     });
-                     MyGlobalSnackBar.show("Saved");
-                   },
-                ),
-              ],
-              bottom: TabBar(
-                labelColor: Colors.white,
-                  indicatorColor: Colors.blue,
-                  unselectedLabelColor: Colors.grey,
-                  tabs: [
-                    Tab(text: "General"),
-                    Tab(text: "Servers"),
-                    Tab(text: "Monitors",)
-                  ]),
-            ),
-            body: TabBarView(
-                children: [
-
-              // General Settings
-              ListView(
-                children: [
-                  const SizedBox(height: 20),
-
-                  // Rebate Value
-                  MyTextOption(
-                    controller: _rebateValueController,
-                    label: 'Rebate Value',
-                    description: "Rebate value per kilometer",
-                    prefix: 'R',
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // logPointPerMeter
-                  MyTextOption(
-                    controller: _logPointPerMeterController,
-                    label: 'Log Location Interval',
-                    description: "Record a map location everytime you move this far in meters",
-                    suffix: 'm',
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // isVoicePromptOn
-                  MyToggleOption(
-                      value: settings.settings!.isVoicePromptOn,
-                      label: 'Voice Prompt',
-                      subtitle: 'Allow me to give you vocal feedback',
-                      onChanged: (bool value)=>
-                      {
-                        //setState(() {
-                        //  _isVoicePromptOn = value;
-                        //}),
-                        settings.updateFireSettingsFields({SettingIsVoicePromptOn: value}),
-
-                        if(value) {
-                          _flutterTts.speak('Voice Prompt enabled'),
-                        },
-                      }
-                  ),
-                ],
+              // Rebate Value
+              MyTextOption(
+                controller: _rebateValueController,
+                label: 'Rebate Value',
+                description: "Rebate value per kilometer",
+                prefix: 'R',
               ),
 
-              // Stations
-              Center(
-                child:  Text(
-                  "Stations",
-                  style:
-                TextStyle(color: Colors.white),
-                ),
+              const SizedBox(height: 10),
+
+              // logPointPerMeter
+              MyTextOption(
+                controller: _logPointPerMeterController,
+                label: 'Log Location Interval',
+                description: "Record a map location everytime you move this far in meters",
+                suffix: 'm',
               ),
 
-              // Monitors
-              Center(
-                  child:  Text(
-                    "Map",style:
-                    TextStyle(color: Colors.white),
-                  ),
+              const SizedBox(height: 10),
+
+              // isVoicePromptOn
+              MyToggleOption(
+                  value: settings.fireSettings!.isVoicePromptOn,
+                  label: 'Voice Prompt',
+                  subtitle: 'Allow me to give you vocal feedback',
+                  onChanged: (bool value)=>
+                  {
+                    //setState(() {
+                    //  _isVoicePromptOn = value;
+                    //}),
+                    settings.updateFireSettingsFields({SettingIsVoicePromptOn: value}),
+
+                    if(value) {
+                      _flutterTts.speak('Voice Prompt enabled'),
+                    },
+                  }
               ),
-            ])
+            ],
           ),
-        );
-      }
+
+          // Stations
+          Center(
+            child:  Text(
+              "Stations",
+              style:
+            TextStyle(color: Colors.white),
+            ),
+          ),
+
+          // Monitors
+          Center(
+              child:  Text(
+                "Map",style:
+                TextStyle(color: Colors.white),
+              ),
+          ),
+        ])
+      ),
     );
   }
 }

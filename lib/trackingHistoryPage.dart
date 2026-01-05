@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
 import 'trackingHistoryMap.dart';
+import 'package:provider/provider.dart';
 
 class TrackingHistoryPage extends StatefulWidget {
   const TrackingHistoryPage({super.key});
@@ -15,6 +16,7 @@ class TrackingHistoryPage extends StatefulWidget {
 }
 
 class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
+  late SettingsService settings;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final nrFormatter = NumberFormat('0.00', 'en_US');
@@ -34,8 +36,13 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       User? user = _auth.currentUser;
-      //Provider.of<SettingsProvider>(context, listen: false).LoadSettings(user?.uid);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    settings = context.read<SettingsService>();
   }
 
   Future<void> fetchVehicles() async {
@@ -323,7 +330,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
               final vehicleId = session['vehicle_id'];
               final distanceInside = (session['distance_inside'] ?? 0).toDouble();
               final vehicleConsumption = _getVehicleFuelConsumptiomById(vehicleId) ?? 0;
-              final rebate = SettingsService().settings?.rebateValuePerLiter ?? 0;
+              final rebate = settings.fireSettings?.rebateValuePerLiter ?? 0;
               double litersUsed = 0.0;
               double thisRebate = 0;
 
@@ -363,7 +370,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
                         String vehicleName = _getVehicleNameById(session['vehicle_id']) ?? "Unknown Vehicle";
                         String vehicleReg = _getVehicleRegById(session['vehicle_id']) ?? "Unknown";
                         double vehicleConsumption = _getVehicleFuelConsumptiomById(session['vehicle_id']) ?? 0;
-                        double rebate = SettingsService().settings?.rebateValuePerLiter ?? 0;
+                        double rebate = settings.fireSettings?.rebateValuePerLiter ?? 0;
                         double insideKM = session['distance_inside'];
                         double outsideKM = session['distance_outside'];
                         double litersUsed = 0.0;

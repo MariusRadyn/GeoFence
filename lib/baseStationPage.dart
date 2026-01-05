@@ -32,15 +32,17 @@ class BaseStationPage extends StatefulWidget {
 }
 
 class _BaseStationState extends State<BaseStationPage> with TickerProviderStateMixin{
+  late SettingsService settingsService;
+  late BaseStationService baseService;
+
   bool Debug = false;
   bool isLoading = true;
-  TabController? _tabControllerMain;
-  TabController? _tabControllerServers;
+  TabController? _tabController;
+  int _selectedIndex = 0;
 
   final TextEditingController _logPointPerMeterController = TextEditingController();
   final TextEditingController _rebateValueController = TextEditingController();
   final FlutterTts _flutterTts = FlutterTts();
-  bool _didInitListeners = false;
   String? bluetoothValue;
   bool isScanning = false;
   bool isSetBTVehicleID = false;
@@ -48,10 +50,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
   List<ScanResult> lstAvailableDevices = [];
   ScanResult? selectedAvailableDevice;
-  List<bool> lstIsWifConnected = [];
-
-  final Map<String, Map<String, dynamic>> mapBaseStationsData = {};
-  List<DocumentSnapshot<Map<String, dynamic>>> lstBaseStationsData = [];
 
   BluetoothDevice? pairedDevice;
   BluetoothDevice? selectedDevice;
@@ -60,43 +58,50 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
 
-
   @override
   void initState() {
     super.initState();
 
     _getBondedDevices();
     _initTts();
-    _fetchServers();
+    //_fetchBaseStations();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-        setState(() {
-          _logPointPerMeterController.text = SettingsService().settings!.logPointPerMeter.toString();
-          _rebateValueController.text = SettingsService().settings!.rebateValuePerLiter.toString();
-        });
-    });
-  }
+      settingsService = context.read<SettingsService>();
+      baseService = context.read<BaseStationService>();
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
+      // if (baseService.lstBaseStations.isNotEmpty) {
+      //   _tabController = TabController(
+      //     length: baseService.lstBaseStations.length,
+      //     vsync: this,
+      //   );
+      // }
+      // setState(() {
+      //   isLoading = false;
+      // });
+
+      _logPointPerMeterController.text =
+          settingsService.fireSettings?.logPointPerMeter.toString() ?? '';
+
+      _rebateValueController.text =
+          settingsService.fireSettings?.rebateValuePerLiter.toString() ?? '';
+    });
   }
 
   @override
   void dispose() {
     _logPointPerMeterController.dispose();
     _flutterTts.stop();
-    _tabControllerMain?.dispose();
-    _tabControllerServers?.dispose();
+    _tabController?.dispose();
 
     FlutterBluePlus.stopScan();
     super.dispose();
   }
 
   Future<void> updateSettingFields(Map<String, dynamic> updates) async {
-    await SettingsService().updateFireSettingsFields(updates);
+    await settingsService.updateFireSettingsFields(updates);
   }
 
   void getVoices() async {
@@ -109,128 +114,104 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
   }
-  Future<void> _fetchServers() async {
-    try{
-      String? uid = FirebaseAuth.instance.currentUser?.uid;
-      if(uid == null) return;
-
-      final snapshot =  await  FirebaseFirestore.instance
-          .collection(CollectionUsers)
-          .doc(uid)
-          .collection(CollectionServers)
-          .get();
-
-      setState(() {
-        lstBaseStationsData = snapshot.docs;
-        mapBaseStationsData.clear();
-
-        for (var doc in lstBaseStationsData) {
-          mapBaseStationsData[doc.id] = doc.data() ?? {};
-          print("Server Data: ");
-          print(doc.data());
-        }
-        print("lstServeData Len: ");
-        print(lstBaseStationsData.length);
-
-        if(lstBaseStationsData.length > 0) {
-          if(_tabControllerServers != null)  _tabControllerServers?.dispose();
-
-          _tabControllerServers = TabController(
-              length: lstBaseStationsData.length,
-              vsync: this
-          );
-        }
-
-        isLoading = false;
-      });
-    }
-    catch (e){
-      MyGlobalSnackBar.show('Load Server Data Failed: $e');
-      setState(() {isLoading = false;});
+  Future<bool> isWifiConnected(String ip, int port) async {
+    try {
+      final socket = await Socket.connect(ip, port, timeout: Duration(seconds: 2));
+      socket.destroy();
+      return true;   // Connected!
+    } catch (e) {
+      return false;  // Cannot reach Pi
     }
   }
-  void _addServer() async {
+  Future<bool> mqttConnect(String ip)async{
+    if(!await isWifiConnected(ip, 1883))
+    {
+      print("Wifi Fail");
+      return false;
+    }
+
+    Mqtt_Service.ipAdr = ip;
+    await Mqtt_Service.init();
+
+    if(!await Mqtt_Service.connect()){
+      MyGlobalSnackBar.show("MQTT Connection FAILED");
+      return false;
+    }
+
+    //settingsService.update(connectedBaseStationIP: ip);
+
+    // Callback Listener
+    Mqtt_Service.setupMessageListener();
+    Mqtt_Service.onMessage(MQTT_TOPIC_TO_ANDROID, (msg) {
+      print("MQTT RX: $msg");
+    });
+
+    MyGlobalSnackBar.show("Connected: " + ip);
+    return true;
+  }
+  Future<void> mqttDisconnect()async{
+    Mqtt_Service.disconnect();
+    MyGlobalSnackBar.show("Disconnected");
+  }
+
+  void _saveBase(BaseStationData base) async {
+    if (_tabController == null) return;
+
+    // final uid = FirebaseAuth.instance.currentUser?.uid;
+    // if (uid == null) return;
+    //
+    // final ref = FirebaseFirestore.instance
+    //     .collection(CollectionUsers)
+    //     .doc(uid)
+    //     .collection(CollectionServers);
+    //
+    // await ref.doc(base.docId).set(
+    //   base.toMap(),
+    //   SetOptions(merge: true),              // UPDATE
+    // );
+    //
+    // await _fetchBaseStations();
+    await baseService.load();
+
+    if (_tabController != null &&  baseService.lstBaseStations.isNotEmpty) {
+      final newIndex = baseService.lstBaseStations.indexWhere((d) => d.docId == base.docId);
+      if (newIndex != -1) {
+        _tabController!.animateTo(newIndex);
+      }
+    }
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Saved')));
+  }
+  void _addBase() async {
+    if (!mounted) return;
+
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final doc = await FirebaseFirestore.instance
+    final ref = FirebaseFirestore.instance
         .collection(CollectionUsers)
         .doc(uid)
-        .collection(CollectionServers)
-        .doc();
+        .collection(CollectionServers);
 
-    final newServer = {
-      SettingServerName: 'New Server',
-      SettingServerDesc: '',
-      SettingServerIpAdr: '192.168.100.1',
-      SettingServerBlueMac: '',
-      SettingServerBlueDeviceName: '',
-    };
+    final base = BaseStationData(
+      baseName: 'New Base',
+    );
 
-    await doc.set(newServer);
-    await _fetchServers();
+    final doc = await ref.add(base.toMap());
+    //await _fetchBaseStations();
+    await baseService.load();
 
-    setState(() { });
-
-    if (_tabControllerServers != null && lstBaseStationsData.isNotEmpty) {
-      final newIndex = lstBaseStationsData.indexWhere((d) => d.id == doc.id);
+    if (_tabController != null &&  baseService.lstBaseStations.isNotEmpty) {
+      final newIndex = baseService.lstBaseStations.indexWhere((d) => d.docId == doc.id);
       if (newIndex != -1) {
-        _tabControllerServers!.animateTo(newIndex);
+        _tabController!.animateTo(newIndex);
       }
     }
   }
-  Future<void> _deleteServer() async {
-    try {
-      User? user = FirebaseAuth.instance.currentUser;
-      int index = _tabControllerServers!.index;
-      final docId = lstBaseStationsData[index].id;
-
-      // 1️⃣ Delete from Firestore
-      await FirebaseFirestore.instance
-          .collection(CollectionUsers)
-          .doc(user?.uid)
-          .collection(CollectionServers)
-          .doc(docId)
-          .delete();
-
-      setState(() {
-        lstBaseStationsData.removeWhere((d) => d.id == docId);
-        mapBaseStationsData.remove(docId);
-
-        _tabControllerServers?.dispose();
-
-        if (lstBaseStationsData.isNotEmpty) {
-          _tabControllerServers = TabController(
-            length: lstBaseStationsData.length,
-            vsync: this,
-          );
-
-          // 5️⃣ Ensure a safe tab is selected
-          int newIndex = 0;
-          if (_tabControllerServers!.index >= lstBaseStationsData.length) {
-            newIndex = lstBaseStationsData.length - 1;
-          } else {
-            newIndex = _tabControllerServers!.index;
-          }
-          _tabControllerServers!.animateTo(newIndex);
-        } else {
-          _tabControllerServers = null;
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Server Deleted')),
-        );
-      });
-    } catch (e) {
-      print('Error deleting Server: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete Server: $e')),
-      );
-    }
-  }
-  void _deleteServerDialog() async {
-    int index = _tabControllerServers!.index;
-    final server = lstBaseStationsData[index];
+  void _deleteBaseDialog() async {
+    int index = _tabController!.index;
+    final base = baseService.lstBaseStations[index];
 
     showDialog(
         context: context,
@@ -250,7 +231,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                 color: Colors.white
             ),
             content: MyText(
-              text: "${server[SettingServerName]}\nAre you sure?",
+              text: "${base.baseName}\nAre you sure?",
               color: Colors.grey,
               fontsize: 18,
             ),
@@ -270,7 +251,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                   ),
 
                   onPressed: () async {
-                    _deleteServer();
+                    _deleteBase(base);
                     Navigator.pop(context);
                   }
               ),
@@ -279,66 +260,50 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
         }
     );
   }
-  void _saveCurrentBaseStation() async {
-    if(_tabControllerServers == null) return;
-
-    User? user = FirebaseAuth.instance.currentUser;
-    final currentIndex = _tabControllerServers!.index;
-    final serverDoc = lstBaseStationsData[currentIndex];
-    final settingsToSave = mapBaseStationsData[serverDoc.id]!;
-
-    await FirebaseFirestore.instance
-        .collection(CollectionUsers)
-        .doc(user?.uid)
-        .collection(CollectionServers)
-        .doc(serverDoc.id)
-        .update(settingsToSave);
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Saved')));
-  }
-  Future<bool> isWifiConnected(String ip, int port) async {
+  Future<void> _deleteBase(BaseStationData base) async {
     try {
-      final socket = await Socket.connect(ip, port, timeout: Duration(seconds: 2));
-      socket.destroy();
-      return true;   // Connected!
+      User? user = FirebaseAuth.instance.currentUser;
+
+      // 1️⃣ Delete from Firestore
+      await FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(user?.uid)
+          .collection(CollectionServers)
+          .doc(base.docId)
+          .delete();
+
+      //await _fetchBaseStations();
+      await baseService.load();
+
+      setState(() {
+        _tabController?.dispose();
+
+        if (baseService.lstBaseStations.isNotEmpty) {
+          _tabController = TabController(
+            length: baseService.lstBaseStations.length,
+            vsync: this,
+          );
+
+          // 5️⃣ Ensure a safe tab is selected
+          int newIndex = 0;
+          if (_tabController!.index >= baseService.lstBaseStations.length) {
+            newIndex = baseService.lstBaseStations.length - 1;
+          } else {
+            newIndex = _tabController!.index;
+          }
+          _tabController!.animateTo(newIndex);
+        } else {
+          _tabController = null;
+        }
+      });
     } catch (e) {
-      return false;  // Cannot reach Pi
+      print('Error deleting: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete Failed: $e')),
+      );
     }
   }
-  Future<bool> mqttConnect(String ip)async{
-    if(SettingsService().isBaseStationConnected == true){
-      SettingsService().isBaseStationConnected = false;
-      SettingsService().connectedBaseStationName = "";
-      SettingsService().clearWifiList();
-      Mqtt_Service.disconnect();
-      MyGlobalSnackBar.show("Disconnected");
-      return true;
-    }
-    if(!await isWifiConnected(ip, 1883))
-    {
-      print("Wifi Fail");
-      return false;
-    }
 
-    Mqtt_Service.ipAdr = ip;
-    await Mqtt_Service.init();
-
-    if(!await Mqtt_Service.connect()){
-      MyGlobalSnackBar.show("MQTT Connection FAILED");
-      return false;
-    }
-
-    // Callback Listener
-    Mqtt_Service.setupMessageListener();
-    Mqtt_Service.onMessage(MQTT_TOPIC_TO_ANDROID, (msg) {
-      print("MQTT RX: $msg");
-    });
-
-    return true;
-  }
-
-  // Bluetooth
   Future<void> _requestPermissions() async {
     await [
       Permission.bluetooth,
@@ -478,7 +443,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
       );
     }
   }
-  void _showBluetoothDevicesPopup() {
+  void _showBluetoothDevicesPopup(BaseStationData base) {
     showDialog(
       context: context,
       barrierDismissible: true, // tap outside to close
@@ -541,12 +506,13 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                         setState(() {
                             selectedDevice = device;
 
-                            final vehicleDoc = lstBaseStationsData[_tabControllerServers!.index];
-                            final docId = vehicleDoc.id;
+                            base.bluetoothName = selectedDevice?.platformName ?? '';
+                            base.bluetoothMac = selectedDevice?.remoteId.toString() ?? '';
+                            _saveBase(base);
 
-                            mapBaseStationsData[docId]?[SettingServerBlueDeviceName] = selectedDevice?.platformName;
-                            mapBaseStationsData[docId]?[SettingServerBlueMac] = selectedDevice?.remoteId.toString();
-                            _saveCurrentBaseStation();
+                          //mapBaseStationsData[docId]?[SettingBaseBlueDeviceName] = selectedDevice?.platformName;
+                            //mapBaseStationsData[docId]?[SettingBaseBlueMac] = selectedDevice?.remoteId.toString();
+                            //_saveCurrentBaseStation();
                         });
 
                         print('Selected: ${device.platformName}');
@@ -595,367 +561,339 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   }
 
   @override
-        Widget build(BuildContext context){
-          return Consumer<SettingsService>(
-              builder: (context, settings, child) {
-                if (isLoading) {
-                return Scaffold(
-                  appBar: AppBar(
-                    backgroundColor: APP_BAR_COLOR,
-                    foregroundColor: Colors.white,
-                    title: MyAppbarTitle('Base Stations'),
-                  ),
-                  backgroundColor: APP_BACKGROUND_COLOR,
-                  body: MyProgressCircle(),
-                );
-                }
-        return StreamBuilder(
-          stream:  FirebaseFirestore.instance
-                  .collection(CollectionUsers)
-                  .doc(FirebaseAuth.instance.currentUser?.uid)
-                  .collection(CollectionServers)
-                  .snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return MyProgressCircle();
-            }
+  Widget build(BuildContext context){
 
-            final docs = snapshot.data!.docs;
-            lstBaseStationsData = docs;
-
-            // Initialize wifi list correctly
-            if (settings.lstIsWifiConnected.length != docs.length) {
-              settings.initWifi(docs.length, false);
-            }
-
-            // Recreate controller if length changes
-            _tabControllerServers ??= TabController(length: docs.length, vsync: this);
-            if (_tabControllerServers!.length != docs.length) {
-              _tabControllerServers = TabController(length: docs.length, vsync: this);
-            }
-
-            return Scaffold(
-              appBar: AppBar(
-                backgroundColor: APP_BAR_COLOR,
-                foregroundColor: Colors.white,
-                title: MyAppbarTitle('Base Stations'),
-              ),
-              backgroundColor: APP_BACKGROUND_COLOR,
-              floatingActionButton: lstBaseStationsData.isEmpty
-
-                // No Base Stations (Floating Buttons)
-                ? FloatingActionButton(
-                  heroTag: "action1",
-                  onPressed: _addServer,
-                  backgroundColor: COLOR_ORANGE,
-                  mini: true,
-                  child: Icon(
-                    Icons.add,
-                    color: Colors.white,
-                  ),
-                )
-
-                // Has Base Stations (Floating Buttons)
-                : Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-
-                    // Delete
-                    FloatingActionButton(
-                      heroTag: "action2",
-                      onPressed: _deleteServerDialog,
-                      backgroundColor: COLOR_ORANGE,
-                      mini: true,
-                      isExtended: false,
-                      child: Icon(
-                        Icons.delete_forever,
-                        color: Colors.white,
-                      ),
-                    ),
-
-                    SizedBox(height: 10),
-
-                    // Add
-                    FloatingActionButton(
-                      onPressed: _addServer,
-                      backgroundColor: COLOR_ORANGE,
-                      mini: true,
-                      child: Icon(
-                        Icons.add,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-                body: (lstBaseStationsData.isEmpty)
-
-                    // (Body) No Base Stations
-                    ? Container(
-                    color: APP_BACKGROUND_COLOR,
-                    child: Center(
-                      child: Text('No Base Stations',
-                        style: TextStyle(color: Colors.grey),
-                        ),
-                      ),
-                    )
-
-                    // (Body) Has Base Stations
-                    : Column(
-                      children: [
-                        TabBar(
-                          controller: _tabControllerServers,
-                          isScrollable: true,
-                          labelColor: Colors.white,
-                          unselectedLabelColor: Colors.grey,
-                          indicatorColor: Colors.blue,
-                          tabs: lstBaseStationsData
-                              .map((server) => Tab(text: server[SettingServerName]))
-                              .toList(),
-                        ),
-                          Expanded(
-                            child: TabBarView(
-                              controller: _tabControllerServers,
-                              children: List.generate(lstBaseStationsData.length, (index)  {
-                                final server = lstBaseStationsData[index];
-                                return SingleChildScrollView(
-                                  padding: const EdgeInsets.all(5),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-
-                                      // Hint Text
-                                      Padding(
-                                        padding: const EdgeInsets.all(8.0),
-                                        child: Text("GeoFence supports multiple base stations. Each base station "
-                                            "has it's own server. In your phone bluetooth settings, connect to the server."
-                                            "Then select it from this list",
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey,),
-                                          softWrap: true,
-                                        ),
-                                      ),
-
-                                      // Name
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-                                        child: MyTextFormField(
-                                          isReadOnly: false,
-                                          backgroundColor: APP_BACKGROUND_COLOR,
-                                          foregroundColor: Colors.white,
-                                          controller: TextEditingController(text: server[SettingServerName]),
-                                          hintText: "Server Name",
-                                          labelText: "Name",
-                                          onChanged: (value) {},
-                                          onFieldSubmitted: (value){
-                                            final vehicleDoc = lstBaseStationsData[index];
-                                            final docId = vehicleDoc.id;
-
-                                            setState(() {
-                                              mapBaseStationsData[docId]?[SettingServerName] = value;
-                                              _saveCurrentBaseStation();
-                                            });
-                                          },
-                                        ),
-                                      ),
-
-                                      // Description
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
-                                        child: MyTextFormField(
-                                          backgroundColor: APP_BACKGROUND_COLOR,
-                                          foregroundColor: Colors.white,
-                                          controller: TextEditingController(text: server[SettingServerDesc]),
-                                          hintText: "Enter value here",
-                                          labelText: "Description",
-                                          onChanged: (value) {
-
-                                          },
-                                          onFieldSubmitted: (value){
-                                            final vehicleDoc = lstBaseStationsData[index];
-                                            final docId = vehicleDoc.id;
-
-                                            setState(() {
-                                              mapBaseStationsData[docId]?[SettingServerDesc] = value;
-                                              _saveCurrentBaseStation();
-                                            });
-                                          },
-                                        ),
-                                      ),
-
-                                      // Bluetooth ID
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-                                        child: Row(
-                                          children: [
-                                            Expanded(
-                                              child: MyTextFormField(
-                                                isReadOnly: true,
-                                                backgroundColor: APP_BACKGROUND_COLOR,
-                                                foregroundColor: Colors.white,
-                                                controller: TextEditingController(text: server[SettingServerBlueDeviceName]),
-                                                hintText: "Bluetooth Identification",
-                                                labelText: "Identification",
-                                                onChanged: (value) {},
-                                                onFieldSubmitted: (value){
-
-                                                },
-                                              ),
-                                            ),
-
-                                            SizedBox(width: 10),
-
-                                            // Bluetooth Button
-                                            OutlinedButton(
-                                                child: Icon(Icons.bluetooth,color: Colors.lightBlueAccent),
-                                                style: OutlinedButton.styleFrom(
-                                                  side: BorderSide(color: Colors.blue, width: 2),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(8),
-                                                  ),
-                                                ),
-                                                onPressed: (){
-                                                  _showBluetoothDevicesPopup();
-                                                }
-                                            )
-                                          ],
-                                        ),
-                                      ),
-
-                                      // IP Address
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-                                        child: MyTextFormField(
-                                          isReadOnly: true,
-                                          backgroundColor: APP_BACKGROUND_COLOR,
-                                          foregroundColor: Colors.white,
-                                          controller: TextEditingController(text: server[SettingServerIpAdr]),
-                                          hintText: "none",
-                                          labelText: "IP Address",
-                                          onChanged: (value) {},
-                                          onFieldSubmitted: (value){},
-                                        ),
-                                      ),
-
-                                      // Pull IP Address from Cloud
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 10),
-                                        child: InkWell(
-                                          child: Text("Request IP Address",
-                                            style: TextStyle(
-                                              color: Colors.blue,
-                                              fontSize: 14,
-                                            ),
-                                          ),
-
-                                          onTap: () async {
-                                            final vehicleDoc = lstBaseStationsData[_tabControllerServers!.index];
-                                            final docId = vehicleDoc.id;
-                                            final bluetoothName = mapBaseStationsData[docId]?[SettingServerBlueDeviceName] ;
-
-                                            if(bluetoothName == ""){
-                                              myMessageBox(
-                                                  context,
-                                                  "No Identification Selected");
-                                              return;
-                                            }
-
-                                            final docSnap = await FirebaseFirestore.instance
-                                                .collection(CollectionClients)
-                                                .doc(bluetoothName)
-                                                .get();
-
-                                            if(docSnap.data() == null){
-                                              MyGlobalSnackBar.show('No IP Address Found for: $bluetoothName');
-                                              return;
-                                            }
-                                            final ipAdr = docSnap.get(SettingClientIpAdr);
-                                            if(ipAdr == ""){
-                                              MyGlobalSnackBar.show('No IP Address Found');
-                                              return;
-                                            }
-
-                                            print('IP Address: $ipAdr');
-                                            MyGlobalSnackBar.show('IP Address: $ipAdr');
-
-                                            setState(() {
-                                              mapBaseStationsData[docId]?[SettingServerIpAdr] = ipAdr;
-                                              _saveCurrentBaseStation();
-                                            });
-                                          },
-                                        ),
-                                      ),
-
-                                      // Connect Button
-                                      Row(
-                                        children: [
-                                          InkWell(
-                                            onTap: () async {
-                                              final vehicleDoc = lstBaseStationsData[index];
-                                              final docId = vehicleDoc.id;
-                                              final bluetoothName = mapBaseStationsData[docId]?[SettingServerBlueDeviceName] ;
-                                              final ip = mapBaseStationsData[docId]?[SettingServerIpAdr] ;
-
-                                              if(ip == ""){
-                                                myMessageBox(context, "No IP Address");
-                                                return;
-                                              }
-                                              if(!await mqttConnect(ip)) {
-                                              myMessageBox(context, "Wifi Connection FAILED");
-                                              setState(() {
-                                                settings.setWifi(index, true);
-                                                settings.isBaseStationConnected = false;
-                                                settings.setBaseStationName("");
-                                              });
-                                              return;
-                                              }
-
-                                              // Connection Successful
-                                              setState(() {
-                                                settings.setWifi(index, true);
-                                                settings.isBaseStationConnected = true;
-                                                settings.setBaseStationName(server[SettingServerBlueDeviceName]);
-                                              });
-
-                                              settings.updateFireSettingsFields({
-                                                SettingConnectedDevice: server[SettingServerBlueDeviceName]
-                                              });
-                                            },
-                                            child: Row(children: [
-                                              Icon(
-                                                Icons.connected_tv,
-                                                size: 50,
-                                                color: settings.lstIsWifiConnected[index] == true ? Colors.lightGreenAccent : Colors.lightBlueAccent ,
-                                              ),
-                                              SizedBox(width: 10),
-                                              Text("Connect",
-                                                style: TextStyle(color: Colors.white),
-                                              )
-                                            ], )
-                                            //icon: Icon( Icons.connected_tv),
-                                            //color: Colors.lightBlueAccent,
-                                            //iconSize: 50,
-                                          ),
-                                        ],
-                                      )
-                                    ]
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        //),
-                      ],
-                    ),
-                  );
-                //],
-              //),
-            //);
+      return Consumer<BaseStationService>(
+        builder: (_ , base , __){
+          if (base.isLoading) {
+            return MyProgressCircle();
           }
-        );
-      }
-    );
+
+          _tabController ??= TabController(length: base.lstBaseStations.length, vsync: this);
+          if (_tabController!.length != base.lstBaseStations.length) {
+            _tabController = TabController(length: base.lstBaseStations.length, vsync: this);
+          }
+
+          return Scaffold(
+            appBar: AppBar(
+              backgroundColor: APP_BAR_COLOR,
+              foregroundColor: Colors.white,
+              title: MyAppbarTitle('Base Stations'),
+            ),
+            backgroundColor: APP_BACKGROUND_COLOR,
+            bottomNavigationBar: BottomNavigationBar(
+                currentIndex: _selectedIndex,
+                backgroundColor: APP_BAR_COLOR,
+                unselectedItemColor: Colors.grey,
+                selectedItemColor: Colors.grey,
+                onTap: (index) {
+                  if (index == 1 && base.lstBaseStations.isEmpty) return;
+                  setState(() => _selectedIndex = index);
+                  if(index == 0) _addBase();
+                  if(index == 1) _deleteBaseDialog();
+                },
+                items: [
+                  // Add Button
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.add),
+                      label: 'Add',
+                      backgroundColor: Colors.grey
+                  ),
+
+                  // Delete Button
+                  if(base.lstBaseStations.isNotEmpty)
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.delete_forever),
+                      label: 'Delete',
+                      backgroundColor: Colors.grey,
+                    ),
+                ]
+            ),
+
+            body: (base.lstBaseStations.isEmpty)
+
+            // (Body) No Base Stations
+                ? Container(
+              color: APP_BACKGROUND_COLOR,
+              child: Center(
+                child: Text('No Base Stations',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            )
+
+            // (Body) Has Base Stations
+                : Column(
+              children: [
+                TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.grey,
+                  indicatorColor: Colors.blue,
+                  tabs: base.lstBaseStations
+                      .map((base) => Tab(text: base.baseName))
+                      .toList(),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children:  base.lstBaseStations.map((base)  {
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.all(5),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+
+                              // Hint Text
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text("GeoFence supports multiple base stations. Each base station "
+                                    "has it's own server. In your phone bluetooth settingsService, connect to the server."
+                                    "Then select it from this list",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,),
+                                  softWrap: true,
+                                ),
+                              ),
+
+                              // Name
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                                child: MyTextFormField(
+                                  isReadOnly: false,
+                                  backgroundColor: APP_BACKGROUND_COLOR,
+                                  foregroundColor: Colors.white,
+                                  controller: TextEditingController(text: base.baseName),
+                                  hintText: "Base Station Name",
+                                  labelText: "Name",
+                                  onChanged: (value) {},
+                                  onFieldSubmitted: (value){
+                                    setState(() {
+                                      base.baseName = value;
+                                      _saveBase(base);
+                                    });
+                                  },
+                                ),
+                              ),
+
+                              // Description
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+                                child: MyTextFormField(
+                                  backgroundColor: APP_BACKGROUND_COLOR,
+                                  foregroundColor: Colors.white,
+                                  controller: TextEditingController(text: base.baseDesc),
+                                  hintText: "Enter value here",
+                                  labelText: "Description",
+                                  onChanged: (value) {
+
+                                  },
+                                  onFieldSubmitted: (value){
+                                    setState(() {
+                                      base.baseDesc = value;
+                                      _saveBase(base);
+                                    });
+                                  },
+                                ),
+                              ),
+
+                              // Bluetooth ID
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: MyTextFormField(
+                                        isReadOnly: true,
+                                        backgroundColor: APP_BACKGROUND_COLOR,
+                                        foregroundColor: Colors.white,
+                                        controller: TextEditingController(text: base.bluetoothName),
+                                        hintText: "Bluetooth Identification",
+                                        labelText: "Identification",
+                                        onChanged: (value) {},
+                                        onFieldSubmitted: (value){
+
+                                        },
+                                      ),
+                                    ),
+
+                                    SizedBox(width: 10),
+
+                                    // Bluetooth Button
+                                    OutlinedButton(
+                                        child: Icon(Icons.bluetooth,color: Colors.lightBlueAccent),
+                                        style: OutlinedButton.styleFrom(
+                                          side: BorderSide(color: Colors.blue, width: 2),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                        onPressed: (){
+                                          _showBluetoothDevicesPopup(base);
+                                        }
+                                    )
+                                  ],
+                                ),
+                              ),
+
+                              // IP Address
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                                child: MyTextFormField(
+                                  isReadOnly: true,
+                                  backgroundColor: APP_BACKGROUND_COLOR,
+                                  foregroundColor: Colors.white,
+                                  controller: TextEditingController(text: base.ipAddress),
+                                  hintText: "none",
+                                  labelText: "IP Address",
+                                  onChanged: (value) {},
+                                  onFieldSubmitted: (value){},
+                                ),
+                              ),
+
+                              // Pull IP Address from Cloud
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 10),
+                                child: InkWell(
+                                  child: Text("Request IP Address",
+                                    style: TextStyle(
+                                      color: Colors.blue,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+
+                                  onTap: () async {
+                                    final bluetoothName = base.bluetoothName;
+
+                                    if(bluetoothName == ""){
+                                      myMessageBox(
+                                          context,
+                                          "No Identification Selected"
+                                      );
+                                      return;
+                                    }
+
+                                    final docSnap = await FirebaseFirestore.instance
+                                        .collection(CollectionClients)
+                                        .doc(bluetoothName)
+                                        .get();
+
+                                    if(docSnap.data() == null){
+                                      MyGlobalSnackBar.show('No IP Address Found for: $bluetoothName');
+                                      return;
+                                    }
+
+                                    final ipAdr = docSnap.get(SettingClientIpAdr);
+                                    if(ipAdr == ""){
+                                      MyGlobalSnackBar.show('No IP Address Found');
+                                      return;
+                                    }
+
+                                    print('IP Address: $ipAdr');
+                                    MyGlobalSnackBar.show('IP Address: $ipAdr');
+
+                                    setState(() {
+                                      base.ipAddress = ipAdr;
+                                      _saveBase(base);
+
+                                      settingsService.updateFireSettingsFields({
+                                        SettingConnectedDevice : base.baseName,
+                                        SettingConnectedDeviceIp : ipAdr
+                                      });
+                                    });
+                                  },
+                                ),
+                              ),
+
+                              // Connect Button
+                              Row(
+                                children: [
+                                  InkWell(
+                                      onTap: () async {
+                                        final ip = base.ipAddress ;
+
+                                        if(ip == ""){
+                                          myMessageBox(context, "No IP Address");
+                                          return;
+                                        }
+
+                                        // Connect MQTT
+                                        if(base.isConnected == false){
+                                          if(await mqttConnect(ip)) {
+
+                                            // Pass
+                                            setState(() {
+                                              base.isConnected = true;
+                                              settingsService.update(
+                                                isBaseStationConnected: true,
+                                              );
+
+                                              settingsService.updateFireSettingsFields({
+                                                SettingConnectedDevice : base.baseName,
+                                                SettingConnectedDeviceIp : ip
+                                              });
+                                            });
+
+                                          } else {
+
+                                            // Failed
+                                            myMessageBox(context, "Wifi Connection FAILED");
+                                            setState(() {
+                                              base.isConnected = false;
+                                              settingsService.update(
+                                                //connectedBaseStationName: "",
+                                                  isBaseStationConnected: false
+                                              );
+                                            });
+                                            return;
+                                          }
+                                        }
+                                        else {
+                                          // Disconnect
+                                          mqttDisconnect();
+
+                                          setState(() {
+                                            base.isConnected = false;
+                                            settingsService.update(
+                                              isBaseStationConnected: false,
+                                            );
+                                          });
+
+                                        }
+
+                                      },
+                                      child: Row(children: [
+                                        Icon(
+                                          Icons.connected_tv,
+                                          size: 50,
+                                          color: base.isConnected == true
+                                              ? Colors.lightGreenAccent
+                                              : Colors.grey ,
+                                        ),
+                                        SizedBox(width: 10),
+                                        Text("Connect",
+                                          style: TextStyle(color: Colors.white),
+                                        )
+                                      ], )
+                                    //icon: Icon( Icons.connected_tv),
+                                    //color: Colors.lightBlueAccent,
+                                    //iconSize: 50,
+                                  ),
+                                ],
+                              )
+                            ]
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          );
+        });
+
   }
 }
 

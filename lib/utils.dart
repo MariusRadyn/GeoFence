@@ -82,6 +82,8 @@ const SettingLogPointPerMeter = 'logPointPerMeter';
 const SettingRebateValue = 'rebateValuePerLiter';
 const SettingDieselPrice = 'dieselPrice';
 const SettingConnectedDevice = 'connectedDevice';
+const SettingConnectedDeviceIp = 'connectedDeviceIp';
+const SettingServerData = 'serverData';
 
 // Monitor settings
 const SettingMonName = 'name';
@@ -93,7 +95,7 @@ const SettingMonPicture = 'picture';
 const SettingMonType = 'type';
 const SettingMonID = 'monitorId';
 const SettingMonTicksPerM = 'ticksPerM';
-const SettingMonDefaultTicksPerM = '20'; // Default value when new Monitor is created
+const double SettingMonDefaultTicksPerM = 20; // Default value when new Monitor is created
 
 // Monitor Types
 const String MonTypeVehicle = "Vehicle";
@@ -107,22 +109,40 @@ const List<String> SettingMonitorTypeList = [
   MonTypeWheel,
 ];
 
-// Servers Settings
-const SettingServerName = 'name';
-const SettingServerDesc = 'description';
-const SettingServerIpAdr = 'ipAdr';
-const SettingServerBlueDeviceName = 'bluetoothDeviceName';
-const SettingServerBlueMac = 'bluetoothMAC';
+// Monitor Debug
+const DebugMonitorConnected = 'debugConnected';
+const DebugMonitorWheelDistance = 'debugWheelDistance';
+const DebugMonitorWheelSignal = 'debugWheelSignal';
+
+// Base Station Settings
+const SettingBaseName = 'name';
+const SettingBaseDesc = 'description';
+const SettingBaseIpAdr = 'ipAdr';
+const SettingBaseBlueDeviceName = 'bluetoothDeviceName';
+const SettingBaseBlueMac = 'bluetoothMAC';
+const SettingBaseImage = 'image';
 
 // Clients Settings
 const SettingClientIpAdr = 'IPAdress';
+
+// MQTT Topics
 const MQTT_TOPIC_FROM_IOT = "mqtt/from/iot";
 const MQTT_TOPIC_TO_IOT = "mqtt/to/iot";
 const MQTT_TOPIC_TO_ANDROID = "mqtt/to/android";
 const MQTT_TOPIC_FROM_ANDROID = "mqtt/from/android";
 const MQTT_TOPIC_WILL = "mqtt/will";
-const MQTT_NAME ="geoAndroidMqtt";
-const MQTT_PIN = "12345";
+//const MQTT_NAME ="geoAndroidMqtt";
+//const MQTT_PIN = "12345";
+
+// MQTT Commands
+const MQTT_CMD_SCAN_MONITOR = "#REQ_MONITOR";
+const MQTT_CMD_FOUND_MONITOR = "#FOUND_MONITOR";
+
+// MQTT Payload
+const MQTT_JSON_DEVICE_ID = "device_id";
+const MQTT_JSON_TOPIC = "topic";
+const MQTT_JSON_PAYLOAD = "payload";
+const MQTT_JSON_CMD = "command";
 
 //---------------------------------------------------
 // Bluetooth
@@ -383,12 +403,21 @@ void MyAlertDialog(BuildContext context, String header, String message){
   showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(header),
-        content: Text(message),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(
+            color: Colors.blue, // Border color
+            width: 2, // Border width
+          ),
+        ),
+        backgroundColor: APP_TILE_COLOR,
+        shadowColor: Colors.black,
+        title: Text(header,style: TextStyle(color: Colors.white),),
+        content: Text(message,style: TextStyle(color: Colors.grey),),
         actions: [
          TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
+            child: const Text('OK',style: TextStyle(color: Colors.blueAccent),),
           ),
         ],
       ),
@@ -927,11 +956,13 @@ class MyTextHeader extends StatelessWidget {
   final String text;
   final double? fontsize;
   final Color color;
+  final Color linecolor;
 
   const MyTextHeader({
     required this.text,
     this.fontsize = 16,
     this.color = Colors.white,
+    this.linecolor = Colors.blue,
     super.key
   });
 
@@ -950,7 +981,7 @@ class MyTextHeader extends StatelessWidget {
         ),
         Divider(
           thickness: 2,
-          color: Colors.blue,
+          color: linecolor,
         )
       ],
     );
@@ -1480,7 +1511,7 @@ class ClientIdManager {
 
     if (id == null) {
       // Generate a short unique ID (MQTT-safe)
-      id = "client_${const Uuid().v4().substring(0, 8)}";
+      id = "android_${const Uuid().v4().substring(0, 8)}";
       await prefs.setString(_key, id);
       MyGlobalSnackBar.show("MQTT DeviceID Generated: $id");
     }
@@ -1709,33 +1740,37 @@ class UserDataService extends ChangeNotifier {
     print(hashCode);
   }
 }
-class Settings{
+
+class FireSettings{
   bool isVoicePromptOn;
   int logPointPerMeter;
   double rebateValuePerLiter;
   double dieselPrice;
   String connectedDevice;
+  String connectedDeviceIp;
   List<ServerData>? serverData;
 
-  Settings({
+  FireSettings({
     required this.dieselPrice,
     required this.isVoicePromptOn,
     required this.logPointPerMeter,
     required this.rebateValuePerLiter,
     this.connectedDevice = "",
+    this.connectedDeviceIp = "",
     this.serverData
   });
 
-  factory Settings.fromMap(Map<String, dynamic> map){
-    return Settings(
-      isVoicePromptOn: map['isVoicePromptOn'] ?? true,
-      dieselPrice: map['dieselPrice'] ?? 20,
-      logPointPerMeter: map['logPointPerMeter'] ?? 10,
-      rebateValuePerLiter: map['rebatePerLiter'] ?? 2.6,
-      connectedDevice: map['connectedDevice'] ?? "",
-      serverData: map['serverData'] != null
+  factory FireSettings.fromMap(Map<String, dynamic> map){
+    return FireSettings(
+      isVoicePromptOn: map[SettingIsVoicePromptOn] ?? true,
+      dieselPrice: map[SettingDieselPrice] ?? 20,
+      logPointPerMeter: map[SettingLogPointPerMeter] ?? 10,
+      rebateValuePerLiter: map[SettingRebateValue] ?? 2.6,
+      connectedDevice: map[SettingConnectedDevice] ?? "",
+      connectedDeviceIp: map[SettingConnectedDeviceIp] ?? "",
+      serverData: map[SettingServerData] != null
         ? List<ServerData>.from(
-        (map['serverData'] as List)
+        (map[SettingServerData] as List)
             .map((e) => ServerData.fromMap(e as Map<String, dynamic>)))
         : null,
     );
@@ -1743,33 +1778,149 @@ class Settings{
 
   Map<String, dynamic> toMap(){
     return{
-      'isVoicePromptOn': isVoicePromptOn,
-      'dieselPrice': dieselPrice,
-      'logPointPerMeter': logPointPerMeter,
-      'rebateValuePerLiter': rebateValuePerLiter,
-      'connectedDevice': connectedDevice,
-      'serverData': serverData?.map((e) => e.toMap()).toList(),
+      SettingIsVoicePromptOn : isVoicePromptOn,
+      SettingDieselPrice : dieselPrice,
+      SettingLogPointPerMeter : logPointPerMeter,
+      SettingRebateValue : rebateValuePerLiter,
+      SettingConnectedDevice : connectedDevice,
+      SettingConnectedDeviceIp : connectedDeviceIp,
+      SettingServerData : serverData?.map((e) => e.toMap()).toList(),
     };
   }
 
-  Settings copyWith({
+  FireSettings copyWith({
     bool? isVoicePromptOn,
     int? logPointPerMeter,
     double? rebateValuePerLiter,
     double? dieselPrice,
     String? connectedDevice,
+    String? connectedDeviceIp,
     List<ServerData>? serverData,
   }){
-    return Settings(
+    return FireSettings(
       isVoicePromptOn: isVoicePromptOn ?? this.isVoicePromptOn,
       logPointPerMeter: logPointPerMeter ?? this.logPointPerMeter,
       dieselPrice: dieselPrice ?? this.dieselPrice,
       rebateValuePerLiter: rebateValuePerLiter ?? this.rebateValuePerLiter,
       connectedDevice: connectedDevice ?? this.connectedDevice,
+      connectedDeviceIp: connectedDeviceIp ?? this.connectedDeviceIp,
       serverData: serverData ?? this.serverData,
     );
   }
+}
+class SettingsService extends ChangeNotifier {
+  FireSettings? _settings;
+  FireSettings? get fireSettings => _settings;
 
+  bool isLoading = false;
+  bool isBaseStationConnected = false;
+  //String connectedBaseStationName = "";
+  //String connectedBaseStationIP = "";
+  int monitorWheelDistance = 0;
+  bool monitorWheelReset = false;
+  bool monitorWheelSignal = false;
+
+  final _db = FirebaseFirestore.instance;
+
+  Future<void> load() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    isLoading = true;
+
+    final doc = await _db
+        .collection(CollectionUsers)
+        .doc(uid)
+        .get();
+
+    if (doc.exists) {
+      _settings = FireSettings.fromMap(doc.data()?[FieldsSettings] ?? {});
+      notifyListeners();
+    }
+
+    isLoading = false;
+  }
+  Map<String, dynamic> flattenMap(Map<String, dynamic> map, [String prefix = '']) {
+    final result = <String, dynamic>{};
+    map.forEach((key, value) {
+      final newKey = prefix.isEmpty ? key : '$prefix.$key';
+      if (value is Map<String, dynamic>) {
+        result.addAll(flattenMap(value, newKey));
+      } else {
+        result[newKey] = value;
+      }
+    });
+    return result;
+  }
+  Future<void> updateFireSettingsFields(Map<String, dynamic> updates) async {
+    try {
+      // final current = _settings;
+      // if (current == null) return;
+      //
+      // final updated = current.copyWith(
+      //   isVoicePromptOn: updates[SettingIsVoicePromptOn] ?? current.isVoicePromptOn,
+      //   logPointPerMeter: updates[SettingLogPointPerMeter] ?? current.logPointPerMeter,
+      //   rebateValuePerLiter: updates[SettingRebateValue] ?? current.rebateValuePerLiter,
+      //   dieselPrice: updates[SettingDieselPrice] ?? current.dieselPrice,
+      //   connectedDevice: updates[SettingConnectedDevice] ?? current.connectedDevice,
+      //   connectedDeviceIp: updates[SettingConnectedDeviceIp] ?? current.connectedDeviceIp,
+      //   serverData: updates['serverData'] ?? current.serverData,
+      // );
+      //
+      // _settings = updated;
+
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final Map<String, dynamic> nestedUpdates = {};
+      // updated.toMap().forEach((key, value) {
+      //   if (updates.containsKey(key)) {
+      //     nestedUpdates['$FieldsSettings.$key'] = value;
+      //   }
+      // });
+
+      updates.forEach((key, value) {
+        nestedUpdates['$FieldsSettings.$key'] = value;
+      });
+
+      await _db.collection(CollectionUsers)
+          .doc(uid)
+          .update(nestedUpdates);
+
+      notifyListeners();
+
+    } catch (e) {
+      GlobalMsg.show('updateSettingFields:', '$e');
+    }
+  }
+
+  void notify() => notifyListeners();
+
+  void update({
+    //String? connectedBaseStationName,
+    //String? connectedBaseStationIP,
+    bool? isBaseStationConnected,
+    //String? monitorName
+  }) {
+    bool changed = false;
+
+    // if (connectedBaseStationName != null && connectedBaseStationName != this.connectedBaseStationName) {
+    //   this.connectedBaseStationName = connectedBaseStationName;
+    //   changed = true;
+    // }
+    // if (connectedBaseStationIP != null && connectedBaseStationIP != this.connectedBaseStationIP) {
+    //   this.connectedBaseStationIP = connectedBaseStationIP;
+    //   changed = true;
+    // }
+    if (isBaseStationConnected != null && isBaseStationConnected != this.isBaseStationConnected) {
+      this.isBaseStationConnected = isBaseStationConnected;
+      changed = true;
+    }
+
+    if (changed){
+      notifyListeners();
+    }
+  }
 }
 class ServerData {
   String? name;
@@ -1802,111 +1953,273 @@ class ServerData {
     };
   }
 }
-class SettingsService extends ChangeNotifier {
-  static final SettingsService _instance = SettingsService._internal();
-  factory SettingsService() => _instance;
-  SettingsService._internal();
 
-  Settings? _settings;
-  Settings? get settings => _settings;
-  bool isLoading = false;
-  bool isBaseStationConnected = false;
-  String connectedBaseStationName = "";
-  List<bool> lstIsWifiConnected = [];
-  final _db = FirebaseFirestore.instance;
+class MonitorData {
+
+  // Persisted (Firebase) fields
+  String monitorId;
+  String? monitorType;
+  String monitorName;
+  String reg;
+  double fuelConsumption;
+  double rebateValue;
+  String bluetoothDeviceName;
+  String bluetoothMac;
+  String image;
+  double ticksPerM;
+
+  // Local-only (NOT saved)
+  bool isLoading;
+  bool isConnected;
+  double wheelDistance;
+  bool wheelSignal;
+  String docId;
+
+  MonitorData({
+    // Firebase
+    this.monitorId = "none",
+    this.monitorType = MonTypeVehicle,
+    this.monitorName = "New Item",
+    this.reg = "none",
+    this.fuelConsumption = 10,
+    this.rebateValue = 10,
+    this.bluetoothDeviceName = "",
+    this.bluetoothMac = "",
+    this.image = "",
+    this.ticksPerM = 20,
+
+    // Local
+    this.isLoading = false,
+    this.isConnected = false,
+    this.wheelDistance = 0,
+    this.wheelSignal = false,
+    this.docId = ""
+  });
+
+  // From Firebase
+  factory MonitorData.fromMap(Map<String, dynamic> map, String docId) {
+    return MonitorData(
+      docId: docId,
+      monitorId: map[SettingMonID] ?? 'none',
+      monitorType: map[SettingMonType] ?? 'none',
+      monitorName: map[SettingMonName] ?? 'New Item',
+      reg: map[SettingMonReg] ?? 'None',
+      fuelConsumption: (map[SettingMonFuelConsumption] as num?)?.toDouble() ?? 0.0,
+      //rebateValue: map[SettingRebateValue] ?? 0,
+      bluetoothDeviceName: map[SettingMonBlueDeviceName] ?? '',
+      bluetoothMac: map[SettingMonBlueMac] ?? '',
+      ticksPerM: (map[SettingMonTicksPerM] as num?)?.toDouble() ?? SettingMonDefaultTicksPerM,
+      image: map[SettingMonPicture] ?? '',
+    );
+  }
+
+  // To Firebase (NO local fields)
+  Map<String, dynamic> toMap() {
+    return {
+      SettingMonID: monitorId,
+      SettingMonType: monitorType,
+      SettingMonName: monitorName,
+      SettingMonReg: reg,
+      SettingMonFuelConsumption: fuelConsumption,
+      SettingRebateValue: rebateValue,
+      SettingMonBlueDeviceName: bluetoothDeviceName,
+      SettingMonBlueMac: bluetoothMac,
+      SettingMonTicksPerM: ticksPerM,
+      SettingMonPicture: image
+    };
+  }
+}
+class MonitorService extends ChangeNotifier {
+  final List<MonitorData> _monitors = [];
+  MonitorData? _selected;
+  bool isLoading = true;
+
+  List<MonitorData> get lstMonitors => List.unmodifiable(_monitors);
+  MonitorData? get selected => _selected;
 
   Future<void> load() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
 
     isLoading = true;
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
 
-    final doc = await _db
+    final snapshot = await FirebaseFirestore.instance
         .collection(CollectionUsers)
         .doc(uid)
+        .collection(CollectionMonitors)
         .get();
 
-    if (doc.exists) {
-      _settings = Settings.fromMap(doc.data()?[FieldsSettings] ?? {});
-      notifyListeners();
-    }
+    final list = snapshot.docs
+        .map((doc) => MonitorData.fromMap(doc.data(),doc.id))
+        .toList();
 
-    isLoading = false;
-  }
-  Map<String, dynamic> flattenMap(Map<String, dynamic> map, [String prefix = '']) {
-    final result = <String, dynamic>{};
-    map.forEach((key, value) {
-      final newKey = prefix.isEmpty ? key : '$prefix.$key';
-      if (value is Map<String, dynamic>) {
-        result.addAll(flattenMap(value, newKey));
-      } else {
-        result[newKey] = value;
-      }
-    });
-    return result;
-  }
-  Future<void> updateFireSettingsFields(Map<String, dynamic> updates) async {
     try {
-      final current = _settings;
-      if (current == null) return;
-
-      final updated = current.copyWith(
-        isVoicePromptOn: updates['isVoicePromptOn'] ?? current.isVoicePromptOn,
-        logPointPerMeter: updates['logPointPerMeter'] ?? current.logPointPerMeter,
-        rebateValuePerLiter: updates['rebateValuePerLiter'] ?? current.rebateValuePerLiter,
-        dieselPrice: updates['dieselPrice'] ?? current.dieselPrice,
-        connectedDevice: updates['connectedDevice'] ?? current.connectedDevice,
-        serverData: updates['serverData'] ?? current.serverData,
-      );
-
-      _settings = updated;
-
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
-
-      final Map<String, dynamic> nestedUpdates = {};
-      updated.toMap().forEach((key, value) {
-        if (updates.containsKey(key)) {
-          nestedUpdates['$FieldsSettings.$key'] = value;
-        }
-      });
-      await _db.collection(CollectionUsers).doc(uid).update(nestedUpdates);
-
-      notifyListeners();
+      setMonitors(list);
     } catch (e) {
-      GlobalMsg.show('updateSettingFields:', '$e');
+      print(e);
+    } finally {
+      isLoading = false;   // ✅ CLEAR HERE
+      notifyListeners();   // ✅ NOTIFY HERE
     }
   }
-  void setBaseStationName(String name) {
-    connectedBaseStationName = name;
-    notifyListeners();        // IMPORTANT
-  }
-  /// Add a WiFi name
-  void addWifi(bool val) {
-      lstIsWifiConnected.add(val);
-      notifyListeners();
-  }
-  /// Init a WiFi name
-  void initWifi(int index, bool val) {
-    lstIsWifiConnected = List<bool>.filled(index, val);
-    //notifyListeners();
-  }
-  /// Set a WiFi name
-  void setWifi(int index, bool val) {
-    lstIsWifiConnected[index] = val;
+
+  void setMonitors(List<MonitorData> list) {
+    _monitors
+      ..clear()
+      ..addAll(list);
     notifyListeners();
   }
-  /// Remove a WiFi name
-  void removeWifi(int index) {
-    lstIsWifiConnected.removeAt (index);
+  void addMonitor(MonitorData mon) {
+    _monitors.add(mon);
+    notifyListeners();
+  }
+  void removeMonitor(String id) {
+    _monitors.removeWhere((m) => m.monitorId == id);
+    if (_selected?.monitorId == id) _selected = null;
+    notifyListeners();
+  }
+  void selectMonitor(String id) {
+    _selected = _monitors.firstWhere((m) => m.monitorId == id);
     notifyListeners();
   }
 
-  /// Clear the list
-  void clearWifiList() {
-    for(int i=0; i < lstIsWifiConnected.length; i++) {
-      lstIsWifiConnected[i] = false;
+  // Local-only updates
+  void setConnected(String id, bool value) {
+    final mon = _monitors.firstWhere((m) => m.monitorId == id);
+    mon.isConnected = value;
+    notifyListeners();
+  }
+}
+
+class BaseStationData {
+
+  // Persisted (Firebase) fields
+  String baseName;
+  String baseDesc;
+  String ipAddress;
+  String bluetoothName;
+  String bluetoothMac;
+  String image;
+
+  // Local-only (NOT saved)
+  bool isLoading;
+  bool isConnected;
+  String docId;
+
+  BaseStationData({
+    // Firebase
+    this.baseName = "New Base",
+    this.baseDesc = "none",
+    this.ipAddress = "0:0:0:0",
+    this.bluetoothName = "",
+    this.bluetoothMac = "",
+    this.image = "",
+
+    // Local
+    this.isLoading = false,
+    this.isConnected = false,
+    this.docId = ""
+  });
+
+
+  // From Firebase
+  factory BaseStationData.fromMap(Map<String, dynamic> map, String docId) {
+    return BaseStationData(
+      docId: docId,
+      baseName: map[SettingBaseName] ?? 'none',
+      baseDesc: map[SettingBaseDesc] ?? 'none',
+      ipAddress: map[SettingBaseIpAdr] ?? 'New Item',
+      bluetoothName: map[SettingBaseBlueDeviceName] ?? 'None',
+      bluetoothMac: map[SettingMonBlueMac] ?? '',
+      image: map[SettingBaseImage] ?? '',
+    );
+  }
+
+  // To Firebase (NO local fields)
+  Map<String, dynamic> toMap() {
+    return {
+      SettingBaseName : baseName,
+      SettingBaseDesc : baseDesc,
+      SettingBaseIpAdr : ipAddress,
+      SettingBaseBlueDeviceName : bluetoothName,
+      SettingBaseBlueMac : bluetoothMac,
+      SettingBaseImage: image
+    };
+  }
+}
+class BaseStationService extends ChangeNotifier {
+  final List<BaseStationData> _base = [];
+  BaseStationData? _selected;
+  bool isLoading = true;
+
+  List<BaseStationData> get lstBaseStations => List.unmodifiable(_base);
+  BaseStationData? get selected => _selected;
+
+  BaseStationService() {
+    debugPrint('BaseStationService CREATED  $hashCode');
+  }
+
+  @override
+  void dispose() {
+    debugPrint('BaseStationService DISPOSED $hashCode');
+    super.dispose();
+  }
+
+  Future<void> load() async {
+    isLoading = true;
+
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection(CollectionUsers)
+        .doc(uid)
+        .collection(CollectionServers)
+        .get();
+
+    final list = snapshot.docs
+        .map((doc) => BaseStationData.fromMap(doc.data(), doc.id))
+        .toList();
+
+    try {
+      if (lstBaseStations.length != list.length) {
+        setBaseStations(list);
+      }
+    } catch (e) {
+      print(e);
+    } finally {
+      isLoading = false;   // ✅ CLEAR HERE
+      notifyListeners();   // ✅ NOTIFY HERE
     }
+  }
+
+  void setBaseStations(List<BaseStationData> list) {
+    _base
+      ..clear()
+      ..addAll(list);
+    notifyListeners();
+  }
+
+  void addBaseStations(BaseStationData mon) {
+    _base.add(mon);
+    notifyListeners();
+  }
+
+  void removeBaseStations(String id) {
+    _base.removeWhere((m) => m.docId == id);
+    if (_selected?.docId == id) _selected = null;
+    notifyListeners();
+  }
+
+  void selectMonitor(String id) {
+    _selected = _base.firstWhere((m) => m.docId == id);
+    notifyListeners();
+  }
+
+  // Local-only updates
+  void setConnected(String id, bool value) {
+    final mon = _base.firstWhere((m) => m.docId == id);
+    mon.isConnected = value;
     notifyListeners();
   }
 }

@@ -29,6 +29,8 @@ Future<void> main() async {
         providers: [
           ChangeNotifierProvider(create: (_) => SettingsService()..load()),
           ChangeNotifierProvider(create: (_) => UserDataService()..load()),
+          ChangeNotifierProvider(create: (_) => MonitorService()..load()),
+          ChangeNotifierProvider(create: (_) => BaseStationService()..load()),
         ],
         child: MyApp(),
       ),

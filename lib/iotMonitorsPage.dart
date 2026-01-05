@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geofence/utils.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 
 import 'MqttService.dart';
 
@@ -23,26 +25,48 @@ class IotMonitorsPage extends StatefulWidget {
   _IotMonitorsPageState createState() => _IotMonitorsPageState();
 }
 
-class _IotMonitorsPageState extends State<IotMonitorsPage>
-    with TickerProviderStateMixin {
+class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderStateMixin {
+  late SettingsService settingService;
+  late MonitorService monitorService;
+
+  final Map<String, Future<DocumentSnapshot<Map<String, dynamic>>>> _docFutures = {};
+  int _selectedIndex = 0;
+  bool scanBusy = false;
+
   bool _isLoading = true;
   TabController? _tabController;
   final ImagePicker _imagePicker = ImagePicker();
-  final Map<String, Map<String, dynamic>> mapMonitorData = {};
-  List<DocumentSnapshot<Map<String, dynamic>>> lstMonitorData = [];
+
   bool _isUploading = false;
   double _uploadProgress = 0.0;
-  //BluetoothDevice? selectedDevice;
-  //BluetoothData bluetoothData = BluetoothData();
   List<BluetoothDevice> lstPairedDevices = [
     BluetoothDevice.fromId("00:11:22:33:44:55"),
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
 
+
   void initState() {
     super.initState();
-    _fetchMonitors();
+
     _getBondedDevices();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      settingService = context.read<SettingsService>();
+      monitorService = context.read<MonitorService>();
+
+      _tabController = TabController(
+        length: monitorService.lstMonitors.length,
+        vsync: this,
+      );
+
+      if(settingService.fireSettings!.connectedDeviceIp.isNotEmpty && !settingService.isBaseStationConnected) {
+        mqttConnect(settingService.fireSettings!.connectedDeviceIp);
+
+        settingService.update(
+          isBaseStationConnected: true
+        );
+      }
+    });
   }
 
   @override
@@ -66,126 +90,83 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
       print('Error getting paired devices: $e');
     }
   }
-  Future<void> _fetchMonitors() async {
-    try {
-      String? uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
-
-      final snapshot = await FirebaseFirestore.instance
-          .collection(CollectionUsers)
-          .doc(uid)
-          .collection(CollectionMonitors)
-          .get();
-
-      setState(() {
-        lstMonitorData = snapshot.docs;
-        mapMonitorData.clear();
-
-        for (var doc in lstMonitorData) {
-          mapMonitorData[doc.id] = doc.data() ?? {};
-        }
-
-        if (lstMonitorData.length > 0) {
-          if (_tabController != null) {
-            _tabController?.dispose();
-          }
-          _tabController =
-              TabController(length: lstMonitorData.length, vsync: this);
-        }
-
-        _isLoading = false;
-      });
-    } catch (e) {
-      MyGlobalSnackBar.show('Image upload failed: $e');
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-  void _saveCurrentMonitor() async {
+  void _saveMonitor(MonitorData monitor) async {
     if (_tabController == null) return;
 
-    User? user = FirebaseAuth.instance.currentUser;
-    final currentIndex = _tabController!.index;
-    final vehicleDoc = lstMonitorData[currentIndex];
-    final settingsToSave = mapMonitorData[vehicleDoc.id]!;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
 
-    await FirebaseFirestore.instance
+    final ref = FirebaseFirestore.instance
         .collection(CollectionUsers)
-        .doc(user?.uid)
-        .collection(CollectionMonitors)
-        .doc(vehicleDoc.id)
-        .update(settingsToSave);
+        .doc(uid)
+        .collection(CollectionMonitors);
+
+      await ref.doc(monitor.docId).set(
+        monitor.toMap(),
+        SetOptions(merge: true),              // UPDATE
+      );
+
+    await monitorService.load();
 
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Vehicle saved')));
+        .showSnackBar(const SnackBar(content: Text('Saved')));
   }
   void _addMonitor() async {
+    if (!mounted) return;
+
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final doc = await FirebaseFirestore.instance
+    final ref = FirebaseFirestore.instance
         .collection(CollectionUsers)
         .doc(uid)
-        .collection(CollectionMonitors)
-        .doc();
+        .collection(CollectionMonitors);
 
-    final newMonitor = {
-      SettingMonType: MonTypeVehicle,
-      SettingMonName: 'New Item',
-      SettingMonReg: 'None',
-      SettingMonFuelConsumption: 0,
-      SettingRebateValue: 0,
-      SettingMonID : 'none',
-      SettingMonBlueDeviceName : '',
-      SettingMonBlueMac:'',
-      SettingMonPicture:'',
-      SettingMonTicksPerM: SettingMonDefaultTicksPerM,
-    };
+    final monitor = MonitorData(
+      monitorName: 'New Monitor',
+    );
 
-    doc.set(newMonitor);
-    await _fetchMonitors();
+    final doc = await ref.add(monitor.toMap());
+    await monitorService.load();
+    if (!mounted) return;
 
-    if (_tabController != null && lstMonitorData.isNotEmpty) {
-      final newIndex = lstMonitorData.indexWhere((d) => d.id == doc.id);
+    if (_tabController != null &&  monitorService.lstMonitors.isNotEmpty) {
+      final newIndex = monitorService.lstMonitors.indexWhere((d) => d.docId == doc.id);
       if (newIndex != -1) {
-        _tabController!.animateTo(newIndex);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _tabController!.animateTo(newIndex);
+        });
       }
     }
   }
-  void _editVehicle(DocumentSnapshot vehicle) {
-    _showVehicleDialog(vehicle: vehicle);
-  }
-  Future<void> _deleteVehicle() async {
+  Future<void> _deleteMonitor(MonitorData monitor) async {
     try {
       User? user = FirebaseAuth.instance.currentUser;
-      int index = _tabController!.index;
-      final docId = lstMonitorData[index].id;
 
       // 1️⃣ Delete from Firestore
       await FirebaseFirestore.instance
           .collection(CollectionUsers)
           .doc(user?.uid)
           .collection(CollectionMonitors)
-          .doc(docId)
+          .doc(monitor.docId)
           .delete();
 
-      setState(() {
-        lstMonitorData.removeWhere((d) => d.id == docId);
-        mapMonitorData.remove(docId);
+      await monitorService.load();
 
+      setState(() {
         _tabController?.dispose();
 
-        if (lstMonitorData.isNotEmpty) {
+        if (monitorService.lstMonitors.isNotEmpty) {
           _tabController = TabController(
-            length: lstMonitorData.length,
+            length: monitorService.lstMonitors.length,
             vsync: this,
           );
 
           // 5️⃣ Ensure a safe tab is selected
           int newIndex = 0;
-          if (_tabController!.index >= lstMonitorData.length) {
-            newIndex = lstMonitorData.length - 1;
+          if (_tabController!.index >= monitorService.lstMonitors.length) {
+            newIndex = monitorService.lstMonitors.length - 1;
           } else {
             newIndex = _tabController!.index;
           }
@@ -197,13 +178,29 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
     } catch (e) {
       print('Error deleting vehicle: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete vehicle: $e')),
+        SnackBar(content: Text('Delete Failed: $e')),
       );
     }
   }
-  void _deleteVehicleDialog() async {
+  void _editVehicle(DocumentSnapshot vehicle) {
+    _showVehicleDialog(vehicle: vehicle);
+  }
+  Future<DocumentSnapshot<Map<String, dynamic>>> _getDocFuture(MonitorData monitor) {
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+
+    return _docFutures.putIfAbsent(
+        monitor.docId,
+            () => FirebaseFirestore.instance
+            .collection(CollectionUsers)
+            .doc(uid)
+            .collection(CollectionMonitors)
+            .doc(monitor.docId)
+            .get()
+    );
+  }
+  void _deleteMonitorDialog() async {
     int index = _tabController!.index;
-    final vehicle = lstMonitorData[index];
+    final monitor = monitorService.lstMonitors[index];
 
     showDialog(
         context: context,
@@ -221,7 +218,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
             title: const MyText(text: "Delete", color: Colors.white),
             content: MyText(
               text:
-                  "${vehicle[SettingMonName]}\n${vehicle[SettingMonReg]}\n\nAre you sure?",
+                  "${monitor.monitorName}\n${monitor.reg}\n\nAre you sure?",
               color: Colors.grey,
               fontsize: 18,
             ),
@@ -240,7 +237,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
                     fontsize: 20,
                   ),
                   onPressed: () async {
-                    _deleteVehicle();
+                    _deleteMonitor(monitor);
                     Navigator.pop(context);
                   }),
             ],
@@ -379,44 +376,12 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
       },
     );
   }
-  Future<void> _pickAndUploadImageOLD({ImageSource? source}) async {
-    if (source == null) return;
-    try {
-      if (_tabController == null) return;
-      final vehicleDoc = lstMonitorData[_tabController!.index];
-
-      final XFile? picked =
-          await _imagePicker.pickImage(source: source!, imageQuality: 85);
-      if (picked == null) return;
-
-      final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-      if (uid.isEmpty) return;
-
-      final String path =
-          '$CollectionUsers/$uid/$CollectionMonitors/${vehicleDoc.id}.jpg';
-      final Reference ref = FirebaseStorage.instance.ref().child(path);
-      final File file = File(picked.path);
-
-      await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
-      final String downloadUrl = await ref.getDownloadURL();
-
-      await FirebaseFirestore.instance
-          .collection(CollectionUsers)
-          .doc(uid)
-          .collection(CollectionMonitors)
-          .doc(vehicleDoc.id)
-          .update({SettingMonPicture: downloadUrl});
-      setState(() {});
-    } catch (e) {
-      MyGlobalSnackBar.show('Image upload failed: $e');
-    }
-  }
   Future<void> _pickAndUploadImage({ImageSource? source}) async {
     if (source == null) return;
 
     try {
       if (_tabController == null) return;
-      final vehicleDoc = lstMonitorData[_tabController!.index];
+      final monitor = monitorService.lstMonitors[_tabController!.index];
 
       final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
       if (uid.isEmpty) return;
@@ -429,7 +394,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
       if (picked == null) return;
 
       final String path =
-          '$CollectionUsers/$uid/$CollectionMonitors/${vehicleDoc.id}_${DateTime.now().millisecondsSinceEpoch}.png';
+          '$CollectionUsers/$uid/$CollectionMonitors/${monitor.docId}_${DateTime.now().millisecondsSinceEpoch}.png';
       final Reference ref = FirebaseStorage.instance.ref().child(path);
       final File file = File(picked.path);
 
@@ -440,7 +405,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
       });
 
       // Delete old image From Firebase
-      final oldUrl = vehicleDoc[SettingMonPicture];
+      final oldUrl = monitor.image;
       if (oldUrl != null && oldUrl.toString().isNotEmpty) {
         try {
           await FirebaseStorage.instance.refFromURL(oldUrl).delete();
@@ -475,10 +440,10 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
           .collection(CollectionUsers)
           .doc(uid)
           .collection(CollectionMonitors)
-          .doc(vehicleDoc.id)
+          .doc(monitor.docId)
           .update({SettingMonPicture: downloadUrl});
 
-      await _fetchMonitors();
+      await monitorService.load();
 
       MyGlobalSnackBar.show('Image uploaded successfully!');
     } on FirebaseException catch (e) {
@@ -552,10 +517,10 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
       return '';
     }
   }
-  Future<ImageProvider<Object>?> _getMonitorImageProvider( BuildContext context, String vehicleId, Map<String,dynamic>? monitor) async {
-    if (_isUploading) return null;
-    String downloadUrl = monitor?[SettingMonPicture] ?? '';
-    String montype = monitor?[SettingMonType] ?? '';
+  Future<ImageProvider<Object>> _getMonitorImageProvider( BuildContext context, String vehicleId, MonitorData? monitor) async {
+    if (_isUploading) return AssetImage('assets/noImage.jpg');
+    String downloadUrl = monitor?.image ?? '';
+    String monType = monitor?.monitorType ?? '';
 
     final directory = await getApplicationDocumentsDirectory();
     String filename = getFileNameFromUrl(downloadUrl);
@@ -573,7 +538,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
       if (downloadUrl == null || downloadUrl.isEmpty) {
 
         // Finally - Load Default
-        switch (montype) {
+        switch (monType) {
           case MonTypeVehicle:
             return AssetImage('assets/red_pickup2.png');
 
@@ -596,10 +561,9 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
 
     } catch (e) {
       debugPrint('Download error: $e');
-      return null;
+      return AssetImage('assets/noImage.jpg');
     }
   }
-
   Future<bool> isWifiConnected(String ip, int port) async {
     try {
       final socket = await Socket.connect(ip, port, timeout: Duration(seconds: 2));
@@ -610,481 +574,485 @@ class _IotMonitorsPageState extends State<IotMonitorsPage>
     }
   }
   Future<bool> _scanMonitor(String ip)async{
-    if(!await isWifiConnected(ip, 1883))
-    {
+    if(settingService.isBaseStationConnected == false){
+      MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
+      return false;
+    }
+
+    Mqtt_Service.onMessage(MQTT_TOPIC_TO_ANDROID, (msg) {
+      print("MQTT RX: $msg");
+
+      Map<String, dynamic> jsonData = jsonDecode(msg);
+
+      // Scan Monitor
+      if(scanBusy){
+        scanBusy = false;
+
+        if(jsonData[MQTT_JSON_CMD] == MQTT_CMD_SCAN_MONITOR){
+          String json = jsonData[MQTT_JSON_PAYLOAD];
+          Mqtt_Service.tx(MQTT_CMD_FOUND_MONITOR,json,MQTT_TOPIC_FROM_ANDROID);
+
+          final monitor = monitorService.lstMonitors[_tabController!.index];
+          final String monID = jsonData[MQTT_JSON_PAYLOAD];
+          final MonitorData? monitorOld = monitorService.lstMonitors.firstWhere(
+                (m) => m.monitorId == monID,
+            orElse: () => null as MonitorData,
+          );
+
+          if(monitorOld != null){
+            MyQuestionAlertBox(context: context,
+                message: "$monID exists in Monitor: '${monitorOld.monitorName}'.\nDo you want to change the monitor to this one\nThe other monitor will be disconnected",
+                onPress: (){
+                  setState(() {
+                    monitor.monitorId = monID;
+                    monitorOld.monitorId = "none";
+                    _saveMonitor(monitor);
+                    _saveMonitor(monitorOld);
+                  });
+                }
+            );
+          }
+          else {
+            setState(() {
+              monitor.monitorId = monID;
+              _saveMonitor(monitor);
+            });
+            MyAlertDialog(context, "Device Found", monID);
+          }
+        }
+      }
+    });
+
+    Mqtt_Service.tx(MQTT_CMD_SCAN_MONITOR,'',MQTT_TOPIC_FROM_ANDROID);
+    return true;
+  }
+  Future<bool> mqttConnect(String ip)async{
+    if(!await isWifiConnected(ip, 1883)) {
       print("Wifi Fail");
       return false;
     }
 
-    final mqtt = MqttService(ipAdr : ip);
-    await mqtt.init();
+    Mqtt_Service.ipAdr = ip;
+    await Mqtt_Service.init();
 
-    if(!await mqtt.connect()){
+    if(!await Mqtt_Service.connect()) {
       MyGlobalSnackBar.show("MQTT Connection FAILED");
       return false;
     }
 
     // Callback Listener
-    mqtt.setupMessageListener();
-    mqtt.onMessage(MQTT_TOPIC_TO_ANDROID, (msg) {
+    Mqtt_Service.setupMessageListener();
+    Mqtt_Service.onMessage(MQTT_TOPIC_TO_ANDROID, (msg) {
       print("MQTT RX: $msg");
     });
 
-    mqtt.tx("#REQ_MONITOR",MQTT_TOPIC_FROM_ANDROID);
-    mqtt.disconnect();
+    MyGlobalSnackBar.show("Connected: " + ip);
     return true;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    User? user = FirebaseAuth.instance.currentUser;
-
-    if (_isLoading) {
-      return MyProgressCircle();
-    }
-
-    if (lstMonitorData.length == 0) {
-      return Scaffold(
-        appBar: AppBar(
-          backgroundColor: APP_BAR_COLOR,
-          foregroundColor: Colors.white,
-          title: MyAppbarTitle('Monitors'),
-        ),
-        bottomNavigationBar: BottomAppBar(
-          color: APP_BACKGROUND_COLOR,
-          shape: const CircularNotchedRectangle(), // optional if using FAB
-          notchMargin: 0,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 1),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  Center(
-                    child: MyIcon(
-                      text: "Add",
-                      icon: Icons.add,
-                      iconColor: Colors.grey,
-                      textColor: Colors.white,
-                      iconSize: 25,
-                      onTap: () {
-                        _addMonitor();
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        body: Center(
-          child: Text("No Monitors Found"),
-        ),
-      );
-    }
-
-    return StreamBuilder(
-        stream: FirebaseFirestore.instance
-            .collection(CollectionUsers)
-            .doc(FirebaseAuth.instance.currentUser?.uid)
-            .collection(CollectionMonitors)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return MyProgressCircle();
-          }
-
-          final docs = snapshot.data!.docs;
-          lstMonitorData = docs;
-
-          // Recreate controller if length changes
-          _tabController ??= TabController(length: docs.length, vsync: this);
-          if (_tabController!.length != docs.length) {
-            _tabController = TabController(length: docs.length, vsync: this);
-          }
-
-          return Scaffold(
-            appBar: AppBar(
-              backgroundColor: APP_BAR_COLOR,
-              foregroundColor: Colors.white,
-              title: MyAppbarTitle('Monitors'),
-              bottom: TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                indicatorColor: Colors.blueAccent,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.grey,
-                tabs: lstMonitorData
-                    .map((doc) => Tab(text: doc['name'] ?? doc.id))
-                    .toList(),
-              ),
-            ),
-            floatingActionButton: lstMonitorData.length == 0
-                ? FloatingActionButton(
-                    heroTag: "addMonitor",
-                    onPressed: _addMonitor,
-                    backgroundColor: COLOR_ORANGE,
-                    mini: true,
-                    child: Icon(
-                      Icons.add,
-                      color: Colors.white,
-                    ),
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Delete Monitor
-                      FloatingActionButton(
-                        heroTag: "deleteMonitor",
-                        onPressed: _deleteVehicleDialog,
-                        backgroundColor: COLOR_ORANGE,
-                        mini: true,
-                        isExtended: false,
-                        child: Icon(
-                          Icons.delete_forever,
-                          color: Colors.white,
-                        ),
-                      ),
-
-                      SizedBox(height: 10),
-
-                      // Add Monitor
-                      FloatingActionButton(
-                        heroTag: "addMonitor2",
-                        onPressed: _addMonitor,
-                        backgroundColor: COLOR_ORANGE,
-                        mini: true,
-                        child: Icon(
-                          Icons.add,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-            body: Container(
-              color: APP_BACKGROUND_COLOR,
-              child: TabBarView(
-                controller: _tabController,
-                children: lstMonitorData.map(
-                  (doc) {
-                    final _docId = doc.id;
-                    final monitor = mapMonitorData[_docId]!;
-
-                    return FutureBuilder(
-                        future: _getMonitorImageProvider(
-                            context, _docId, monitor),
-                        builder: (context, imgSnapshot) {
-                          if (imgSnapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return MyProgressCircle();
-                          }
-
-                          ImageProvider<Object> imageProvider =
-                              imgSnapshot.data ??
-                                  const AssetImage('assets/noImage.jpg');
-
-                          return ListView(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 20, horizontal: 0),
-                            children: [
-
-                              // Picture header Container
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12.0, vertical: 8.0),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.transparent,
-                                    border: Border.all(
-                                        color: Colors.transparent, width: 1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Stack(
-                                      children: [
-                                        // Vehicle Picture
-                                        Center(
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4), // border thickness
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  Colors.blue, // border color
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: _isUploading
-
-                                                // Uploading
-                                                ? CircleAvatar(
-                                                    radius: 70,
-                                                    backgroundColor:
-                                                        Colors.grey.shade200,
-                                                    child: Center(
-                                                      child: Text('Uploading... ${(100 * _uploadProgress).toStringAsFixed(0)}%'),
-                                                    ),
-                                                  )
-
-                                                // Load Picture
-                                                : CircleAvatar(
-                                                    radius: 70,
-                                                    backgroundColor:   Colors.grey.shade200,
-                                                    backgroundImage:   imageProvider,
-                                                  ),
-                                          ),
-                                        ),
-
-                                        // Floating circular buttons on top-right
-                                        Positioned(
-                                          top: 1,
-                                          bottom: 1,
-                                          right: 8,
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.end,
-                                            children: [
-
-                                              // Load Image
-                                              MyCircleIconButton(
-                                                icon: Icons.photo_camera,
-                                                onPressed: () =>
-                                                    _pickAndUploadImage(
-                                                        source:
-                                                            ImageSource.camera),
-                                              ),
-
-                                              const SizedBox(height: 5),
-
-                                              // Take Photo
-                                              MyCircleIconButton(
-                                                icon: Icons.photo_library,
-                                                onPressed: () =>
-                                                    _pickAndUploadImage(
-                                                        source: ImageSource
-                                                            .gallery),
-                                              ),
-
-                                              const SizedBox(height: 5),
-
-                                              // Delete Pic
-                                              MyCircleIconButton(
-                                                icon: Icons.delete,
-                                                onPressed: () => {
-                                                  if(monitor[SettingMonPicture] != null && monitor[SettingMonPicture] != '' ){
-                                                    MyQuestionAlertBox(
-                                                        context: context,
-                                                        message: 'Delete Current Picture?',
-                                                      onPress:(){
-                                                          setState(() {
-                                                            monitor[SettingMonPicture] = '';
-                                                            _saveCurrentMonitor();
-                                                          });
-                                                      }
-                                                    )
-                                                  }
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              SizedBox(height: 5),
-
-                              // Progress Bar
-                              _isUploading
-                                  ? Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 100),
-                                      child: LinearProgressIndicator(
-                                        value: _uploadProgress,
-                                        minHeight: 6,
-                                        valueColor:
-                                            const AlwaysStoppedAnimation<Color>(
-                                                Colors.blue),
-                                      ),
-                                    )
-                                  : SizedBox(height: 5),
-
-                              // Monitor Type
-                              Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(10, 0, 10, 20),
-                                  child: MyDropdown(
-                                    onChange: (value) {
-                                      final vehicleDoc =
-                                          lstMonitorData[_tabController!.index];
-                                      final docId = vehicleDoc.id;
-
-                                      setState(() {
-                                        mapMonitorData[docId]?[SettingMonType] = value;
-                                        _saveCurrentMonitor();
-                                      });
-                                    },
-                                    value: SettingMonitorTypeList.contains(
-                                            monitor[SettingMonType])
-                                        ? monitor[SettingMonType]
-                                        : null,
-                                  )
-                              ),
-
-                              //--------------------------------------------------------------
-                              // Monitor Types
-                              //--------------------------------------------------------------
-                              _buildbody(monitor, doc)
-
-                            ],
-                          );
-                        });
-                  },
-                ).toList(),
-              ),
-            ),
-          );
-        });
-  }
-
-  Widget _buildbody(Map<String, dynamic> monitor, DocumentSnapshot<Map<String, dynamic>> doc){
+  Widget _buildbody(MonitorData monitor) {
     try{
-      switch(monitor[SettingMonType]){
+
+      switch(monitor.monitorType){
         case MonTypeVehicle:
           return IotVehicleType(
-            mapMonitorData: mapMonitorData,
+            monitorData: monitor,
             lstPairedDevices: lstPairedDevices,
-            doc: doc,
 
             // Vehicle Name
-            monitorName: monitor[SettingMonName],
             onChangedVehicleName: (value) {
               setState(() {
-                final vehicleDoc =
-                lstMonitorData[_tabController!.index];
-                final docId = vehicleDoc.id;
-
-                setState(() {
-                  mapMonitorData[docId]
-                  ?[SettingMonName] = value;
-                  _saveCurrentMonitor();
-                });
+                monitor.monitorName= value;
+                _saveMonitor(monitor);
               });
-            },
+          },
 
             // Fuel Consumption
-            monitorFuelConsumption: monitor[SettingMonFuelConsumption].toString(),
             onChangedFuelConsumption: (value) {
-              final vehicleDoc =
-              lstMonitorData[_tabController!.index];
-              final docId = vehicleDoc.id;
-
               setState(() {
-                mapMonitorData[docId]
-                ?[SettingMonFuelConsumption] =  value;
-                _saveCurrentMonitor();
+                monitor.fuelConsumption =  value as double;
+                _saveMonitor(monitor);
               });
             },
 
             // Registration
-            monitorReg: monitor[SettingMonReg],
             onChangedReg: (value) {
-              final vehicleDoc =
-              lstMonitorData[_tabController!.index];
-              final docId = vehicleDoc.id;
-
               setState(() {
-                mapMonitorData[docId]?[SettingMonReg] =
-                    value;
-                _saveCurrentMonitor();
+                monitor.reg = value;
+                _saveMonitor(monitor);
               });
             },
 
             // Bluetooth
             onChangedBluetooth: (BluetoothDevice? device) {
               setState(() {
-                final vehicleDoc =
-                lstMonitorData[_tabController!.index];
-                final docId = vehicleDoc.id;
-
-                setState(() {
-                  mapMonitorData[docId]
-                  ?[SettingMonBlueDeviceName] =
-                      device?.platformName;
-                  mapMonitorData[docId]
-                  ?[SettingMonBlueMac] =
-                      device?.remoteId.toString();
-                  _saveCurrentMonitor();
-                });
+                monitor.bluetoothDeviceName =  device?.platformName ?? '';
+                monitor.bluetoothMac =  device?.remoteId.toString() ?? '';
+                _saveMonitor(monitor);
               });
             },
           );
 
         case MonTypeWheel:
           return IotDistanceWheelType(
+            monitorData: monitor,
 
             // Name
-            name: monitor[SettingMonName],
             onChangedName: (value){
               setState(() {
-                final vehicleDoc = lstMonitorData[_tabController!.index];
-                final docId = vehicleDoc.id;
-
                 setState(() {
-                  mapMonitorData[docId]
-                  ?[SettingMonName] = value;
-                  _saveCurrentMonitor();
+                  monitor.monitorName = value;
+                  _saveMonitor(monitor);
                 });
               });
             },
 
             // Monitor ID
-            monId: monitor[SettingMonID],
             onChangedMonId: (value){
               setState(() {
-                final vehicleDoc = lstMonitorData[_tabController!.index];
-                final docId = vehicleDoc.id;
-
-                setState(() {
-                  mapMonitorData[docId]
-                  ?[SettingMonID] = value;
-                  _saveCurrentMonitor();
-                });
+                monitor.monitorId = value;
+                _saveMonitor(monitor);
               });
-            },
+          },
 
             // Ticker per Meter
-            ticksPerM: monitor[SettingMonTicksPerM].toString(),
             onChangedTicksPerM: (value){
               setState(() {
-                final vehicleDoc = lstMonitorData[_tabController!.index];
-                final docId = vehicleDoc.id;
-
-                setState(() {
-                  mapMonitorData[docId]
-                  ?[SettingMonTicksPerM] = value;
-                  _saveCurrentMonitor();
-                });
+                monitor.ticksPerM = double.parse(value);
+                _saveMonitor(monitor);
               });
             },
 
             // Scan Monitor
             onTapScan: (){
-              _scanMonitor(ip)
+              if(settingService.fireSettings!.connectedDeviceIp.isEmpty){
+                MyAlertDialog(context, "Connection", "No IP Address found. Select Base Station, then connect");
+              }
+              else{
+                scanBusy = true;
+                _scanMonitor(settingService.fireSettings!.connectedDeviceIp);
+                MyGlobalSnackBar.show("Scanning for monitors: " + settingService.fireSettings!.connectedDeviceIp);
+              }
             },
           );
 
-          default:
+        default:
           return Center(
             child: Text("Unknown Selection",
-              style:TextStyle(color: Colors.white)
+                style:TextStyle(color: Colors.white)
             ),
           );
       }
     } catch (e){
       return MyProgressCircle();
     }
-
   }
+
+  @override
+  Widget build(BuildContext context) {
+
+    return Consumer2<MonitorService, SettingsService>(
+      builder: (context, _monitor, _settings, _){
+
+        if (_monitor.lstMonitors.isEmpty) {
+          return Scaffold(
+            appBar: AppBar(
+              backgroundColor: APP_BAR_COLOR,
+              foregroundColor: Colors.white,
+              title: MyAppbarTitle('Monitors'),
+            ),
+            bottomNavigationBar: BottomAppBar(
+              color: APP_BACKGROUND_COLOR,
+              shape: const CircularNotchedRectangle(), // optional if using FAB
+              notchMargin: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 1),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Center(
+                        child: MyIcon(
+                          text: "Add",
+                          icon: Icons.add,
+                          iconColor: Colors.grey,
+                          textColor: Colors.white,
+                          iconSize: 25,
+                          onTap: () {
+                            _addMonitor();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            body: Center(
+              child: Text("No Monitors Found"),
+            ),
+          );
+        }
+
+        if (_monitor.isLoading) {
+          return MyProgressCircle();
+        }
+
+        _tabController ??= TabController(length: _monitor.lstMonitors.length, vsync: this);
+        if (_tabController!.length != _monitor.lstMonitors.length) {
+          _tabController = TabController(length: _monitor.lstMonitors.length, vsync: this);
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            backgroundColor: APP_BAR_COLOR,
+            foregroundColor: Colors.white,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Montors' ,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.normal,
+                    fontFamily: 'Poppins',
+                    color: Colors.white,
+                  ),
+                ),
+
+                Text(
+                  _settings.isBaseStationConnected != true
+                      ? "No Connection"
+                      : _settings.fireSettings == null
+                      ? "Loading ..."
+                      : _settings.fireSettings!.connectedDevice,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.blueGrey,
+                  ),
+                ),
+                // },
+                //),
+              ],
+            ),
+            bottom: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              indicatorColor: Colors.blueAccent,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.grey,
+              tabs: _monitor.lstMonitors
+                  .map((doc) => Tab(text: doc.monitorName ?? "New Item"))
+                  .toList(),
+            ),
+          ),
+          bottomNavigationBar: BottomNavigationBar(
+              currentIndex: _selectedIndex,
+              backgroundColor: APP_BAR_COLOR,
+              unselectedItemColor: Colors.grey,
+              selectedItemColor: Colors.grey,
+              onTap: (index) {
+                if (index == 1 && _monitor.lstMonitors.isEmpty) return;
+                setState(() => _selectedIndex = index);
+                if(index == 0)_addMonitor();
+                if(index == 1)_deleteMonitorDialog();
+              },
+              items: [
+                // Add Button
+                BottomNavigationBarItem(
+                    icon: Icon(Icons.add),
+                    label: 'Add',
+                    backgroundColor: Colors.grey
+                ),
+
+                // Delete Button
+                if(_monitor.lstMonitors.isNotEmpty)
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.delete_forever),
+                    label: 'Delete',
+                    backgroundColor: Colors.grey,
+                  ),
+              ]
+          ),
+
+          body: Container(
+            color: APP_BACKGROUND_COLOR,
+            child: TabBarView(
+              controller: _tabController,
+              children: _monitor.lstMonitors.map((monitor) {
+                final _docId = monitor.docId;
+                return FutureBuilder<ImageProvider<Object>>(
+                    future: _getMonitorImageProvider(context, _docId, monitor),
+                    builder: (context, imgSnapshot) {
+
+                      if (imgSnapshot.connectionState == ConnectionState.waiting) {
+                        return MyProgressCircle();
+                      }
+
+                      if (imgSnapshot.hasError) {
+                        return const Center(child: Icon(Icons.error));
+                      }
+
+                      final ImageProvider<Object> imageProvider =
+                          imgSnapshot.data ?? const AssetImage('assets/noImage.jpg');
+
+                      return ListView(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 20, horizontal: 0),
+                        children: [
+
+                          // Picture header Container
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12.0, vertical: 8.0),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                border: Border.all(
+                                    color: Colors.transparent, width: 1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Stack(
+                                  children: [
+                                    // Vehicle Picture
+                                    Center(
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4), // border thickness
+                                        decoration: BoxDecoration(
+                                          color:
+                                          Colors.blue, // border color
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: _isUploading
+
+                                        // Uploading
+                                            ? CircleAvatar(
+                                          radius: 70,
+                                          backgroundColor:
+                                          Colors.grey.shade200,
+                                          child: Center(
+                                            child: Text('Uploading... ${(100 * _uploadProgress).toStringAsFixed(0)}%'),
+                                          ),
+                                        )
+
+                                        // Load Picture
+                                            : CircleAvatar(
+                                          radius: 70,
+                                          backgroundColor:   Colors.grey.shade200,
+                                          backgroundImage:   imageProvider,
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Floating circular buttons on top-right
+                                    Positioned(
+                                      top: 1,
+                                      bottom: 1,
+                                      right: 8,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                        CrossAxisAlignment.end,
+                                        children: [
+
+                                          // Load Image
+                                          MyCircleIconButton(
+                                            icon: Icons.photo_camera,
+                                            onPressed: () =>
+                                                _pickAndUploadImage(
+                                                    source:
+                                                    ImageSource.camera),
+                                          ),
+
+                                          const SizedBox(height: 5),
+
+                                          // Take Photo
+                                          MyCircleIconButton(
+                                            icon: Icons.photo_library,
+                                            onPressed: () =>
+                                                _pickAndUploadImage(
+                                                    source: ImageSource
+                                                        .gallery),
+                                          ),
+
+                                          const SizedBox(height: 5),
+
+                                          // Delete Pic
+                                          MyCircleIconButton(
+                                            icon: Icons.delete,
+                                            onPressed: () => {
+                                              if(monitor.image != '' ){
+                                                MyQuestionAlertBox(
+                                                    context: context,
+                                                    message: 'Delete Current Picture?',
+                                                    onPress:(){
+                                                      setState(() {
+                                                        monitor.image = '';
+                                                        _saveMonitor(monitor);
+                                                      });
+                                                    }
+                                                )
+                                              }
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          SizedBox(height: 5),
+
+                          // Progress Bar
+                          _isUploading
+                              ? Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 100),
+                            child: LinearProgressIndicator(
+                              value: _uploadProgress,
+                              minHeight: 6,
+                              valueColor:
+                              const AlwaysStoppedAnimation<Color>(
+                                  Colors.blue),
+                            ),
+                          )
+                              : SizedBox(height: 5),
+
+                          // Monitor Type
+                          Padding(
+                              padding:
+                              const EdgeInsets.fromLTRB(10, 0, 10, 20),
+                              child: MyDropdown(
+                                onChange: (value) {
+                                  setState(() {
+                                    monitor.monitorType = value;
+                                    _saveMonitor(monitor);
+                                  });
+                                },
+                                value: monitor.monitorType!,
+                              )
+                          ),
+
+                          //--------------------------------------------------------------
+                          // Monitor Types
+                          //--------------------------------------------------------------
+                          _buildbody(monitor)
+
+                        ],
+                      );
+                      // }
+                      //);
+                    });
+              },
+              ).toList(),
+            ),
+          ),
+        );
+
+      });
+
+    }
 }

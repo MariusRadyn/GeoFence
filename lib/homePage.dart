@@ -19,11 +19,12 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  late SettingsService settings;
+
   final TextEditingController _pwController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController2 = TextEditingController();
   final TextEditingController _userController = TextEditingController();
-
 
   @override
   void initState() {
@@ -34,6 +35,12 @@ class _HomePageState extends State<HomePage> {
         UserDataService().userdata!.isLoggedIn = true;
       });
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    settings = context.watch<SettingsService>();
   }
 
   @override
@@ -501,11 +508,10 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final userDataService = context.watch<UserDataService>();
-    final settingsService = context.watch<SettingsService>();
 
     final isLoading =
         userDataService.userdata == null ||
-            (settingsService.isLoading && userDataService.isLoading);
+            (settings.isLoading && userDataService.isLoading);
 
     return Scaffold(
       appBar: AppBar(
@@ -520,15 +526,21 @@ class _HomePageState extends State<HomePage> {
                 fontFamily: 'Poppins',
                 color: Colors.white,
               ),
-            ),Text( settingsService.settings?.connectedDevice.isEmpty ?? true
-                ? "No Connection"
-                : settingsService.settings!.connectedDevice,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
-                fontFamily: 'Poppins',
-                color: Colors.blueGrey,
-              ),
+            ), Consumer<SettingsService>(
+              builder: (_, _settings, __) {
+                return
+                Text(
+                  _settings.isBaseStationConnected != true
+                      ? "No Connection"
+                      : _settings.fireSettings == null
+                      ? "Loading ..."
+                      : _settings.fireSettings!.connectedDevice,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.blueGrey,
+                  ),
+                );
+              },
             ),
           ],
         ),

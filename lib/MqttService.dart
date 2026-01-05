@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:geofence/utils.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
+import 'utils.dart';
 
 Timer? _reconnectTimer;
 
@@ -11,6 +12,8 @@ class MqttService {
   final int port;
   late String _clientId;
   final String mqttPin;
+  bool isConnected = false;
+  bool autoReconnect = false;
 
   late MqttServerClient client;
   final Map<String, List<void Function(String)>> _topicCallbacks = {};
@@ -21,6 +24,8 @@ class MqttService {
     this.ipAdr = "",
     this.port = 1883,
     this.mqttPin = "",
+    this.isConnected = false,
+    this.autoReconnect = false
   }){}
 
   Future<void> init() async {
@@ -32,10 +37,10 @@ class MqttService {
       ..keepAlivePeriod = 20
       ..onConnected = _onConnected
       ..onDisconnected = _onDisconnected
+      ..onAutoReconnected = _onAutoReconnected
+      ..onAutoReconnect = _onAutoReconnect
       ..onSubscribed = (t) => print("Subscribed to $t");
 
-    client.onAutoReconnect = _onAutoReconnect;
-    client.onAutoReconnected = _onAutoReconnected;
     client.setProtocolV311();
 
     client.connectTimeoutPeriod = 4000;
@@ -48,12 +53,14 @@ class MqttService {
   // CALLBACKS
   // -----------------------------------------------------------
   void _onConnected() {
+    isConnected = true;
     print("MQTT CONNECTED");
     _reconnectTimer?.cancel(); // stop reconnection attempts
   }
   void _onDisconnected() {
+    isConnected = false;
     print("MQTT DISCONNECTED");
-    _scheduleReconnect(); // auto schedule reconnect manually
+    if(autoReconnect) _scheduleReconnect(); // auto schedule reconnect manually
   }
   void _onAutoReconnect() {
     print("Auto-reconnecting…");
@@ -72,10 +79,10 @@ class MqttService {
     }
 
     // Store callback
-    _topicCallbacks.putIfAbsent(topic, () => []);
-    _topicCallbacks[topic]!.add(callback);
+    _topicCallbacks.putIfAbsent(_topic, () => []);
+    _topicCallbacks[_topic]!.add(callback);
 
-    print("Callback registered for topic: $topic");
+    print("Callback registered for topic: $_topic");
   }
 
   // -----------------------------------------------------------
@@ -112,10 +119,14 @@ class MqttService {
         }
       });
     }
-  void tx(String msg, String topic) {
+  void tx(String cmd,String msg, String topic) {
+    //String _topic = topic + "/" + _clientId;
+
     final payload = jsonEncode({
-      "clientId": _clientId,
-      "data": msg
+      MQTT_JSON_DEVICE_ID: _clientId,
+      MQTT_JSON_PAYLOAD: msg,
+      MQTT_JSON_CMD: cmd,
+      MQTT_JSON_TOPIC: topic
     });
 
     final builder = MqttClientPayloadBuilder();

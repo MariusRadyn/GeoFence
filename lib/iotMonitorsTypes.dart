@@ -3,29 +3,22 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/utils.dart';
+import 'package:provider/provider.dart';
 
 // Vehicle
 class IotVehicleType extends StatefulWidget {
-  final Map<String, Map<String, dynamic>> mapMonitorData;
-  final DocumentSnapshot<Map<String, dynamic>> doc;
-  final String monitorName;
+  final MonitorData monitorData;
   final Function(String) onChangedVehicleName;
-  final String monitorFuelConsumption;
   final Function(String) onChangedFuelConsumption;
-  final String monitorReg;
   final Function(String) onChangedReg;
   final Function(BluetoothDevice?) onChangedBluetooth;
   final List<BluetoothDevice> lstPairedDevices;
 
   IotVehicleType({
     super.key,
-    required this.mapMonitorData,
-    required this.doc,
-    required this.monitorName,
+    required this.monitorData,
     required this.onChangedVehicleName,
-    required this.monitorFuelConsumption,
     required this.onChangedFuelConsumption,
-    required this.monitorReg,
     required this.onChangedReg,
     required this.lstPairedDevices,
     required this.onChangedBluetooth
@@ -54,7 +47,7 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
                 child: MyTextFormField(
                   backgroundColor: APP_BACKGROUND_COLOR,
                   foregroundColor: Colors.white,
-                  controller: TextEditingController(text: widget.monitorName),
+                  controller: TextEditingController(text: widget.monitorData.monitorName),
                   hintText: "Enter value here",
                   labelText: "Vehicle Name",
                   onFieldSubmitted: widget.onChangedVehicleName,
@@ -67,7 +60,7 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
                 child: MyTextFormField(
                   backgroundColor: APP_BACKGROUND_COLOR,
                   foregroundColor: Colors.white,
-                  controller: TextEditingController(text:  widget.monitorFuelConsumption),
+                  controller: TextEditingController(text:  widget.monitorData.fuelConsumption.toString()),
                   hintText: "Enter value here",
                   labelText: "Consumption",
                   suffix: "l/100Km",
@@ -82,7 +75,7 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
                 child: MyTextFormField(
                   backgroundColor: APP_BACKGROUND_COLOR,
                   foregroundColor: Colors.white,
-                  controller: TextEditingController(text: widget.monitorReg),
+                  controller: TextEditingController(text: widget.monitorData.reg),
                   hintText: "Enter value here",
                   labelText: "Registration Number",
                   onFieldSubmitted: widget.onChangedReg,
@@ -148,13 +141,10 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
             data: Theme.of(context).copyWith(canvasColor: APP_TILE_COLOR),
             child: DropdownButtonFormField<BluetoothDevice>(
               value: (() {
-                final docMap = widget.doc.data() ?? {};
-                String? savedMac = docMap[SettingServerBlueMac] as String?;
-                if (savedMac == null) return null;
 
                 // Find the matching paired device
                 return widget.lstPairedDevices.firstWhereOrNull(
-                      (d) => d.remoteId.toString() == savedMac,
+                      (d) => d.remoteId.toString() == widget.monitorData.bluetoothMac,
                 );
               })(),
 
@@ -210,18 +200,6 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
                 );
               }).toList(),
               onChanged: widget.onChangedBluetooth,
-              // onChanged: (BluetoothDevice? device) {
-              //   setState(() {
-              //     final vehicleDoc = lstMonitorData[_tabController!.index];
-              //     final docId = vehicleDoc.id;
-              //
-              //     setState(() {
-              //       mapMonitorData[docId]?[SettingMonitorBlueDeviceName] = device?.platformName;
-              //       mapMonitorData[docId]?[SettingMonitorBlueMac] = device?.remoteId.toString();
-              //       _saveCurrentMonitor();
-              //     });
-              //   });
-              // },
               isExpanded: true,
             ),
           ),
@@ -234,30 +212,79 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
 
 // Wheel
 class IotDistanceWheelType extends StatefulWidget {
-  final String name;
+  final MonitorData monitorData;
   final Function(String) onChangedName;
-  final String ticksPerM;
   final Function(String) onChangedTicksPerM;
-  final String monId;
   final Function(String) onChangedMonId;
   final Function() onTapScan;
 
   const IotDistanceWheelType({
     super.key,
-    required this.name,
+    required this.monitorData,
     required this.onChangedName,
-    this.ticksPerM = '',
     required this.onChangedTicksPerM,
-    this.monId = '',
     required this.onChangedMonId,
     required this.onTapScan
-
   });
 
   @override
   State<IotDistanceWheelType> createState() => _IotDistanceWheelTypeState();
 }
 class _IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
+  late TextEditingController _controllerName;
+  late TextEditingController _controllerId;
+  late TextEditingController _controllerTicks;
+  late TextEditingController _controllerDistance;
+  late SettingsService settingService;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllerId = TextEditingController(text: widget.monitorData.monitorId);
+    _controllerName = TextEditingController(text: widget.monitorData.monitorName);
+    _controllerTicks = TextEditingController(text: widget.monitorData.ticksPerM.toString());
+    _controllerDistance = TextEditingController(text: widget.monitorData.wheelDistance.toString());
+
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    settingService = context.read<SettingsService>();
+  }
+
+  @override
+  void didUpdateWidget(covariant IotDistanceWheelType oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Update text only if monitorId changes externally
+    if (oldWidget.monitorData.monitorId != widget.monitorData.monitorId) {
+      _controllerId.text = widget.monitorData.monitorId;
+    }
+
+    if (oldWidget.monitorData.monitorName != widget.monitorData.monitorName) {
+      _controllerName.text = widget.monitorData.monitorName;
+    }
+
+    if (oldWidget.monitorData.ticksPerM != widget.monitorData.ticksPerM) {
+      _controllerTicks.text = widget.monitorData.ticksPerM.toString();
+    }
+
+    if (oldWidget.monitorData.wheelDistance != widget.monitorData.wheelDistance) {
+      _controllerDistance.text = widget.monitorData.wheelDistance.toString();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controllerId.dispose();
+    _controllerDistance.dispose();
+    _controllerName.dispose();
+    _controllerTicks.dispose();
+    super.dispose();
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -270,7 +297,7 @@ class _IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
           child: MyTextFormField(
             backgroundColor: APP_BACKGROUND_COLOR,
             foregroundColor: Colors.white,
-            controller: TextEditingController(text: widget.name),
+            controller: _controllerName,
             hintText: "Enter value here",
             labelText: "Wheel Name",
             onFieldSubmitted: widget.onChangedName,
@@ -279,17 +306,49 @@ class _IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
 
         SizedBox(height: 5),
 
-        // ID
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          child: MyTextFormField(
-            backgroundColor: APP_BACKGROUND_COLOR,
-            foregroundColor: Colors.white,
-            controller: TextEditingController(text: widget.monId),
-            hintText: "Select Monitor",
-            labelText: "Monitor ID",
-            onFieldSubmitted: widget.onChangedMonId,
-          ),
+        // ID + Scan Button
+        Row(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 15),
+                child: MyTextFormField(
+                  backgroundColor: APP_BACKGROUND_COLOR,
+                  foregroundColor: Colors.white,
+                  controller: _controllerId,
+                  hintText: "Select Monitor",
+                  labelText: "Monitor ID",
+                  onFieldSubmitted: widget.onChangedMonId,
+                ),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: InkWell(
+                  onTap: widget.onTapScan,
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.connected_tv,
+                        size: 30,
+                        color: settingService.isBaseStationConnected
+                            ? Colors.lightBlueAccent
+                            : Colors.grey ,
+                      ),
+                      SizedBox(width: 10),
+                      Text("Scan",
+                        style: TextStyle(
+                            color: settingService.isBaseStationConnected
+                              ? Colors.white
+                              : Colors.grey
+                        ),
+                      )
+                    ],
+                  )
+              ),
+            ),
+          ],
         ),
 
         SizedBox(height: 5),
@@ -300,39 +359,78 @@ class _IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
           child: MyTextFormField(
             backgroundColor: APP_BACKGROUND_COLOR,
             foregroundColor: Colors.white,
-            controller: TextEditingController(text: widget.ticksPerM.toString()),
+            controller: _controllerTicks,
             hintText: "Enter value here",
             labelText: "Ticks per Meter",
             onFieldSubmitted: widget.onChangedTicksPerM,
           ),
         ),
 
-        SizedBox(height: 10),
+        SizedBox(height: 30),
 
+        // Go Live + Connect Button
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Row(
             children: [
+              // Debug Header
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(15,10,15,10),
+                  child: MyTextHeader(
+                      text: "Go Live",
+                      color:widget.monitorData.isConnected
+                          ? Colors.white
+                          : Colors.grey,
+                      linecolor: widget.monitorData.isConnected
+                        ? Colors.blue
+                        : Colors.grey
+                  ),
+                ),
+              ),
+
+              SizedBox(width: 15),
+
+              // Connect Button
               InkWell(
                   onTap: widget.onTapScan,
-                  child: Row(children: [
-                    Icon(
-                      Icons.connected_tv,
-                      size: 50,
-                      color: Colors.lightBlueAccent ,
-                    ),
-                    SizedBox(width: 10),
-                    Text("Scan Monitor",
-                      style: TextStyle(color: Colors.white),
-                    )
-                  ], )
-                //icon: Icon( Icons.connected_tv),
-                //color: Colors.lightBlueAccent,
-                //iconSize: 50,
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.online_prediction_sharp,
+                        size: 30,
+                        color: settingService.isBaseStationConnected
+                          ? widget.monitorData.isConnected
+                            ? Colors.greenAccent
+                            : Colors.lightBlueAccent
+                          : Colors.grey
+                      ),
+                      SizedBox(width: 10),
+                      Text("Connect",
+                        style: TextStyle(
+                            color: settingService.isBaseStationConnected
+                              ? Colors.white
+                              : Colors.grey
+                        ),
+                      )
+                    ],
+                  )
               ),
             ],
           ),
-        )
+        ),
+
+        // Distance
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15),
+          child: MyTextFormField(
+            backgroundColor: APP_BACKGROUND_COLOR,
+            foregroundColor: Colors.white,
+            controller: _controllerDistance,
+            hintText: "Waiting for movement",
+            labelText: "Distance",
+          ),
+        ),
       ],
     );
   }
