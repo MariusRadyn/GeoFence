@@ -217,6 +217,7 @@ class IotDistanceWheelType extends StatefulWidget {
   final Function(String) onChangedTicksPerM;
   final Function(String) onChangedMonId;
   final Function() onTapScan;
+  final Function() onTapConnect;
 
   const IotDistanceWheelType({
     super.key,
@@ -224,27 +225,30 @@ class IotDistanceWheelType extends StatefulWidget {
     required this.onChangedName,
     required this.onChangedTicksPerM,
     required this.onChangedMonId,
-    required this.onTapScan
+    required this.onTapScan,
+    required this.onTapConnect,
   });
 
   @override
-  State<IotDistanceWheelType> createState() => _IotDistanceWheelTypeState();
+  State<IotDistanceWheelType> createState() => IotDistanceWheelTypeState();
 }
-class _IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
-  late TextEditingController _controllerName;
-  late TextEditingController _controllerId;
-  late TextEditingController _controllerTicks;
-  late TextEditingController _controllerDistance;
+class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   late SettingsService settingService;
+  late final TextEditingController _controllerName;
+  late final TextEditingController _controllerId;
+  late final TextEditingController _controllerTicks;
+  late final TextEditingController _controllerDistance;
 
   @override
   void initState() {
     super.initState();
-    _controllerId = TextEditingController(text: widget.monitorData.monitorId);
-    _controllerName = TextEditingController(text: widget.monitorData.monitorName);
-    _controllerTicks = TextEditingController(text: widget.monitorData.ticksPerM.toString());
-    _controllerDistance = TextEditingController(text: widget.monitorData.wheelDistance.toString());
+     _controllerId = TextEditingController(text: widget.monitorData.monitorId);
+     _controllerName = TextEditingController(text: widget.monitorData.monitorName);
+     _controllerTicks = TextEditingController(text: widget.monitorData.ticksPerM.toString());
+     _controllerDistance = TextEditingController(text: widget.monitorData.wheelDistance.toString());
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+    });
   }
 
   @override
@@ -256,23 +260,6 @@ class _IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   @override
   void didUpdateWidget(covariant IotDistanceWheelType oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    // Update text only if monitorId changes externally
-    if (oldWidget.monitorData.monitorId != widget.monitorData.monitorId) {
-      _controllerId.text = widget.monitorData.monitorId;
-    }
-
-    if (oldWidget.monitorData.monitorName != widget.monitorData.monitorName) {
-      _controllerName.text = widget.monitorData.monitorName;
-    }
-
-    if (oldWidget.monitorData.ticksPerM != widget.monitorData.ticksPerM) {
-      _controllerTicks.text = widget.monitorData.ticksPerM.toString();
-    }
-
-    if (oldWidget.monitorData.wheelDistance != widget.monitorData.wheelDistance) {
-      _controllerDistance.text = widget.monitorData.wheelDistance.toString();
-    }
   }
 
   @override
@@ -284,6 +271,23 @@ class _IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
     super.dispose();
   }
 
+  // Public methods for parent to update text Controllers
+  void updateDistance(double value) {
+    if (!mounted) return;
+    _controllerDistance.text = value.toStringAsFixed(2);
+  }
+  void updateTicks(double value) {
+    if (!mounted) return;
+    _controllerTicks.text = value.toStringAsFixed(2);
+  }
+  void updateID(String value) {
+    if (!mounted) return;
+    _controllerId.text = value;
+  }
+  void updateName(String value) {
+    if (!mounted) return;
+    _controllerName.text = value;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -368,7 +372,7 @@ class _IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
 
         SizedBox(height: 30),
 
-        // Go Live + Connect Button
+        // Connect to iOT  + Connect Button
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Row(
@@ -378,11 +382,11 @@ class _IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(15,10,15,10),
                   child: MyTextHeader(
-                      text: "Go Live",
-                      color:widget.monitorData.isConnected
+                      text: "Connect to iOT",
+                      color:widget.monitorData.isConnectedToIot
                           ? Colors.white
                           : Colors.grey,
-                      linecolor: widget.monitorData.isConnected
+                      linecolor: widget.monitorData.isConnectedToIot
                         ? Colors.blue
                         : Colors.grey
                   ),
@@ -393,14 +397,14 @@ class _IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
 
               // Connect Button
               InkWell(
-                  onTap: widget.onTapScan,
+                  onTap: widget.onTapConnect,
                   child: Column(
                     children: [
                       Icon(
                         Icons.online_prediction_sharp,
                         size: 30,
                         color: settingService.isBaseStationConnected
-                          ? widget.monitorData.isConnected
+                          ? widget.monitorData.isConnectedToIot
                             ? Colors.greenAccent
                             : Colors.lightBlueAccent
                           : Colors.grey

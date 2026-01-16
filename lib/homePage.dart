@@ -30,6 +30,8 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
 
+    mqtt_Service.init();
+
     if(UserDataService().userdata != null) {
       setState(() {
         UserDataService().userdata!.isLoggedIn = true;
@@ -613,6 +615,7 @@ class _HomePageState extends State<HomePage> {
           children: [
             const SizedBox(height: 50),
 
+            // Track Vehicle
             MyCustomTileWithPic(
               imagePath: 'assets/track.jpg',
               header: 'Track',
@@ -622,6 +625,7 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 10),
 
+            // GeoFence
             const MyCustomTileWithPic(
               imagePath: 'assets/geofence.jpg',
               header: 'GeoFence',
@@ -631,6 +635,7 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 10),
 
+            // Base Stations
             MyCustomTileWithPic(
               imagePath: 'assets/base_station.png',
               header: 'Base Stations',
@@ -640,6 +645,7 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 10),
 
+            // iOT Monitors
             const MyCustomTileWithPic(
               imagePath: 'assets/iot.png',
               header: 'iOT Monitors',

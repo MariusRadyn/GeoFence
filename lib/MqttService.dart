@@ -10,7 +10,7 @@ Timer? _reconnectTimer;
 class MqttService {
   String ipAdr;
   final int port;
-  late String _clientId;
+  late String myDeviceId;
   final String mqttPin;
   bool isConnected = false;
   bool autoReconnect = false;
@@ -26,12 +26,14 @@ class MqttService {
     this.mqttPin = "",
     this.isConnected = false,
     this.autoReconnect = false
-  }){}
+  }){
+    init();
+  }
 
   Future<void> init() async {
-    _clientId = await ClientIdManager.getClientId();
+     myDeviceId = await ClientIdManager.getClientId();
 
-    client = MqttServerClient(ipAdr, _clientId)
+    client = MqttServerClient(ipAdr, myDeviceId)
       ..port = 1883
       ..logging(on: false)
       ..keepAlivePeriod = 20
@@ -54,27 +56,27 @@ class MqttService {
   // -----------------------------------------------------------
   void _onConnected() {
     isConnected = true;
-    print("MQTT CONNECTED");
+    print("MQTT Connected");
     _reconnectTimer?.cancel(); // stop reconnection attempts
   }
   void _onDisconnected() {
     isConnected = false;
-    print("MQTT DISCONNECTED");
+    print("MQTT Disconnected");
     if(autoReconnect) _scheduleReconnect(); // auto schedule reconnect manually
   }
   void _onAutoReconnect() {
-    print("Auto-reconnecting…");
+    print("MQTT Auto-reconnecting…");
   }
   void _onAutoReconnected() {
     print("Auto-reconnected successfully");
   }
   void onMessage(String topic, void Function(String message) callback) {
     // Add subscription only once
-    String _topic = topic + "/" + _clientId;
+    String _topic = topic + "/" + myDeviceId;
 
     if (!_subscribedTopics.contains(_topic)) {
       client.subscribe(_topic, MqttQos.atLeastOnce);
-      _subscribedTopics.add(_topic); // ← set it here
+      _subscribedTopics.add(_topic);
       print("Subscribed to topic: $_topic");
     }
 
@@ -88,6 +90,9 @@ class MqttService {
   // -----------------------------------------------------------
   // Methods
   // -----------------------------------------------------------
+  void getClientId() async {
+    myDeviceId = await ClientIdManager.getClientId();
+  }
   void _scheduleReconnect() {
     if (_reconnectTimer?.isActive ?? false) return;
 
@@ -119,12 +124,12 @@ class MqttService {
         }
       });
     }
-  void tx(String cmd,String msg, String topic) {
-    //String _topic = topic + "/" + _clientId;
+  void tx(String toDeviceId, String cmd, dynamic jsonMsg, String topic) {
 
     final payload = jsonEncode({
-      MQTT_JSON_DEVICE_ID: _clientId,
-      MQTT_JSON_PAYLOAD: msg,
+      MQTT_JSON_FROM_DEVICE_ID: myDeviceId,
+      MQTT_JSON_TO_DEVICE_ID: toDeviceId,
+      MQTT_JSON_PAYLOAD: jsonMsg,
       MQTT_JSON_CMD: cmd,
       MQTT_JSON_TOPIC: topic
     });
@@ -133,7 +138,7 @@ class MqttService {
     builder.addString(payload);
 
     client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
-    print("MQTT TX: $payload $topic");
+    print("MQTT TX: $payload");
   }
   void setupMessageListener() {
     _updatesSubscription = client.updates!.listen((List<MqttReceivedMessage<MqttMessage>> messages) {
@@ -162,7 +167,7 @@ class MqttService {
   Future<bool> connect() async {
     try {
       client.connectionMessage = MqttConnectMessage()
-          .withClientIdentifier(_clientId)
+          .withClientIdentifier(myDeviceId)
           .startClean()
           .withWillTopic(MQTT_TOPIC_WILL)
           .withWillMessage('offline')
@@ -204,7 +209,7 @@ class MqttService {
   }
   void subscribe(String topic){
     //final topic = "$MQTT_TOPIC_RESPONSE/$_clientId";
-    final _topic = "$topic/$_clientId";
+    final _topic = "$topic/$myDeviceId";
     client.subscribe(_topic, MqttQos.atLeastOnce);
     print("Subscribing: $_topic");
   }

@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -20,7 +23,7 @@ bool isDebug = true;
 String debugLog = '';
 
 const String  googleAPiKey = String.fromEnvironment('MAPS_API_KEY');
-final Mqtt_Service = MqttService();
+final mqtt_Service = MqttService();
 
 // keytool -keystore C:\Users\mradyn\.android\debug.keystore -list
 // PW android
@@ -122,6 +125,11 @@ const SettingBaseBlueDeviceName = 'bluetoothDeviceName';
 const SettingBaseBlueMac = 'bluetoothMAC';
 const SettingBaseImage = 'image';
 
+//JSON Settings
+const SettingJsonMonId = "monId";
+const SettingJsonTicksPerM = "ticksPerM";
+const SettingJsonIotType = "iotType";
+
 // Clients Settings
 const SettingClientIpAdr = 'IPAdress';
 
@@ -135,11 +143,17 @@ const MQTT_TOPIC_WILL = "mqtt/will";
 //const MQTT_PIN = "12345";
 
 // MQTT Commands
-const MQTT_CMD_SCAN_MONITOR = "#REQ_MONITOR";
+const MQTT_CMD_REQ_MONITOR = "#REQ_MONITOR";
 const MQTT_CMD_FOUND_MONITOR = "#FOUND_MONITOR";
+const MQTT_CMD_CONNECT_MONITOR = "#CONNECT_MONITOR";
+const MQTT_CMD_DISCONNECT_MONITOR = "#DISCONNECT_MONITOR";
+const MQTT_CMD_ACK = "#ACK";
+const MQTT_CMD_MONITOR_DATA = "#MONITOR_DATA";
+const MQTT_JSON_WHEEL_DISTANCE = "wheel_distance";
 
 // MQTT Payload
-const MQTT_JSON_DEVICE_ID = "device_id";
+const MQTT_JSON_FROM_DEVICE_ID = "from_device_id";
+const MQTT_JSON_TO_DEVICE_ID = "to_device_id";
 const MQTT_JSON_TOPIC = "topic";
 const MQTT_JSON_PAYLOAD = "payload";
 const MQTT_JSON_CMD = "command";
@@ -1582,6 +1596,37 @@ class MyDropdown extends StatelessWidget {
   }
 }
 
+Future<bool> _isWifiConnected(String ip, int port) async {
+  try {
+    final socket = await Socket.connect(ip, port, timeout: Duration(seconds: 2));
+    socket.destroy();
+    return true;   // Connected!
+  } catch (e) {
+    return false;  // Cannot reach Pi
+  }
+}
+Future<bool> _mqttConnect(String ip) async {
+  if (!await _isWifiConnected(ip, 1883)) {
+    print("Wifi Fail");
+    return false;
+  }
+
+  mqtt_Service.ipAdr = ip;
+  await mqtt_Service.init();
+
+  if (!await mqtt_Service.connect()) {
+    MyGlobalSnackBar.show("MQTT Connection FAILED");
+    return false;
+  }
+
+  MyGlobalSnackBar.show("Connected: $ip");
+  return true;
+}
+Future<void> _mqttDisconnect()async{
+  mqtt_Service.disconnect();
+  MyGlobalSnackBar.show("Disconnected");
+}
+
 //---------------------------------------------------
 // Services
 //---------------------------------------------------
@@ -1813,14 +1858,15 @@ class SettingsService extends ChangeNotifier {
   FireSettings? get fireSettings => _settings;
 
   bool isLoading = false;
+  bool isConnecting = false;
   bool isBaseStationConnected = false;
-  //String connectedBaseStationName = "";
-  //String connectedBaseStationIP = "";
   int monitorWheelDistance = 0;
   bool monitorWheelReset = false;
   bool monitorWheelSignal = false;
+  String? lastConnectionError = "";
 
   final _db = FirebaseFirestore.instance;
+
 
   Future<void> load() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -1896,22 +1942,43 @@ class SettingsService extends ChangeNotifier {
 
   void notify() => notifyListeners();
 
+  Future<bool> mqttConnect(String ip) async {
+    if (isConnecting) return true;
+    if (isBaseStationConnected) return true;
+
+    isConnecting = true;
+    notifyListeners();
+
+    try {
+      if(await _mqttConnect(ip)){
+        isBaseStationConnected = true;
+        lastConnectionError = '';
+      }
+    } catch (e) {
+      lastConnectionError = e.toString();
+    } finally {
+      isConnecting = false;
+      notifyListeners();
+    }
+
+    if(!isBaseStationConnected){
+      return false;
+    }
+    else {
+      return true;
+    }
+  }
+  Future<void> mqttDisconnect()async{
+    await _mqttDisconnect();
+    isBaseStationConnected = false;
+    notifyListeners();
+  }
+
   void update({
-    //String? connectedBaseStationName,
-    //String? connectedBaseStationIP,
     bool? isBaseStationConnected,
-    //String? monitorName
   }) {
     bool changed = false;
 
-    // if (connectedBaseStationName != null && connectedBaseStationName != this.connectedBaseStationName) {
-    //   this.connectedBaseStationName = connectedBaseStationName;
-    //   changed = true;
-    // }
-    // if (connectedBaseStationIP != null && connectedBaseStationIP != this.connectedBaseStationIP) {
-    //   this.connectedBaseStationIP = connectedBaseStationIP;
-    //   changed = true;
-    // }
     if (isBaseStationConnected != null && isBaseStationConnected != this.isBaseStationConnected) {
       this.isBaseStationConnected = isBaseStationConnected;
       changed = true;
@@ -1970,7 +2037,8 @@ class MonitorData {
 
   // Local-only (NOT saved)
   bool isLoading;
-  bool isConnected;
+  bool isConnectedToIot;
+  bool isConnectingToIot;
   double wheelDistance;
   bool wheelSignal;
   String docId;
@@ -1990,7 +2058,8 @@ class MonitorData {
 
     // Local
     this.isLoading = false,
-    this.isConnected = false,
+    this.isConnectedToIot = false,
+    this.isConnectingToIot = false,
     this.wheelDistance = 0,
     this.wheelSignal = false,
     this.docId = ""
@@ -2063,6 +2132,7 @@ class MonitorService extends ChangeNotifier {
     }
   }
 
+  void notify() => notifyListeners();
   void setMonitors(List<MonitorData> list) {
     _monitors
       ..clear()
@@ -2084,9 +2154,14 @@ class MonitorService extends ChangeNotifier {
   }
 
   // Local-only updates
-  void setConnected(String id, bool value) {
+  void setConnectedToIot(String id, bool value) {
     final mon = _monitors.firstWhere((m) => m.monitorId == id);
-    mon.isConnected = value;
+    mon.isConnectedToIot = value;
+    notifyListeners();
+  }
+  void setConnectingToIot(String id, bool value) {
+    final mon = _monitors.firstWhere((m) => m.monitorId == id);
+    mon.isConnectingToIot = value;
     notifyListeners();
   }
 }
@@ -2155,16 +2230,6 @@ class BaseStationService extends ChangeNotifier {
   List<BaseStationData> get lstBaseStations => List.unmodifiable(_base);
   BaseStationData? get selected => _selected;
 
-  BaseStationService() {
-    debugPrint('BaseStationService CREATED  $hashCode');
-  }
-
-  @override
-  void dispose() {
-    debugPrint('BaseStationService DISPOSED $hashCode');
-    super.dispose();
-  }
-
   Future<void> load() async {
     isLoading = true;
 
@@ -2199,27 +2264,28 @@ class BaseStationService extends ChangeNotifier {
       ..addAll(list);
     notifyListeners();
   }
-
-  void addBaseStations(BaseStationData mon) {
-    _base.add(mon);
+  void addBaseStations(BaseStationData newBase) {
+    _base.add(newBase);
     notifyListeners();
   }
-
   void removeBaseStations(String id) {
     _base.removeWhere((m) => m.docId == id);
     if (_selected?.docId == id) _selected = null;
     notifyListeners();
   }
-
   void selectMonitor(String id) {
     _selected = _base.firstWhere((m) => m.docId == id);
     notifyListeners();
   }
+  void setConnectedByIp(String ip, bool value) {
+    final base = lstBaseStations.firstWhereOrNull((b) => b.ipAddress == ip);
+    if (base == null) return;
 
-  // Local-only updates
-  void setConnected(String id, bool value) {
-    final mon = _base.firstWhere((m) => m.docId == id);
-    mon.isConnected = value;
+    base.isConnected = value;
+    notifyListeners();
+  }
+  void setIpAddress(BaseStationData base, String value) {
+    base.ipAddress = value;
     notifyListeners();
   }
 }

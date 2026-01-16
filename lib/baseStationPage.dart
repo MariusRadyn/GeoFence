@@ -40,8 +40,11 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   TabController? _tabController;
   int _selectedIndex = 0;
 
-  final TextEditingController _logPointPerMeterController = TextEditingController();
-  final TextEditingController _rebateValueController = TextEditingController();
+  final Map<String, TextEditingController> _controllersName = {};
+  final Map<String, TextEditingController> _controllersDesc = {};
+  final Map<String, TextEditingController> _controllersBluetooth = {};
+  final Map<String, TextEditingController> _controllersIpAddress = {};
+
   final FlutterTts _flutterTts = FlutterTts();
   String? bluetoothValue;
   bool isScanning = false;
@@ -64,35 +67,27 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
     _getBondedDevices();
     _initTts();
-    //_fetchBaseStations();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
       settingsService = context.read<SettingsService>();
       baseService = context.read<BaseStationService>();
-
-      // if (baseService.lstBaseStations.isNotEmpty) {
-      //   _tabController = TabController(
-      //     length: baseService.lstBaseStations.length,
-      //     vsync: this,
-      //   );
-      // }
-      // setState(() {
-      //   isLoading = false;
-      // });
-
-      _logPointPerMeterController.text =
-          settingsService.fireSettings?.logPointPerMeter.toString() ?? '';
-
-      _rebateValueController.text =
-          settingsService.fireSettings?.rebateValuePerLiter.toString() ?? '';
     });
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+  }
+
+  @override
   void dispose() {
-    _logPointPerMeterController.dispose();
+    for(final c in _controllersName.values){c.dispose();}
+    for(final c in _controllersDesc.values){c.dispose();}
+    for(final c in _controllersIpAddress.values){c.dispose();}
+    for(final c in _controllersBluetooth.values){c.dispose();}
+
     _flutterTts.stop();
     _tabController?.dispose();
 
@@ -103,7 +98,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   Future<void> updateSettingFields(Map<String, dynamic> updates) async {
     await settingsService.updateFireSettingsFields(updates);
   }
-
   void getVoices() async {
     List<dynamic> voices = await _flutterTts.getVoices;
     print("Available Voices: $voices");
@@ -114,62 +108,22 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
   }
-  Future<bool> isWifiConnected(String ip, int port) async {
-    try {
-      final socket = await Socket.connect(ip, port, timeout: Duration(seconds: 2));
-      socket.destroy();
-      return true;   // Connected!
-    } catch (e) {
-      return false;  // Cannot reach Pi
-    }
-  }
-  Future<bool> mqttConnect(String ip)async{
-    if(!await isWifiConnected(ip, 1883))
-    {
-      print("Wifi Fail");
-      return false;
-    }
-
-    Mqtt_Service.ipAdr = ip;
-    await Mqtt_Service.init();
-
-    if(!await Mqtt_Service.connect()){
-      MyGlobalSnackBar.show("MQTT Connection FAILED");
-      return false;
-    }
-
-    //settingsService.update(connectedBaseStationIP: ip);
-
-    // Callback Listener
-    Mqtt_Service.setupMessageListener();
-    Mqtt_Service.onMessage(MQTT_TOPIC_TO_ANDROID, (msg) {
-      print("MQTT RX: $msg");
-    });
-
-    MyGlobalSnackBar.show("Connected: " + ip);
-    return true;
-  }
-  Future<void> mqttDisconnect()async{
-    Mqtt_Service.disconnect();
-    MyGlobalSnackBar.show("Disconnected");
-  }
-
   void _saveBase(BaseStationData base) async {
     if (_tabController == null) return;
 
-    // final uid = FirebaseAuth.instance.currentUser?.uid;
-    // if (uid == null) return;
-    //
-    // final ref = FirebaseFirestore.instance
-    //     .collection(CollectionUsers)
-    //     .doc(uid)
-    //     .collection(CollectionServers);
-    //
-    // await ref.doc(base.docId).set(
-    //   base.toMap(),
-    //   SetOptions(merge: true),              // UPDATE
-    // );
-    //
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final ref = FirebaseFirestore.instance
+        .collection(CollectionUsers)
+        .doc(uid)
+        .collection(CollectionServers);
+
+    await ref.doc(base.docId).set(
+      base.toMap(),
+      SetOptions(merge: true),              // UPDATE
+    );
+
     // await _fetchBaseStations();
     await baseService.load();
 
@@ -292,6 +246,12 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
             newIndex = _tabController!.index;
           }
           _tabController!.animateTo(newIndex);
+
+          _controllersBluetooth.remove(base.docId)?.dispose();
+          _controllersDesc.remove(base.docId)?.dispose();
+          _controllersName.remove(base.docId)?.dispose();
+          _controllersIpAddress.remove(base.docId)?.dispose();
+
         } else {
           _tabController = null;
         }
@@ -304,14 +264,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     }
   }
 
-  Future<void> _requestPermissions() async {
-    await [
-      Permission.bluetooth,
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.location,
-    ].request();
-  }
   Future<void> _getBondedDevices() async {
     try {
       List<BluetoothDevice> devices = await FlutterBluePlus.bondedDevices;
@@ -337,110 +289,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
     } catch (e) {
       print('Error getting paired devices: $e');
-    }
-  }
-  Future<void> _getPairedDevices() async {
-    try {
-      List<BluetoothDevice> devices = await FlutterBluePlus.connectedDevices;
-      setState(() {
-        lstPairedDevices = devices;
-
-        if(devices.length == 0){
-          lstPairedDevices = [
-            BluetoothDevice(remoteId: DeviceIdentifier("00:00:00:00:00:00")),
-          ];
-        }
-
-        // Debug - Set Manual List
-        if(Debug){
-          lstPairedDevices = [
-            BluetoothDevice(
-              remoteId: DeviceIdentifier("00:11:22:33:44:55"),
-            ),
-            BluetoothDevice(
-              remoteId: DeviceIdentifier("AA:BB:CC:DD:EE:FF"),
-            ),
-          ];
-        }
-      });
-    } catch (e) {
-      print('Error getting connected devices: $e');
-    }
-  }
-  void _getAvailableDevices() async {
-    lstAvailableDevices.clear();
-
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
-
-    FlutterBluePlus.scanResults.listen((results) {
-      setState(() {
-        lstAvailableDevices = results;
-      });
-    });
-  }
-  Future<void> _startScan() async {
-    if (await FlutterBluePlus.isSupported == false) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Bluetooth not supported')),
-      );
-      return;
-    }
-
-    setState(() {
-      isScanning = true;
-      lstAvailableDevices.clear();
-    });
-
-    // Listen to scan results
-    FlutterBluePlus.scanResults.listen((results) {
-      setState(() {
-        lstAvailableDevices = results;
-      });
-    });
-
-    // Start scanning
-    await FlutterBluePlus.startScan(timeout: Duration(seconds: 10));
-
-    setState(() {
-      isScanning = false;
-    });
-  }
-  Future<void> _stopScan() async {
-    await FlutterBluePlus.stopScan();
-    setState(() {
-      isScanning = false;
-    });
-  }
-  Future<void> _connectToDevice(BluetoothDevice device) async {
-    try {
-      await device.connect();
-      setState(() {
-        //pairedDevice = device;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Connected to ${device.name}')),
-      );
-
-      // Discover services after connection
-      List<BluetoothService> services = await device.discoverServices();
-      print('Discovered ${services.length} services');
-
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to connect: $e')),
-      );
-    }
-  }
-  Future<void> _disconnect() async {
-    if (pairedDevice != null) {
-      await pairedDevice!.disconnect();
-      setState(() {
-        pairedDevice = null;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Disconnected')),
-      );
     }
   }
   void _showBluetoothDevicesPopup(BaseStationData base) {
@@ -560,19 +408,63 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     print("BT Connection Not Found");
   }
 
+  // Controllers
+  void _updateTabController(int length) {
+    if (length == 0) return;
+
+    if (_tabController == null || _tabController!.length != length) {
+      final oldIndex = _tabController?.index ?? 0;
+
+      _tabController?.dispose();
+      _tabController = TabController(
+        length: length,
+        vsync: this,
+        initialIndex: oldIndex.clamp(0, length - 1),
+      );
+    }
+  }
+  TextEditingController _getControllerName(BaseStationData station) {
+    return _controllersName.putIfAbsent(
+      station.docId,
+          () => TextEditingController(text: station.baseName),
+    );
+  }
+  TextEditingController _getControllerDesc(BaseStationData station) {
+    return _controllersDesc.putIfAbsent(
+      station.docId,
+          () => TextEditingController(text: station.baseDesc),
+    );
+  }
+  TextEditingController _getControllerBluetooth(BaseStationData station) {
+    return _controllersBluetooth.putIfAbsent(
+      station.docId,
+          () => TextEditingController(text: station.bluetoothName),
+    );
+  }
+  TextEditingController _getControllerIpAdr(BaseStationData station) {
+    final controller = _controllersIpAddress.putIfAbsent(
+      station.docId,
+          () => TextEditingController(text: station.ipAddress),
+    );
+
+    if (controller.text != station.ipAddress) {
+      controller.text = station.ipAddress;
+    }
+
+    return controller;
+  }
+
   @override
   Widget build(BuildContext context){
 
-      return Consumer<BaseStationService>(
-        builder: (_ , base , __){
-          if (base.isLoading) {
+      return Consumer2<BaseStationService, SettingsService>(
+        builder: (_ , _baseService , _settingsService, __){
+          if (_baseService.isLoading) {
             return MyProgressCircle();
           }
 
-          _tabController ??= TabController(length: base.lstBaseStations.length, vsync: this);
-          if (_tabController!.length != base.lstBaseStations.length) {
-            _tabController = TabController(length: base.lstBaseStations.length, vsync: this);
-          }
+          _updateTabController(_baseService.lstBaseStations.length);
+
 
           return Scaffold(
             appBar: AppBar(
@@ -587,7 +479,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                 unselectedItemColor: Colors.grey,
                 selectedItemColor: Colors.grey,
                 onTap: (index) {
-                  if (index == 1 && base.lstBaseStations.isEmpty) return;
+                  if (index == 1 && _baseService.lstBaseStations.isEmpty) return;
                   setState(() => _selectedIndex = index);
                   if(index == 0) _addBase();
                   if(index == 1) _deleteBaseDialog();
@@ -601,7 +493,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                   ),
 
                   // Delete Button
-                  if(base.lstBaseStations.isNotEmpty)
+                  if(_baseService.lstBaseStations.isNotEmpty)
                     BottomNavigationBarItem(
                       icon: Icon(Icons.delete_forever),
                       label: 'Delete',
@@ -610,7 +502,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                 ]
             ),
 
-            body: (base.lstBaseStations.isEmpty)
+            body: (_baseService.lstBaseStations.isEmpty)
 
             // (Body) No Base Stations
                 ? Container(
@@ -631,14 +523,21 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.grey,
                   indicatorColor: Colors.blue,
-                  tabs: base.lstBaseStations
+                  tabs: _baseService.lstBaseStations
                       .map((base) => Tab(text: base.baseName))
                       .toList(),
                 ),
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
-                    children:  base.lstBaseStations.map((base)  {
+                    children:  List.generate(_baseService.lstBaseStations.length, (index){ //_baseService.lstBaseStations.map((base)  {
+                      final base = _baseService.lstBaseStations[index];
+
+                      final _controllerName = _getControllerName(base);
+                      final _controllerDesc = _getControllerDesc(base);
+                      final _controllerIPAddress = _getControllerIpAdr(base);
+                      final _controllerBluetooth = _getControllerBluetooth(base);
+
                       return SingleChildScrollView(
                         padding: const EdgeInsets.all(5),
                         child: Column(
@@ -665,7 +564,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   isReadOnly: false,
                                   backgroundColor: APP_BACKGROUND_COLOR,
                                   foregroundColor: Colors.white,
-                                  controller: TextEditingController(text: base.baseName),
+                                  controller: _controllerName,
                                   hintText: "Base Station Name",
                                   labelText: "Name",
                                   onChanged: (value) {},
@@ -684,7 +583,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                 child: MyTextFormField(
                                   backgroundColor: APP_BACKGROUND_COLOR,
                                   foregroundColor: Colors.white,
-                                  controller: TextEditingController(text: base.baseDesc),
+                                  controller: _controllerDesc,
                                   hintText: "Enter value here",
                                   labelText: "Description",
                                   onChanged: (value) {
@@ -693,6 +592,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   onFieldSubmitted: (value){
                                     setState(() {
                                       base.baseDesc = value;
+                                      _baseService.setIpAddress(base, value);
                                       _saveBase(base);
                                     });
                                   },
@@ -709,7 +609,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                         isReadOnly: true,
                                         backgroundColor: APP_BACKGROUND_COLOR,
                                         foregroundColor: Colors.white,
-                                        controller: TextEditingController(text: base.bluetoothName),
+                                        controller: _controllerBluetooth,
                                         hintText: "Bluetooth Identification",
                                         labelText: "Identification",
                                         onChanged: (value) {},
@@ -742,10 +642,10 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
                                 child: MyTextFormField(
-                                  isReadOnly: true,
+                                  isReadOnly: false,
                                   backgroundColor: APP_BACKGROUND_COLOR,
                                   foregroundColor: Colors.white,
-                                  controller: TextEditingController(text: base.ipAddress),
+                                  controller: _controllerIPAddress,
                                   hintText: "none",
                                   labelText: "IP Address",
                                   onChanged: (value) {},
@@ -821,14 +721,11 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
                                         // Connect MQTT
                                         if(base.isConnected == false){
-                                          if(await mqttConnect(ip)) {
+                                          if(await _settingsService.mqttConnect(ip)) {
 
                                             // Pass
                                             setState(() {
                                               base.isConnected = true;
-                                              settingsService.update(
-                                                isBaseStationConnected: true,
-                                              );
 
                                               settingsService.updateFireSettingsFields({
                                                 SettingConnectedDevice : base.baseName,
@@ -842,27 +739,18 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                             myMessageBox(context, "Wifi Connection FAILED");
                                             setState(() {
                                               base.isConnected = false;
-                                              settingsService.update(
-                                                //connectedBaseStationName: "",
-                                                  isBaseStationConnected: false
-                                              );
                                             });
                                             return;
                                           }
                                         }
                                         else {
                                           // Disconnect
-                                          mqttDisconnect();
+                                          _settingsService.mqttDisconnect();
 
                                           setState(() {
                                             base.isConnected = false;
-                                            settingsService.update(
-                                              isBaseStationConnected: false,
-                                            );
                                           });
-
                                         }
-
                                       },
                                       child: Row(children: [
                                         Icon(
@@ -897,3 +785,117 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   }
 }
 
+
+// Future<void> _getPairedDevices() async {
+//   try {
+//     List<BluetoothDevice> devices = await FlutterBluePlus.connectedDevices;
+//     setState(() {
+//       lstPairedDevices = devices;
+//
+//       if(devices.length == 0){
+//         lstPairedDevices = [
+//           BluetoothDevice(remoteId: DeviceIdentifier("00:00:00:00:00:00")),
+//         ];
+//       }
+//
+//       // Debug - Set Manual List
+//       if(Debug){
+//         lstPairedDevices = [
+//           BluetoothDevice(
+//             remoteId: DeviceIdentifier("00:11:22:33:44:55"),
+//           ),
+//           BluetoothDevice(
+//             remoteId: DeviceIdentifier("AA:BB:CC:DD:EE:FF"),
+//           ),
+//         ];
+//       }
+//     });
+//   } catch (e) {
+//     print('Error getting connected devices: $e');
+//   }
+// }
+// void _getAvailableDevices() async {
+//   lstAvailableDevices.clear();
+//
+//   FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+//
+//   FlutterBluePlus.scanResults.listen((results) {
+//     setState(() {
+//       lstAvailableDevices = results;
+//     });
+//   });
+// }
+// Future<void> _startScan() async {
+//   if (await FlutterBluePlus.isSupported == false) {
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       SnackBar(content: Text('Bluetooth not supported')),
+//     );
+//     return;
+//   }
+//
+//   setState(() {
+//     isScanning = true;
+//     lstAvailableDevices.clear();
+//   });
+//
+//   // Listen to scan results
+//   FlutterBluePlus.scanResults.listen((results) {
+//     setState(() {
+//       lstAvailableDevices = results;
+//     });
+//   });
+//
+//   // Start scanning
+//   await FlutterBluePlus.startScan(timeout: Duration(seconds: 10));
+//
+//   setState(() {
+//     isScanning = false;
+//   });
+// }
+// Future<void> _stopScan() async {
+//   await FlutterBluePlus.stopScan();
+//   setState(() {
+//     isScanning = false;
+//   });
+// }
+// Future<void> _connectToDevice(BluetoothDevice device) async {
+//   try {
+//     await device.connect();
+//     setState(() {
+//       //pairedDevice = device;
+//     });
+//
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       SnackBar(content: Text('Connected to ${device.name}')),
+//     );
+//
+//     // Discover services after connection
+//     List<BluetoothService> services = await device.discoverServices();
+//     print('Discovered ${services.length} services');
+//
+//   } catch (e) {
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       SnackBar(content: Text('Failed to connect: $e')),
+//     );
+//   }
+// }
+// Future<void> _disconnect() async {
+//   if (pairedDevice != null) {
+//     await pairedDevice!.disconnect();
+//     setState(() {
+//       pairedDevice = null;
+//     });
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       SnackBar(content: Text('Disconnected')),
+//     );
+//   }
+// }
+// Future<void> _requestPermissions() async {
+//   await [
+//     Permission.bluetooth,
+//     Permission.bluetoothScan,
+//     Permission.bluetoothConnect,
+//     Permission.location,
+//   ].request();
+// }
+//

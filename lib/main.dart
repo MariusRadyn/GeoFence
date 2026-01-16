@@ -27,7 +27,7 @@ Future<void> main() async {
     runApp(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (_) => SettingsService()..load()),
+          ChangeNotifierProvider(create: (context) => SettingsService()..load()),
           ChangeNotifierProvider(create: (_) => UserDataService()..load()),
           ChangeNotifierProvider(create: (_) => MonitorService()..load()),
           ChangeNotifierProvider(create: (_) => BaseStationService()..load()),

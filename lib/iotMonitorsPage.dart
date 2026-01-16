@@ -16,8 +16,6 @@ import 'package:geofence/utils.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
-import 'MqttService.dart';
-
 class IotMonitorsPage extends StatefulWidget {
   const IotMonitorsPage({super.key});
 
@@ -28,15 +26,18 @@ class IotMonitorsPage extends StatefulWidget {
 class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderStateMixin {
   late SettingsService settingService;
   late MonitorService monitorService;
+  late BaseStationService baseService;
+  TabController? _tabController;
+  late List<ScrollController> _scrollControllers;
+  late final List<GlobalKey<IotDistanceWheelTypeState>> _tabKeys;
 
+  VoidCallback? _baseListener;
   final Map<String, Future<DocumentSnapshot<Map<String, dynamic>>>> _docFutures = {};
   int _selectedIndex = 0;
   bool scanBusy = false;
-
-  bool _isLoading = true;
-  TabController? _tabController;
+  bool _hasScrolled = false;
   final ImagePicker _imagePicker = ImagePicker();
-
+  bool _listenerStarted = false;
   bool _isUploading = false;
   double _uploadProgress = 0.0;
   List<BluetoothDevice> lstPairedDevices = [
@@ -44,34 +45,40 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
 
-
   void initState() {
     super.initState();
 
     _getBondedDevices();
+    _setupListener();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      settingService = context.read<SettingsService>();
-      monitorService = context.read<MonitorService>();
+    if(!mounted) return;
 
-      _tabController = TabController(
-        length: monitorService.lstMonitors.length,
-        vsync: this,
-      );
+    settingService = context.read<SettingsService>();
+    monitorService = context.read<MonitorService>();
+    baseService = context.read<BaseStationService>();
+    _tabKeys = [];
 
-      if(settingService.fireSettings!.connectedDeviceIp.isNotEmpty && !settingService.isBaseStationConnected) {
-        mqttConnect(settingService.fireSettings!.connectedDeviceIp);
+    debugPrint("initState");
+  }
 
-        settingService.update(
-          isBaseStationConnected: true
-        );
-      }
-    });
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
   }
 
   @override
   void dispose() {
+
+    if (_baseListener != null) {
+      baseService.removeListener(_baseListener!);
+      _baseListener = null;
+    }
+
     _tabController?.dispose();
+    //controllerWheelDistance.dispose();
+    //controllerWheelTicksPerM.dispose();
+    //controllerWheelId.dispose();
+    //controllerWheelName.dispose();
     super.dispose();
   }
 
@@ -182,9 +189,6 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       );
     }
   }
-  void _editVehicle(DocumentSnapshot vehicle) {
-    _showVehicleDialog(vehicle: vehicle);
-  }
   Future<DocumentSnapshot<Map<String, dynamic>>> _getDocFuture(MonitorData monitor) {
     String? uid = FirebaseAuth.instance.currentUser?.uid;
 
@@ -243,138 +247,6 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             ],
           );
         });
-  }
-  void _showVehicleDialog({DocumentSnapshot? vehicle}) {
-    TextEditingController nameController = TextEditingController(
-        text: vehicle != null ? vehicle[SettingMonName] : '');
-
-    TextEditingController fuelController = TextEditingController(
-        text: vehicle != null
-            ? vehicle[SettingMonFuelConsumption].toString()
-            : '');
-
-    TextEditingController regController = TextEditingController(
-        text: vehicle != null ? vehicle[SettingMonReg] : '');
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: const BorderSide(
-              color: Colors.blue, // Border color
-              width: 2, // Border width
-            ),
-          ),
-          backgroundColor: APP_TILE_COLOR,
-          shadowColor: Colors.black,
-          title: Text(
-            vehicle == null ? 'Add Vehicle' : 'Edit Vehicle',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Vehicle Name
-              TextField(
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                ),
-                controller: nameController,
-                decoration: const InputDecoration(
-                    labelText: 'Vehicle Name',
-                    labelStyle: TextStyle(color: Colors.grey)),
-              ),
-
-              // Fuel Consumption
-              TextField(
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                ),
-                controller: fuelController,
-                decoration: const InputDecoration(
-                    labelText: 'Fuel Consumption (L/100km)',
-                    labelStyle: TextStyle(color: Colors.grey)),
-                keyboardType: TextInputType.number,
-              ),
-
-              // Reg Number
-              TextField(
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                ),
-                controller: regController,
-                decoration: const InputDecoration(
-                    labelText: 'Registration Number',
-                    labelStyle: TextStyle(color: Colors.grey)),
-              ),
-            ],
-          ),
-          actions: [
-            // Cancel Button
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontFamily: "Poppins",
-                  fontSize: 20,
-                ),
-              ),
-            ),
-
-            // Save Button
-            TextButton(
-              onPressed: () async {
-                User? user = FirebaseAuth.instance.currentUser;
-                if (user != null) {
-                  if (vehicle == null) {
-                    // Add new vehicle
-                    await FirebaseFirestore.instance
-                        .collection(CollectionUsers)
-                        .doc(user.uid)
-                        .collection(CollectionMonitors)
-                        .add({
-                      SettingMonName: nameController.text,
-                      SettingMonFuelConsumption:
-                          double.parse(fuelController.text),
-                      SettingMonReg: regController.text,
-                    });
-                  } else {
-                    // Update existing vehicle
-                    await FirebaseFirestore.instance
-                        .collection(CollectionUsers)
-                        .doc(user.uid)
-                        .collection(CollectionMonitors)
-                        .doc(vehicle.id)
-                        .update({
-                      SettingMonName: nameController.text,
-                      SettingMonFuelConsumption:
-                          double.parse(fuelController.text),
-                      SettingMonReg: regController.text,
-                    });
-                  }
-                  Navigator.pop(context);
-                }
-              },
-              child: Text(
-                vehicle == null ? 'Add' : 'Update',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontFamily: "Poppins",
-                  fontSize: 20,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
   }
   Future<void> _pickAndUploadImage({ImageSource? source}) async {
     if (source == null) return;
@@ -491,12 +363,6 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       return null;
     }
   }
-  Future<void> _deleteLocalVehicleImage(String vehicleId) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final path = '${directory.path}/$vehicleId.jpg';
-    final file = File(path);
-    if (await file.exists()) await file.delete();
-  }
   String getFileNameFromUrl(String? downloadUrl) {
     try {
       if (downloadUrl == null) return "";
@@ -564,14 +430,94 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       return AssetImage('assets/noImage.jpg');
     }
   }
-  Future<bool> isWifiConnected(String ip, int port) async {
-    try {
-      final socket = await Socket.connect(ip, port, timeout: Duration(seconds: 2));
-      socket.destroy();
-      return true;   // Connected!
-    } catch (e) {
-      return false;  // Cannot reach Pi
+  void _updateTabs(int length) {
+    if (length == 0) return;
+
+    if (_tabController == null || _tabController!.length != length) {
+      final oldIndex = _tabController?.index ?? 0;
+
+      _tabController?.dispose();
+      _tabController = TabController(
+        length: length,
+        vsync: this,
+        initialIndex: oldIndex.clamp(0, length - 1),
+      );
     }
+
+    if (_tabKeys.length < length){
+      final toAdd = length - _tabKeys.length;
+      _tabKeys.addAll(
+        List.generate(toAdd, (_) => GlobalKey<IotDistanceWheelTypeState>()),
+      );
+    }
+
+    _scrollControllers=List.generate(monitorService.lstMonitors.length, (_) => ScrollController());;
+
+  }
+  void _scrollToBottomOnce(ScrollController _scrollController) {
+    Future.delayed(Duration.zero, () {
+      // Callback runs after widget is built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients && _scrollController.position.hasContentDimensions) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    });
+  }
+  void _updateWheelDistance(double distance) {
+    if(_tabController == null) return;
+    if (_tabController!.index < 0 || _tabController!.index >= _tabKeys.length) return;
+
+    _tabKeys[_tabController!.index].currentState?.updateDistance(distance);
+  }
+
+  // MQTT
+  void _setupListener() {
+    // Use WidgetsBinding to safely access context after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final _settingService = context.read<SettingsService>();
+      final _baseService = context.read<BaseStationService>();
+
+      _baseListener = () async {
+        if (_baseService.isLoading) {
+          print("MQTT listener WAIT - baseService busy Loading");
+          return;
+        }
+
+        if( !_listenerStarted){
+          final ip = _settingService.fireSettings?.connectedDeviceIp;
+          if (ip == null || ip.isEmpty) return;
+
+          if(!mqtt_Service.isConnected){
+            final ok = await _settingService.mqttConnect(ip);
+            if (ok) {
+              _baseService.setConnectedByIp(ip, true);
+
+              if (!_listenerStarted && mqtt_Service.isConnected) {
+                _listenerStarted = true;
+                mqtt_Service.setupMessageListener();
+                mqtt_Service.onMessage( MQTT_TOPIC_TO_ANDROID, _onMqttMessage);
+                print("MQTT Listener Started");
+              }
+              else {
+                print("MQTT listener - already Started");
+              }
+            }
+            else{
+              return;
+            }
+          }
+        }
+      };
+
+      _baseService.addListener(_baseListener!);
+    });
   }
   Future<bool> _scanMonitor(String ip)async{
     if(settingService.isBaseStationConnected == false){
@@ -579,78 +525,124 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       return false;
     }
 
-    Mqtt_Service.onMessage(MQTT_TOPIC_TO_ANDROID, (msg) {
-      print("MQTT RX: $msg");
+    final payload = {};
 
-      Map<String, dynamic> jsonData = jsonDecode(msg);
+    if(mqtt_Service.isConnected){
+      mqtt_Service.tx("", MQTT_CMD_REQ_MONITOR, payload, MQTT_TOPIC_FROM_ANDROID);
+    }
+    return true;
+  }
+  Future<bool> _connectIot(String ip, MonitorData monitor)async{
+    if(settingService.isBaseStationConnected == false){
+      MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
+      return false;
+    }
 
-      // Scan Monitor
-      if(scanBusy){
-        scanBusy = false;
+    final payload = {
+      SettingJsonIotType : monitor.monitorType,
+      SettingJsonTicksPerM: monitor.ticksPerM
+    };
 
-        if(jsonData[MQTT_JSON_CMD] == MQTT_CMD_SCAN_MONITOR){
-          String json = jsonData[MQTT_JSON_PAYLOAD];
-          Mqtt_Service.tx(MQTT_CMD_FOUND_MONITOR,json,MQTT_TOPIC_FROM_ANDROID);
+    if(mqtt_Service.isConnected){
+      mqtt_Service.tx(monitor.monitorId, MQTT_CMD_CONNECT_MONITOR, payload ,MQTT_TOPIC_FROM_ANDROID);
+    }
+    return true;
+  }
+  Future<bool> _disconnectIot(MonitorData monitor)async{
+    if(settingService.isBaseStationConnected == false){
+      MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
+      return false;
+    }
 
-          final monitor = monitorService.lstMonitors[_tabController!.index];
-          final String monID = jsonData[MQTT_JSON_PAYLOAD];
-          final MonitorData? monitorOld = monitorService.lstMonitors.firstWhere(
-                (m) => m.monitorId == monID,
-            orElse: () => null as MonitorData,
-          );
+    if(mqtt_Service.isConnected){
+      mqtt_Service.tx(monitor.monitorId, MQTT_CMD_DISCONNECT_MONITOR, '' ,MQTT_TOPIC_FROM_ANDROID);
+    }
+    return true;
+  }
 
-          if(monitorOld != null){
-            MyQuestionAlertBox(context: context,
-                message: "$monID exists in Monitor: '${monitorOld.monitorName}'.\nDo you want to change the monitor to this one\nThe other monitor will be disconnected",
-                onPress: (){
-                  setState(() {
-                    monitor.monitorId = monID;
-                    monitorOld.monitorId = "none";
-                    _saveMonitor(monitor);
-                    _saveMonitor(monitorOld);
-                  });
-                }
-            );
-          }
-          else {
-            setState(() {
-              monitor.monitorId = monID;
-              _saveMonitor(monitor);
-            });
-            MyAlertDialog(context, "Device Found", monID);
-          }
+  void _onMqttMessage(String msg) {
+    debugPrint('MQTT RX: $msg');
+
+    final Map<String, dynamic> jsonData = jsonDecode(msg);
+    final cmd = jsonData[MQTT_JSON_CMD];
+    final fromId = jsonData[MQTT_JSON_FROM_DEVICE_ID];
+
+    // Pair - Set Device ID
+    if (cmd == MQTT_CMD_REQ_MONITOR) {
+      scanBusy = false;
+      final monitor = monitorService.lstMonitors[_tabController!.index];
+
+      MonitorData? monitorOld;
+      for (final m in monitorService.lstMonitors) {
+        if (m.monitorId == fromId) {
+          monitorOld = m;
+          break;
         }
       }
-    });
 
-    Mqtt_Service.tx(MQTT_CMD_SCAN_MONITOR,'',MQTT_TOPIC_FROM_ANDROID);
-    return true;
-  }
-  Future<bool> mqttConnect(String ip)async{
-    if(!await isWifiConnected(ip, 1883)) {
-      print("Wifi Fail");
-      return false;
+      if (monitorOld != null && monitorOld.monitorId != fromId) {
+        MyQuestionAlertBox(
+          context: context,
+          message:
+          "$fromId exists in Monitor: '${monitorOld.monitorName}'.\n"
+              "Do you want to change the monitor to this one?\n"
+              "The other monitor will be disconnected",
+          onPress: () {
+            setState(() {
+              monitor.monitorId = fromId;
+              monitorOld!.monitorId = "none";
+            });
+            _saveMonitor(monitor);
+            _saveMonitor(monitorOld!);
+          },
+        );
+      } if(monitorOld != null && monitorOld.monitorId == fromId){
+        // Nothing changed
+        MyAlertDialog(context, "Device Found", fromId);
+      } else {
+        // New Monitor
+        setState(() {
+          monitor.monitorId = fromId;
+        });
+        _saveMonitor(monitor);
+        MyAlertDialog(context, "Device Found", fromId);
+      }
+
+      // Reply - Found Monitor
+      mqtt_Service.tx(
+        monitor.monitorId,
+        MQTT_CMD_FOUND_MONITOR,
+        monitor.monitorId,
+        MQTT_TOPIC_FROM_ANDROID,
+      );
     }
 
-    Mqtt_Service.ipAdr = ip;
-    await Mqtt_Service.init();
-
-    if(!await Mqtt_Service.connect()) {
-      MyGlobalSnackBar.show("MQTT Connection FAILED");
-      return false;
+    // Connecting to IOT Monitor
+    if(cmd == MQTT_CMD_CONNECT_MONITOR){
+      final monitor = monitorService.lstMonitors[_tabController!.index];
+      monitorService.setConnectedToIot(monitor.monitorId, true);
+      debugPrint('IOT Connected');
     }
 
-    // Callback Listener
-    Mqtt_Service.setupMessageListener();
-    Mqtt_Service.onMessage(MQTT_TOPIC_TO_ANDROID, (msg) {
-      print("MQTT RX: $msg");
-    });
+    // DisConnecting from IOT Monitor
+    if(cmd == MQTT_CMD_DISCONNECT_MONITOR){
+      final monitor = monitorService.lstMonitors[_tabController!.index];
+      monitorService.setConnectedToIot(monitor.monitorId, false);
+      debugPrint('IOT Connected');
+    }
 
-    MyGlobalSnackBar.show("Connected: " + ip);
-    return true;
+    // IOT Monitor Data
+    if(cmd == MQTT_CMD_MONITOR_DATA){
+      final monitor = monitorService.lstMonitors[_tabController!.index];
+      final payload = jsonData[MQTT_JSON_PAYLOAD];
+      final value = payload[MQTT_JSON_WHEEL_DISTANCE];
+
+      if(value is num) _updateWheelDistance(value.toDouble());
+      debugPrint('Wheel distance: ${monitor.wheelDistance}');
+    }
   }
 
-  Widget _buildbody(MonitorData monitor) {
+  Widget _buildBody(MonitorData monitor, Key key) {
     try{
 
       switch(monitor.monitorType){
@@ -695,6 +687,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
         case MonTypeWheel:
           return IotDistanceWheelType(
+            key: key,
             monitorData: monitor,
 
             // Name
@@ -723,7 +716,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               });
             },
 
-            // Scan Monitor
+            // Scan Monitor ID
             onTapScan: (){
               if(settingService.fireSettings!.connectedDeviceIp.isEmpty){
                 MyAlertDialog(context, "Connection", "No IP Address found. Select Base Station, then connect");
@@ -732,6 +725,29 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                 scanBusy = true;
                 _scanMonitor(settingService.fireSettings!.connectedDeviceIp);
                 MyGlobalSnackBar.show("Scanning for monitors: " + settingService.fireSettings!.connectedDeviceIp);
+              }
+            },
+
+            // Connect Monitor
+            onTapConnect: (){
+              if(settingService.fireSettings!.connectedDeviceIp.isEmpty){
+                MyAlertDialog(context, "Connection", "No IP Address found. Select Base Station, then connect");
+              }
+              else{
+                if(monitor.monitorId.isEmpty){
+                  MyAlertDialog(context, "Monitor ID", "No monitor ID found. Please press scan button");
+                }else {
+                  if(monitor.isConnectedToIot){
+                    monitor.isConnectedToIot = false;
+                    _disconnectIot(monitor);
+                  }else{
+                    monitor.isConnectedToIot = false;
+                    monitor.isConnectingToIot = true;
+                    _hasScrolled = false;
+                    _connectIot(settingService.fireSettings!.connectedDeviceIp, monitor);
+                    //MyGlobalSnackBar.show("Scanning for monitors: " + settingService.fireSettings!.connectedDeviceIp);
+                  }
+                }
               }
             },
           );
@@ -750,58 +766,19 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-
-    return Consumer2<MonitorService, SettingsService>(
-      builder: (context, _monitor, _settings, _){
-
-        if (_monitor.lstMonitors.isEmpty) {
-          return Scaffold(
-            appBar: AppBar(
-              backgroundColor: APP_BAR_COLOR,
-              foregroundColor: Colors.white,
-              title: MyAppbarTitle('Monitors'),
-            ),
-            bottomNavigationBar: BottomAppBar(
-              color: APP_BACKGROUND_COLOR,
-              shape: const CircularNotchedRectangle(), // optional if using FAB
-              notchMargin: 0,
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 1),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Center(
-                        child: MyIcon(
-                          text: "Add",
-                          icon: Icons.add,
-                          iconColor: Colors.grey,
-                          textColor: Colors.white,
-                          iconSize: 25,
-                          onTap: () {
-                            _addMonitor();
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            body: Center(
-              child: Text("No Monitors Found"),
-            ),
-          );
-        }
-
-        if (_monitor.isLoading) {
+    return Consumer3<MonitorService, SettingsService, BaseStationService>(
+      builder: (context, _monitorService, _settingsService, _baseService,_){
+        if (_monitorService.isLoading || _baseService.isLoading || _settingsService.isLoading || _settingsService.isConnecting) {
           return MyProgressCircle();
         }
-
-        _tabController ??= TabController(length: _monitor.lstMonitors.length, vsync: this);
-        if (_tabController!.length != _monitor.lstMonitors.length) {
-          _tabController = TabController(length: _monitor.lstMonitors.length, vsync: this);
+        
+        if (_tabController != null && _monitorService.lstMonitors[_tabController!.index].isConnectedToIot && !_hasScrolled) {
+          _hasScrolled = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottomOnce(_scrollControllers[_tabController!.index]);
+          });
         }
+        _updateTabs(_monitorService.lstMonitors.length);
 
         return Scaffold(
           appBar: AppBar(
@@ -820,30 +797,30 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                 ),
 
                 Text(
-                  _settings.isBaseStationConnected != true
+                  _settingsService.isBaseStationConnected != true
                       ? "No Connection"
-                      : _settings.fireSettings == null
+                      : _settingsService.fireSettings == null
                       ? "Loading ..."
-                      : _settings.fireSettings!.connectedDevice,
+                      : _settingsService.fireSettings!.connectedDevice,
                   style: const TextStyle(
                     fontSize: 12,
                     color: Colors.blueGrey,
                   ),
                 ),
-                // },
-                //),
               ],
             ),
-            bottom: TabBar(
+            bottom: _monitorService.lstMonitors.isNotEmpty
+                ? TabBar(
               controller: _tabController,
               isScrollable: true,
               indicatorColor: Colors.blueAccent,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.grey,
-              tabs: _monitor.lstMonitors
+              tabs: _monitorService.lstMonitors
                   .map((doc) => Tab(text: doc.monitorName ?? "New Item"))
                   .toList(),
-            ),
+            )
+                :null
           ),
           bottomNavigationBar: BottomNavigationBar(
               currentIndex: _selectedIndex,
@@ -851,7 +828,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               unselectedItemColor: Colors.grey,
               selectedItemColor: Colors.grey,
               onTap: (index) {
-                if (index == 1 && _monitor.lstMonitors.isEmpty) return;
+                if (index == 1 && _monitorService.lstMonitors.isEmpty) return;
                 setState(() => _selectedIndex = index);
                 if(index == 0)_addMonitor();
                 if(index == 1)_deleteMonitorDialog();
@@ -865,7 +842,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                 ),
 
                 // Delete Button
-                if(_monitor.lstMonitors.isNotEmpty)
+                if(_monitorService.lstMonitors.isNotEmpty)
                   BottomNavigationBarItem(
                     icon: Icon(Icons.delete_forever),
                     label: 'Delete',
@@ -878,10 +855,12 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             color: APP_BACKGROUND_COLOR,
             child: TabBarView(
               controller: _tabController,
-              children: _monitor.lstMonitors.map((monitor) {
-                final _docId = monitor.docId;
+              children: List.generate(_monitorService.lstMonitors.length, (index){
+                final _docId = _monitorService.lstMonitors[index].docId;
+                final _monitor = _monitorService.lstMonitors[index];
+
                 return FutureBuilder<ImageProvider<Object>>(
-                    future: _getMonitorImageProvider(context, _docId, monitor),
+                    future: _getMonitorImageProvider(context, _docId, _monitor),
                     builder: (context, imgSnapshot) {
 
                       if (imgSnapshot.connectionState == ConnectionState.waiting) {
@@ -896,6 +875,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                           imgSnapshot.data ?? const AssetImage('assets/noImage.jpg');
 
                       return ListView(
+                        controller: _scrollControllers[index],
                         padding: const EdgeInsets.symmetric(
                             vertical: 20, horizontal: 0),
                         children: [
@@ -971,8 +951,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                             icon: Icons.photo_library,
                                             onPressed: () =>
                                                 _pickAndUploadImage(
-                                                    source: ImageSource
-                                                        .gallery),
+                                                    source: ImageSource.gallery),
                                           ),
 
                                           const SizedBox(height: 5),
@@ -981,14 +960,14 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                           MyCircleIconButton(
                                             icon: Icons.delete,
                                             onPressed: () => {
-                                              if(monitor.image != '' ){
+                                              if(_monitor.image != '' ){
                                                 MyQuestionAlertBox(
                                                     context: context,
                                                     message: 'Delete Current Picture?',
                                                     onPress:(){
                                                       setState(() {
-                                                        monitor.image = '';
-                                                        _saveMonitor(monitor);
+                                                        _monitor.image = '';
+                                                        _saveMonitor(_monitor);
                                                       });
                                                     }
                                                 )
@@ -1028,31 +1007,165 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                               child: MyDropdown(
                                 onChange: (value) {
                                   setState(() {
-                                    monitor.monitorType = value;
-                                    _saveMonitor(monitor);
+                                    _monitor.monitorType = value;
+                                    _saveMonitor(_monitor);
                                   });
                                 },
-                                value: monitor.monitorType!,
+                                value: _monitor.monitorType!,
                               )
                           ),
 
                           //--------------------------------------------------------------
                           // Monitor Types
                           //--------------------------------------------------------------
-                          _buildbody(monitor)
-
+                          if(_tabKeys.isNotEmpty) _buildBody(_monitor,_tabKeys[index])
                         ],
                       );
-                      // }
-                      //);
                     });
               },
               ).toList(),
             ),
           ),
         );
-
       });
-
     }
 }
+
+// void _showVehicleDialog({DocumentSnapshot? vehicle}) {
+//   TextEditingController nameController = TextEditingController(
+//       text: vehicle != null ? vehicle[SettingMonName] : '');
+//
+//   TextEditingController fuelController = TextEditingController(
+//       text: vehicle != null
+//           ? vehicle[SettingMonFuelConsumption].toString()
+//           : '');
+//
+//   TextEditingController regController = TextEditingController(
+//       text: vehicle != null ? vehicle[SettingMonReg] : '');
+//
+//   showDialog(
+//     context: context,
+//     builder: (context) {
+//       return AlertDialog(
+//         shape: RoundedRectangleBorder(
+//           borderRadius: BorderRadius.circular(10),
+//           side: const BorderSide(
+//             color: Colors.blue, // Border color
+//             width: 2, // Border width
+//           ),
+//         ),
+//         backgroundColor: APP_TILE_COLOR,
+//         shadowColor: Colors.black,
+//         title: Text(
+//           vehicle == null ? 'Add Vehicle' : 'Edit Vehicle',
+//           style: TextStyle(color: Colors.white),
+//         ),
+//         content: Column(
+//           mainAxisSize: MainAxisSize.min,
+//           children: [
+//             // Vehicle Name
+//             TextField(
+//               style: const TextStyle(
+//                 color: Colors.white,
+//                 fontSize: 18,
+//               ),
+//               controller: nameController,
+//               decoration: const InputDecoration(
+//                   labelText: 'Vehicle Name',
+//                   labelStyle: TextStyle(color: Colors.grey)),
+//             ),
+//
+//             // Fuel Consumption
+//             TextField(
+//               style: const TextStyle(
+//                 color: Colors.white,
+//                 fontSize: 18,
+//               ),
+//               controller: fuelController,
+//               decoration: const InputDecoration(
+//                   labelText: 'Fuel Consumption (L/100km)',
+//                   labelStyle: TextStyle(color: Colors.grey)),
+//               keyboardType: TextInputType.number,
+//             ),
+//
+//             // Reg Number
+//             TextField(
+//               style: const TextStyle(
+//                 color: Colors.white,
+//                 fontSize: 18,
+//               ),
+//               controller: regController,
+//               decoration: const InputDecoration(
+//                   labelText: 'Registration Number',
+//                   labelStyle: TextStyle(color: Colors.grey)),
+//             ),
+//           ],
+//         ),
+//         actions: [
+//           // Cancel Button
+//           TextButton(
+//             onPressed: () => Navigator.pop(context),
+//             child: const Text(
+//               'Cancel',
+//               style: TextStyle(
+//                 color: Colors.white70,
+//                 fontFamily: "Poppins",
+//                 fontSize: 20,
+//               ),
+//             ),
+//           ),
+//
+//           // Save Button
+//           TextButton(
+//             onPressed: () async {
+//               User? user = FirebaseAuth.instance.currentUser;
+//               if (user != null) {
+//                 if (vehicle == null) {
+//                   // Add new vehicle
+//                   await FirebaseFirestore.instance
+//                       .collection(CollectionUsers)
+//                       .doc(user.uid)
+//                       .collection(CollectionMonitors)
+//                       .add({
+//                     SettingMonName: nameController.text,
+//                     SettingMonFuelConsumption:
+//                     double.parse(fuelController.text),
+//                     SettingMonReg: regController.text,
+//                   });
+//                 } else {
+//                   // Update existing vehicle
+//                   await FirebaseFirestore.instance
+//                       .collection(CollectionUsers)
+//                       .doc(user.uid)
+//                       .collection(CollectionMonitors)
+//                       .doc(vehicle.id)
+//                       .update({
+//                     SettingMonName: nameController.text,
+//                     SettingMonFuelConsumption:
+//                     double.parse(fuelController.text),
+//                     SettingMonReg: regController.text,
+//                   });
+//                 }
+//                 Navigator.pop(context);
+//               }
+//             },
+//             child: Text(
+//               vehicle == null ? 'Add' : 'Update',
+//               style: const TextStyle(
+//                 color: Colors.white70,
+//                 fontFamily: "Poppins",
+//                 fontSize: 20,
+//               ),
+//             ),
+//           ),
+//         ],
+//       );
+//     },
+//   );
+// }
+// Future<void> _deleteLocalVehicleImage(String vehicleId) async {
+//   final directory = await getApplicationDocumentsDirectory();
+//   final path = '${directory.path}/$vehicleId.jpg';
+//   final file = File(path);
+//   if (await file.exists()) await file.delete();
+// }
