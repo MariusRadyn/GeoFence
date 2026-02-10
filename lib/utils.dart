@@ -70,7 +70,7 @@ const CollectionUsers = 'users';
 const CollectionGeoFences = 'geofences';
 const CollectionTrackingSessions = 'tracking_sessions';
 const CollectionLocations = 'locations';
-const CollectionMonitors = 'vehicles';
+const CollectionMonitors = 'monitors';
 const CollectionServers = 'servers';
 const CollectionClients = 'clients';
 
@@ -152,11 +152,11 @@ const MQTT_CMD_MONITOR_DATA = "#MONITOR_DATA";
 const MQTT_JSON_WHEEL_DISTANCE = "wheel_distance";
 
 // MQTT Payload
-const MQTT_JSON_FROM_DEVICE_ID = "from_device_id";
-const MQTT_JSON_TO_DEVICE_ID = "to_device_id";
+const MQTT_JSON_FROM_DEVICE_ID = "from";
+const MQTT_JSON_TO_DEVICE_ID = "to";
 const MQTT_JSON_TOPIC = "topic";
 const MQTT_JSON_PAYLOAD = "payload";
-const MQTT_JSON_CMD = "command";
+const MQTT_JSON_CMD = "cmd";
 
 //---------------------------------------------------
 // Bluetooth
@@ -2107,7 +2107,6 @@ class MonitorService extends ChangeNotifier {
   MonitorData? get selected => _selected;
 
   Future<void> load() async {
-
     isLoading = true;
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;

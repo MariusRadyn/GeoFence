@@ -778,6 +778,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             _scrollToBottomOnce(_scrollControllers[_tabController!.index]);
           });
         }
+
         _updateTabs(_monitorService.lstMonitors.length);
 
         return Scaffold(
@@ -787,7 +788,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Montors' ,
+                Text('iOT Monitors' ,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.normal,
@@ -828,30 +829,42 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               unselectedItemColor: Colors.grey,
               selectedItemColor: Colors.grey,
               onTap: (index) {
-                if (index == 1 && _monitorService.lstMonitors.isEmpty) return;
-                setState(() => _selectedIndex = index);
-                if(index == 0)_addMonitor();
-                if(index == 1)_deleteMonitorDialog();
+                 if (index == 1 && _monitorService.lstMonitors.isEmpty) return;
+                 setState(() => _selectedIndex = index);
+                 if(index == 0)_addMonitor();
+                 if(index == 1)_deleteMonitorDialog();
               },
               items: [
                 // Add Button
                 BottomNavigationBarItem(
-                    icon: Icon(Icons.add),
-                    label: 'Add',
-                    backgroundColor: Colors.grey
+                    icon: Icon(
+                      Icons.add,
+                      color: Colors.white
+                    ),
+                    label: 'Add'
                 ),
 
                 // Delete Button
-                if(_monitorService.lstMonitors.isNotEmpty)
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.delete_forever),
-                    label: 'Delete',
-                    backgroundColor: Colors.grey,
+                BottomNavigationBarItem(
+                  icon: Icon(
+                    Icons.delete_forever,
+                    color: _monitorService.lstMonitors.isEmpty
+                        ? Colors.grey
+                        : Colors.white,
                   ),
+                  label: 'Delete',
+                ),
               ]
           ),
 
-          body: Container(
+          body: _monitorService.lstMonitors.isEmpty
+            ?  Container(
+              color: APP_BACKGROUND_COLOR,
+              child: Center(
+                  child: MyText(text: "No Monitors"),
+                ),
+              )
+              :Container(
             color: APP_BACKGROUND_COLOR,
             child: TabBarView(
               controller: _tabController,
@@ -1000,7 +1013,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                           )
                               : SizedBox(height: 5),
 
-                          // Monitor Type
+                          // Monitor Type Dropdown
                           Padding(
                               padding:
                               const EdgeInsets.fromLTRB(10, 0, 10, 20),
