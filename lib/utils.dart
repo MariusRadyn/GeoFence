@@ -16,7 +16,7 @@ import 'package:uuid/uuid.dart';
 
 import 'MqttService.dart';
 
-const APP_VERSION = "1.1";
+const APP_VERSION = "V1.0.1";
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool isDebug = true;
@@ -129,6 +129,8 @@ const SettingBaseImage = 'image';
 const SettingJsonMonId = "monId";
 const SettingJsonTicksPerM = "ticksPerM";
 const SettingJsonIotType = "iotType";
+const SettingJsonDocId = "docId";
+const SettingJsonUserId = "userId";
 
 // Clients Settings
 const SettingClientIpAdr = 'IPAdress';
@@ -139,8 +141,6 @@ const MQTT_TOPIC_TO_IOT = "mqtt/to/iot";
 const MQTT_TOPIC_TO_ANDROID = "mqtt/to/android";
 const MQTT_TOPIC_FROM_ANDROID = "mqtt/from/android";
 const MQTT_TOPIC_WILL = "mqtt/will";
-//const MQTT_NAME ="geoAndroidMqtt";
-//const MQTT_PIN = "12345";
 
 // MQTT Commands
 const MQTT_CMD_REQ_MONITOR = "#REQ_MONITOR";
@@ -2042,6 +2042,7 @@ class MonitorData {
   double wheelDistance;
   bool wheelSignal;
   String docId;
+  String userId;
 
   MonitorData({
     // Firebase
@@ -2062,13 +2063,15 @@ class MonitorData {
     this.isConnectingToIot = false,
     this.wheelDistance = 0,
     this.wheelSignal = false,
-    this.docId = ""
+    this.docId = "",
+    this.userId = "",
   });
 
   // From Firebase
-  factory MonitorData.fromMap(Map<String, dynamic> map, String docId) {
+  factory MonitorData.fromMap(Map<String, dynamic> map, String docId, String userId) {
     return MonitorData(
       docId: docId,
+      userId: userId,
       monitorId: map[SettingMonID] ?? 'none',
       monitorType: map[SettingMonType] ?? 'none',
       monitorName: map[SettingMonName] ?? 'New Item',
@@ -2118,7 +2121,7 @@ class MonitorService extends ChangeNotifier {
         .get();
 
     final list = snapshot.docs
-        .map((doc) => MonitorData.fromMap(doc.data(),doc.id))
+        .map((doc) => MonitorData.fromMap(doc.data(),doc.id, uid))
         .toList();
 
     try {

@@ -1,9 +1,5 @@
 import 'dart:convert';
-import 'package:mqtt_client/mqtt_client.dart';
-import 'package:mqtt_client/mqtt_server_client.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:collection/collection.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -11,12 +7,6 @@ import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-
-import 'Bluetooth2.dart';
-import 'MqttService.dart';
-//import 'package:lan_scanner/lan_scanner.dart';
-//import 'package:network_info_plus/network_info_plus.dart';
-//import 'Bluetooth2.dart';
 
 class SettingsPage extends StatefulWidget {
   final String userId;

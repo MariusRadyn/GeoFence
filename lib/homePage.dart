@@ -515,8 +515,11 @@ class _HomePageState extends State<HomePage> {
         userDataService.userdata == null ||
             (settings.isLoading && userDataService.isLoading);
 
+
     return Scaffold(
+
       appBar: AppBar(
+        iconTheme: IconThemeData(color: Colors.white),
         backgroundColor: APP_BAR_COLOR,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -604,6 +607,103 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       backgroundColor: APP_BACKGROUND_COLOR,
+
+      drawer: Drawer(
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 1.0), // optional glass effect
+          ),
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              DrawerHeader(
+                decoration: BoxDecoration(
+                  gradient: MyTileGradient(),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+
+                    /// TOP ROW
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          "Menu",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                          ),
+                        ),
+
+                        Image.asset(
+                          'assets/limitless.png',
+                          width: 80, // 👈 reduce from 100
+                          height: 80,
+                          fit: BoxFit.contain,
+                        ),
+                      ],
+                    ),
+
+                    Spacer(), // 👈 pushes bottom info down nicely
+
+                    /// BOTTOM INFO
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        MyText(
+                          text: APP_VERSION,
+                          color: Colors.grey,
+                        ),
+                        MyText(
+                          text: UserDataService().userdata?.displayName ?? "Not Logged in",
+                          color: Colors.grey,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.gps_fixed),
+                title: Text("Track"),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.fence),
+                title: Text("GeoFence"),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.cell_tower),
+                title: Text("Base Station"),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.monitor),
+                title: Text("iOT Monitors"),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.history),
+                title: Text("Tracking History"),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
       body: isLoading
         ? Scaffold(
             backgroundColor: APP_BACKGROUND_COLOR,

@@ -540,7 +540,9 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
     final payload = {
       SettingJsonIotType : monitor.monitorType,
-      SettingJsonTicksPerM: monitor.ticksPerM
+      SettingJsonTicksPerM: monitor.ticksPerM,
+      SettingJsonMonId: monitor.docId,
+      SettingJsonUserId: monitor.userId
     };
 
     if(mqtt_Service.isConnected){

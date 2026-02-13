@@ -347,7 +347,6 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
             return _vehicles == null
                 ? Center(child: CircularProgressIndicator())
                 :
-
             Column(
               children: [
                 MyTextTileWithEditDelete(

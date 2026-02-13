@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:geofence/utils.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
-import 'utils.dart';
 
 Timer? _reconnectTimer;
 
