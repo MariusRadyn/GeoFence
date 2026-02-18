@@ -25,7 +25,7 @@ class IotMonitorsPage extends StatefulWidget {
 
 class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderStateMixin {
   late SettingsService settingService;
-  late MonitorService monitorService;
+  late MonitorSettingsService monitorService;
   late BaseStationService baseService;
   TabController? _tabController;
   late List<ScrollController> _scrollControllers;
@@ -54,7 +54,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     if(!mounted) return;
 
     settingService = context.read<SettingsService>();
-    monitorService = context.read<MonitorService>();
+    monitorService = context.read<MonitorSettingsService>();
     baseService = context.read<BaseStationService>();
     _tabKeys = [];
 
@@ -97,7 +97,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       print('Error getting paired devices: $e');
     }
   }
-  void _saveMonitor(MonitorData monitor) async {
+  void _saveMonitor(MonitorSettings monitor) async {
     if (_tabController == null) return;
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -108,7 +108,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
         .doc(uid)
         .collection(CollectionMonitors);
 
-      await ref.doc(monitor.docId).set(
+      await ref.doc(monitor.monDocId).set(
         monitor.toMap(),
         SetOptions(merge: true),              // UPDATE
       );
@@ -129,7 +129,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
         .doc(uid)
         .collection(CollectionMonitors);
 
-    final monitor = MonitorData(
+    final monitor = MonitorSettings(
       monitorName: 'New Monitor',
     );
 
@@ -138,7 +138,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     if (!mounted) return;
 
     if (_tabController != null &&  monitorService.lstMonitors.isNotEmpty) {
-      final newIndex = monitorService.lstMonitors.indexWhere((d) => d.docId == doc.id);
+      final newIndex = monitorService.lstMonitors.indexWhere((d) => d.monDocId == doc.id);
       if (newIndex != -1) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -147,7 +147,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       }
     }
   }
-  Future<void> _deleteMonitor(MonitorData monitor) async {
+  Future<void> _deleteMonitor(MonitorSettings monitor) async {
     try {
       User? user = FirebaseAuth.instance.currentUser;
 
@@ -156,7 +156,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
           .collection(CollectionUsers)
           .doc(user?.uid)
           .collection(CollectionMonitors)
-          .doc(monitor.docId)
+          .doc(monitor.monDocId)
           .delete();
 
       await monitorService.load();
@@ -189,16 +189,16 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       );
     }
   }
-  Future<DocumentSnapshot<Map<String, dynamic>>> _getDocFuture(MonitorData monitor) {
+  Future<DocumentSnapshot<Map<String, dynamic>>> _getDocFuture(MonitorSettings monitor) {
     String? uid = FirebaseAuth.instance.currentUser?.uid;
 
     return _docFutures.putIfAbsent(
-        monitor.docId,
+        monitor.monDocId,
             () => FirebaseFirestore.instance
             .collection(CollectionUsers)
             .doc(uid)
             .collection(CollectionMonitors)
-            .doc(monitor.docId)
+            .doc(monitor.monDocId)
             .get()
     );
   }
@@ -266,7 +266,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       if (picked == null) return;
 
       final String path =
-          '$CollectionUsers/$uid/$CollectionMonitors/${monitor.docId}_${DateTime.now().millisecondsSinceEpoch}.png';
+          '$CollectionUsers/$uid/$CollectionMonitors/${monitor.monDocId}_${DateTime.now().millisecondsSinceEpoch}.png';
       final Reference ref = FirebaseStorage.instance.ref().child(path);
       final File file = File(picked.path);
 
@@ -312,8 +312,8 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
           .collection(CollectionUsers)
           .doc(uid)
           .collection(CollectionMonitors)
-          .doc(monitor.docId)
-          .update({SettingMonPicture: downloadUrl});
+          .doc(monitor.monDocId)
+          .update({FIRE_MON_IMAGE: downloadUrl});
 
       await monitorService.load();
 
@@ -383,7 +383,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       return '';
     }
   }
-  Future<ImageProvider<Object>> _getMonitorImageProvider( BuildContext context, String vehicleId, MonitorData? monitor) async {
+  Future<ImageProvider<Object>> _getMonitorImageProvider( BuildContext context, String vehicleId, MonitorSettings? monitor) async {
     if (_isUploading) return AssetImage('assets/noImage.jpg');
     String downloadUrl = monitor?.image ?? '';
     String monType = monitor?.monitorType ?? '';
@@ -525,24 +525,24 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       return false;
     }
 
-    final payload = {};
+    final payload =  {
+      MQTT_JSON_IOT_TYPE: monitorService.lstMonitors[_selectedIndex].monitorType,
+    };
 
     if(mqtt_Service.isConnected){
       mqtt_Service.tx("", MQTT_CMD_REQ_MONITOR, payload, MQTT_TOPIC_FROM_ANDROID);
     }
     return true;
   }
-  Future<bool> _connectIot(String ip, MonitorData monitor)async{
+  Future<bool> _connectIot(String ip, MonitorSettings monitor)async{
     if(settingService.isBaseStationConnected == false){
       MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
       return false;
     }
 
     final payload = {
-      SettingJsonIotType : monitor.monitorType,
-      SettingJsonTicksPerM: monitor.ticksPerM,
-      SettingJsonMonId: monitor.docId,
-      SettingJsonUserId: monitor.userId
+      MQTT_JSON_IOT_TYPE: monitor.monitorType,
+      MQTT_JSON_TICKS_PER_M: monitor.ticksPerM,
     };
 
     if(mqtt_Service.isConnected){
@@ -550,7 +550,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
     return true;
   }
-  Future<bool> _disconnectIot(MonitorData monitor)async{
+  Future<bool> _disconnectIot(MonitorSettings monitor)async{
     if(settingService.isBaseStationConnected == false){
       MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
       return false;
@@ -561,7 +561,6 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
     return true;
   }
-
   void _onMqttMessage(String msg) {
     debugPrint('MQTT RX: $msg');
 
@@ -574,7 +573,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       scanBusy = false;
       final monitor = monitorService.lstMonitors[_tabController!.index];
 
-      MonitorData? monitorOld;
+      MonitorSettings? monitorOld;
       for (final m in monitorService.lstMonitors) {
         if (m.monitorId == fromId) {
           monitorOld = m;
@@ -599,9 +598,11 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
           },
         );
       } if(monitorOld != null && monitorOld.monitorId == fromId){
+
         // Nothing changed
         MyAlertDialog(context, "Device Found", fromId);
       } else {
+
         // New Monitor
         setState(() {
           monitor.monitorId = fromId;
@@ -610,11 +611,19 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
         MyAlertDialog(context, "Device Found", fromId);
       }
 
+      final payload =  {
+        MQTT_JSON_USER_DOC_ID: UserDataService().userdata!.userID,
+        MQTT_JSON_MON_DOC_ID: monitorService.lstMonitors[_selectedIndex].monDocId,
+        MQTT_JSON_IOT_NAME: monitorService.lstMonitors[_selectedIndex].monitorName,
+        MQTT_JSON_IOT_TYPE: monitorService.lstMonitors[_selectedIndex].monitorType,
+        MQTT_JSON_TICKS_PER_M: monitorService.lstMonitors[_selectedIndex].ticksPerM,
+      };
+
       // Reply - Found Monitor
       mqtt_Service.tx(
         monitor.monitorId,
         MQTT_CMD_FOUND_MONITOR,
-        monitor.monitorId,
+        payload,
         MQTT_TOPIC_FROM_ANDROID,
       );
     }
@@ -644,7 +653,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
   }
 
-  Widget _buildBody(MonitorData monitor, Key key) {
+  Widget _buildBody(MonitorSettings monitor, Key key) {
     try{
 
       switch(monitor.monitorType){
@@ -721,7 +730,11 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             // Scan Monitor ID
             onTapScan: (){
               if(settingService.fireSettings!.connectedDeviceIp.isEmpty){
-                MyAlertDialog(context, "Connection", "No IP Address found. Select Base Station, then connect");
+                MyAlertDialog(context, "Base Station", "No IP Address found. \nGoto Base Station page then click 'Request IP Adr'");
+              }
+              else if(settingService.isBaseStationConnected == false){
+                MyAlertDialog(context, "Base Station", "You are not connected to a Base Station.\nGoto Base Station page then click 'Request IP Adr'\nThen click 'Connect'");
+                return false;
               }
               else{
                 scanBusy = true;
@@ -768,7 +781,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<MonitorService, SettingsService, BaseStationService>(
+    return Consumer3<MonitorSettingsService, SettingsService, BaseStationService>(
       builder: (context, _monitorService, _settingsService, _baseService,_){
         if (_monitorService.isLoading || _baseService.isLoading || _settingsService.isLoading || _settingsService.isConnecting) {
           return MyProgressCircle();
@@ -871,7 +884,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             child: TabBarView(
               controller: _tabController,
               children: List.generate(_monitorService.lstMonitors.length, (index){
-                final _docId = _monitorService.lstMonitors[index].docId;
+                final _docId = _monitorService.lstMonitors[index].monDocId;
                 final _monitor = _monitorService.lstMonitors[index];
 
                 return FutureBuilder<ImageProvider<Object>>(
@@ -1045,142 +1058,3 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       });
     }
 }
-
-// void _showVehicleDialog({DocumentSnapshot? vehicle}) {
-//   TextEditingController nameController = TextEditingController(
-//       text: vehicle != null ? vehicle[SettingMonName] : '');
-//
-//   TextEditingController fuelController = TextEditingController(
-//       text: vehicle != null
-//           ? vehicle[SettingMonFuelConsumption].toString()
-//           : '');
-//
-//   TextEditingController regController = TextEditingController(
-//       text: vehicle != null ? vehicle[SettingMonReg] : '');
-//
-//   showDialog(
-//     context: context,
-//     builder: (context) {
-//       return AlertDialog(
-//         shape: RoundedRectangleBorder(
-//           borderRadius: BorderRadius.circular(10),
-//           side: const BorderSide(
-//             color: Colors.blue, // Border color
-//             width: 2, // Border width
-//           ),
-//         ),
-//         backgroundColor: APP_TILE_COLOR,
-//         shadowColor: Colors.black,
-//         title: Text(
-//           vehicle == null ? 'Add Vehicle' : 'Edit Vehicle',
-//           style: TextStyle(color: Colors.white),
-//         ),
-//         content: Column(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             // Vehicle Name
-//             TextField(
-//               style: const TextStyle(
-//                 color: Colors.white,
-//                 fontSize: 18,
-//               ),
-//               controller: nameController,
-//               decoration: const InputDecoration(
-//                   labelText: 'Vehicle Name',
-//                   labelStyle: TextStyle(color: Colors.grey)),
-//             ),
-//
-//             // Fuel Consumption
-//             TextField(
-//               style: const TextStyle(
-//                 color: Colors.white,
-//                 fontSize: 18,
-//               ),
-//               controller: fuelController,
-//               decoration: const InputDecoration(
-//                   labelText: 'Fuel Consumption (L/100km)',
-//                   labelStyle: TextStyle(color: Colors.grey)),
-//               keyboardType: TextInputType.number,
-//             ),
-//
-//             // Reg Number
-//             TextField(
-//               style: const TextStyle(
-//                 color: Colors.white,
-//                 fontSize: 18,
-//               ),
-//               controller: regController,
-//               decoration: const InputDecoration(
-//                   labelText: 'Registration Number',
-//                   labelStyle: TextStyle(color: Colors.grey)),
-//             ),
-//           ],
-//         ),
-//         actions: [
-//           // Cancel Button
-//           TextButton(
-//             onPressed: () => Navigator.pop(context),
-//             child: const Text(
-//               'Cancel',
-//               style: TextStyle(
-//                 color: Colors.white70,
-//                 fontFamily: "Poppins",
-//                 fontSize: 20,
-//               ),
-//             ),
-//           ),
-//
-//           // Save Button
-//           TextButton(
-//             onPressed: () async {
-//               User? user = FirebaseAuth.instance.currentUser;
-//               if (user != null) {
-//                 if (vehicle == null) {
-//                   // Add new vehicle
-//                   await FirebaseFirestore.instance
-//                       .collection(CollectionUsers)
-//                       .doc(user.uid)
-//                       .collection(CollectionMonitors)
-//                       .add({
-//                     SettingMonName: nameController.text,
-//                     SettingMonFuelConsumption:
-//                     double.parse(fuelController.text),
-//                     SettingMonReg: regController.text,
-//                   });
-//                 } else {
-//                   // Update existing vehicle
-//                   await FirebaseFirestore.instance
-//                       .collection(CollectionUsers)
-//                       .doc(user.uid)
-//                       .collection(CollectionMonitors)
-//                       .doc(vehicle.id)
-//                       .update({
-//                     SettingMonName: nameController.text,
-//                     SettingMonFuelConsumption:
-//                     double.parse(fuelController.text),
-//                     SettingMonReg: regController.text,
-//                   });
-//                 }
-//                 Navigator.pop(context);
-//               }
-//             },
-//             child: Text(
-//               vehicle == null ? 'Add' : 'Update',
-//               style: const TextStyle(
-//                 color: Colors.white70,
-//                 fontFamily: "Poppins",
-//                 fontSize: 20,
-//               ),
-//             ),
-//           ),
-//         ],
-//       );
-//     },
-//   );
-// }
-// Future<void> _deleteLocalVehicleImage(String vehicleId) async {
-//   final directory = await getApplicationDocumentsDirectory();
-//   final path = '${directory.path}/$vehicleId.jpg';
-//   final file = File(path);
-//   if (await file.exists()) await file.delete();
-// }

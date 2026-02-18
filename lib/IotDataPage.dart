@@ -8,14 +8,14 @@ import 'package:intl/intl.dart';
 import 'trackingHistoryMap.dart';
 import 'package:provider/provider.dart';
 
-class TrackingHistoryPage extends StatefulWidget {
-  const TrackingHistoryPage({super.key});
+class IotDataPage extends StatefulWidget {
+  const IotDataPage({super.key});
 
   @override
-  State<TrackingHistoryPage> createState() => _TrackingHistoryPageState();
+  State<IotDataPage> createState() => _IotDataPageState();
 }
 
-class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
+class _IotDataPageState extends State<IotDataPage> {
   late SettingsService settings;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -299,12 +299,11 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
         color: APP_BACKGROUND_COLOR,
         child: StreamBuilder<QuerySnapshot>(
           stream: _firestore
-              .collection(CollectionUsers)
-              .doc(_auth.currentUser!.uid)
-              .collection(CollectionTrackingSessions)
-              .where(FIRE_TRACK_START_TIME, isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedDateFrom))
-              .where(FIRE_TRACK_START_TIME, isLessThanOrEqualTo: Timestamp.fromDate(_selectedDateTo))
-              .orderBy(FIRE_TRACK_START_TIME, descending: true)
+              .collectionGroup(CollectionMonitorData)
+              .where(FIRE_MON_USER_DOC_ID, isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+              .where(FIRE_MON_TIMESTAMP, isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedDateFrom))
+              .where(FIRE_MON_TIMESTAMP, isLessThanOrEqualTo: Timestamp.fromDate(_selectedDateTo))
+              .orderBy(FIRE_MON_TIMESTAMP, descending: true)
               .snapshots(),
 
           builder: (context, snapshot) {
@@ -316,7 +315,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
             if (sessions.isEmpty) {
               return const Center(
                 child: Text(
-                  "No tracking history found",
+                  "No IOT Data history found",
                   style: TextStyle(
                     color: Colors.grey,
                     fontSize: 20,
@@ -324,7 +323,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
                 ),
               );
             }
-
+            
             // Calculate totals
             for (var session in sessions) {
               final vehicleId = session['vehicle_id'];

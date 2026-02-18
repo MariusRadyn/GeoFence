@@ -12,8 +12,7 @@ class TrackingPage extends StatefulWidget {
 
   const TrackingPage({
     super.key
-    }
-      );
+  });
 
   @override
   _TrackingPageState createState() => _TrackingPageState();

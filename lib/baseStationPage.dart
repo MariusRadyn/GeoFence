@@ -462,9 +462,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
           if (_baseService.isLoading) {
             return MyProgressCircle();
           }
-
           _updateTabController(_baseService.lstBaseStations.length);
-
 
           return Scaffold(
             appBar: AppBar(

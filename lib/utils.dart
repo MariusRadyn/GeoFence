@@ -71,6 +71,7 @@ const CollectionGeoFences = 'geofences';
 const CollectionTrackingSessions = 'tracking_sessions';
 const CollectionLocations = 'locations';
 const CollectionMonitors = 'monitors';
+const CollectionMonitorData = 'iotdata';
 const CollectionServers = 'servers';
 const CollectionClients = 'clients';
 
@@ -87,24 +88,9 @@ const SettingDieselPrice = 'dieselPrice';
 const SettingConnectedDevice = 'connectedDevice';
 const SettingConnectedDeviceIp = 'connectedDeviceIp';
 const SettingServerData = 'serverData';
-
-// Monitor settings
-const SettingMonName = 'name';
-const SettingMonFuelConsumption = 'fuelConsumption';
-const SettingMonReg = 'registrationNumber';
-const SettingMonBlueDeviceName = 'bluetoothDeviceName';
-const SettingMonBlueMac = 'bluetoothMAC';
-const SettingMonPicture = 'picture';
-const SettingMonType = 'type';
-const SettingMonID = 'monitorId';
-const SettingMonTicksPerM = 'ticksPerM';
 const double SettingMonDefaultTicksPerM = 20; // Default value when new Monitor is created
 
 // Monitor Types
-const String MonTypeVehicle = "Vehicle";
-const String MonTypeMobileMachineMon = "Mobile Machine";
-const String MonTypeStationaryMachineMon = "Stationary Machine";
-const String MonTypeWheel = "Distance Wheel";
 const List<String> SettingMonitorTypeList = [
   MonTypeVehicle,
   MonTypeMobileMachineMon,
@@ -112,25 +98,58 @@ const List<String> SettingMonitorTypeList = [
   MonTypeWheel,
 ];
 
+// Monitor Types
+const String MonTypeVehicle = "Vehicle";
+const String MonTypeMobileMachineMon = "Mobile Machine";
+const String MonTypeStationaryMachineMon = "Stationary Machine";
+const String MonTypeWheel = "Distance Wheel";
+
+// Monitor Log Data
+const LogMonDocId = 'monDocId';
+const LogMonUserDocId = 'userDocId';
+const LogMonType = 'iotType';
+const LogMonName = 'iotName';
+const LogMonDistance = 'distance';
+const LogMonLines = 'lines';
+const LogMonOperator = 'operator';
+const LogMonSupervisor = 'supervisor';
+const LogMonTimestamp = 'timestamp';
+
 // Monitor Debug
 const DebugMonitorConnected = 'debugConnected';
 const DebugMonitorWheelDistance = 'debugWheelDistance';
 const DebugMonitorWheelSignal = 'debugWheelSignal';
 
-// Base Station Settings
-const SettingBaseName = 'name';
-const SettingBaseDesc = 'description';
-const SettingBaseIpAdr = 'ipAdr';
-const SettingBaseBlueDeviceName = 'bluetoothDeviceName';
-const SettingBaseBlueMac = 'bluetoothMAC';
-const SettingBaseImage = 'image';
+// Firebase - Base Station Settings
+const FIRE_BASE_NAME = 'name';
+const FIRE_BASE_DESC = 'description';
+const FIRE_BASE_IP = 'ipAdr';
+const FIRE_BASE_BT_NAME = 'bluetoothDeviceName';
+const FIRE_BASE_BT_MAC = 'bluetoothMAC';
+const FIRE_BASE_IMAGE = 'image';
 
-//JSON Settings
-const SettingJsonMonId = "monId";
-const SettingJsonTicksPerM = "ticksPerM";
-const SettingJsonIotType = "iotType";
-const SettingJsonDocId = "docId";
-const SettingJsonUserId = "userId";
+// Firebase - Monitor settings
+const FIRE_MON_NAME = 'name';
+const FIRE_MON_FUEL_CONSUMPTION = 'fuelConsumption';
+const FIRE_MON_REGISTRATION = 'registrationNumber';
+const FIRE_MON_BT_NAME = 'bluetoothDeviceName';
+const FIRE_MON_BT_MAC = 'bluetoothMAC';
+const FIRE_MON_IMAGE = 'picture';
+const FIRE_MON_TYPE = 'type';
+const FIRE_MON_ID = 'monitorId';
+const FIRE_MON_DOC_ID = 'monDocId';
+const FIRE_MON_USER_DOC_ID = 'userDocId';
+const FIRE_MON_TICKS_PER_M = 'ticksPerM';
+const FIRE_MON_TIMESTAMP = 'timestamp';
+
+// Firebase - Tracking settings
+const FIRE_TRACK_DIST_IN = 'distance_inside';
+const FIRE_TRACK_DIST_OUT = 'distance_outside';
+const FIRE_TRACK_START_TIME = 'start_time';
+const FIRE_TRACK_END_TIME = 'end_time';
+const FIRE_TRACK_ACTIVE = 'is_active';
+const FIRE_TRACK_VEH_DOC_ID = 'vehicle_id';
+
 
 // Clients Settings
 const SettingClientIpAdr = 'IPAdress';
@@ -149,7 +168,6 @@ const MQTT_CMD_CONNECT_MONITOR = "#CONNECT_MONITOR";
 const MQTT_CMD_DISCONNECT_MONITOR = "#DISCONNECT_MONITOR";
 const MQTT_CMD_ACK = "#ACK";
 const MQTT_CMD_MONITOR_DATA = "#MONITOR_DATA";
-const MQTT_JSON_WHEEL_DISTANCE = "wheel_distance";
 
 // MQTT Payload
 const MQTT_JSON_FROM_DEVICE_ID = "from";
@@ -157,6 +175,16 @@ const MQTT_JSON_TO_DEVICE_ID = "to";
 const MQTT_JSON_TOPIC = "topic";
 const MQTT_JSON_PAYLOAD = "payload";
 const MQTT_JSON_CMD = "cmd";
+const MQTT_JSON_WHEEL_DISTANCE = "wheel_distance";
+
+// JSON Settings
+const MQTT_JSON_MON_ID = "monId";
+const MQTT_JSON_TICKS_PER_M = "ticksPerM";
+const MQTT_JSON_IOT_TYPE = "iotType";
+const MQTT_JSON_IOT_NAME = "iotName";
+const MQTT_JSON_MON_DOC_ID = "monDocId";
+const MQTT_JSON_USER_DOC_ID = "userDocId";
+
 
 //---------------------------------------------------
 // Bluetooth
@@ -1160,19 +1188,19 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
 
   void loadSettings() {
     vehicleNameController = TextEditingController(
-        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingMonName] : ''
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_NAME] : ''
     );
 
     fuelConsumptionController = TextEditingController(
-        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingMonFuelConsumption].toString() : ''
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_FUEL_CONSUMPTION].toString() : ''
     );
 
     vehicleRegController = TextEditingController(
-        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingMonReg] : ''
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_REGISTRATION] : ''
     );
 
-    widget.bluetoothDeviceName = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingMonBlueDeviceName] : "";
-    widget.bluetoothMAC = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![SettingMonBlueMac] : "";
+    widget.bluetoothDeviceName = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_BT_NAME] : "";
+    widget.bluetoothMAC = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_BT_MAC] : "";
   }
 
   @override
@@ -2021,7 +2049,7 @@ class ServerData {
   }
 }
 
-class MonitorData {
+class MonitorSettings {
 
   // Persisted (Firebase) fields
   String monitorId;
@@ -2041,10 +2069,10 @@ class MonitorData {
   bool isConnectingToIot;
   double wheelDistance;
   bool wheelSignal;
-  String docId;
-  String userId;
+  String monDocId;
+  String userDocId;
 
-  MonitorData({
+  MonitorSettings({
     // Firebase
     this.monitorId = "none",
     this.monitorType = MonTypeVehicle,
@@ -2063,51 +2091,51 @@ class MonitorData {
     this.isConnectingToIot = false,
     this.wheelDistance = 0,
     this.wheelSignal = false,
-    this.docId = "",
-    this.userId = "",
+    this.monDocId = "",
+    this.userDocId = "",
   });
 
   // From Firebase
-  factory MonitorData.fromMap(Map<String, dynamic> map, String docId, String userId) {
-    return MonitorData(
-      docId: docId,
-      userId: userId,
-      monitorId: map[SettingMonID] ?? 'none',
-      monitorType: map[SettingMonType] ?? 'none',
-      monitorName: map[SettingMonName] ?? 'New Item',
-      reg: map[SettingMonReg] ?? 'None',
-      fuelConsumption: (map[SettingMonFuelConsumption] as num?)?.toDouble() ?? 0.0,
+  factory MonitorSettings.fromMap(Map<String, dynamic> map, String docId, String userId) {
+    return MonitorSettings(
+      monDocId: docId,
+      userDocId: userId,
+      monitorId: map[FIRE_MON_ID] ?? 'none',
+      monitorType: map[FIRE_MON_TYPE] ?? 'none',
+      monitorName: map[FIRE_MON_NAME] ?? 'New Item',
+      reg: map[FIRE_MON_REGISTRATION] ?? 'None',
+      fuelConsumption: (map[FIRE_MON_FUEL_CONSUMPTION] as num?)?.toDouble() ?? 0.0,
       //rebateValue: map[SettingRebateValue] ?? 0,
-      bluetoothDeviceName: map[SettingMonBlueDeviceName] ?? '',
-      bluetoothMac: map[SettingMonBlueMac] ?? '',
-      ticksPerM: (map[SettingMonTicksPerM] as num?)?.toDouble() ?? SettingMonDefaultTicksPerM,
-      image: map[SettingMonPicture] ?? '',
+      bluetoothDeviceName: map[FIRE_MON_BT_NAME] ?? '',
+      bluetoothMac: map[FIRE_MON_BT_MAC] ?? '',
+      ticksPerM: (map[FIRE_MON_TICKS_PER_M] as num?)?.toDouble() ?? SettingMonDefaultTicksPerM,
+      image: map[FIRE_MON_IMAGE] ?? '',
     );
   }
 
   // To Firebase (NO local fields)
   Map<String, dynamic> toMap() {
     return {
-      SettingMonID: monitorId,
-      SettingMonType: monitorType,
-      SettingMonName: monitorName,
-      SettingMonReg: reg,
-      SettingMonFuelConsumption: fuelConsumption,
+      FIRE_MON_ID: monitorId,
+      FIRE_MON_TYPE: monitorType,
+      FIRE_MON_NAME: monitorName,
+      FIRE_MON_REGISTRATION: reg,
+      FIRE_MON_FUEL_CONSUMPTION: fuelConsumption,
       SettingRebateValue: rebateValue,
-      SettingMonBlueDeviceName: bluetoothDeviceName,
-      SettingMonBlueMac: bluetoothMac,
-      SettingMonTicksPerM: ticksPerM,
-      SettingMonPicture: image
+      FIRE_MON_BT_NAME: bluetoothDeviceName,
+      FIRE_MON_BT_MAC: bluetoothMac,
+      FIRE_MON_TICKS_PER_M: ticksPerM,
+      FIRE_MON_IMAGE: image
     };
   }
 }
-class MonitorService extends ChangeNotifier {
-  final List<MonitorData> _monitors = [];
-  MonitorData? _selected;
+class MonitorSettingsService extends ChangeNotifier {
+  final List<MonitorSettings> _monitors = [];
+  MonitorSettings? _selected;
   bool isLoading = true;
 
-  List<MonitorData> get lstMonitors => List.unmodifiable(_monitors);
-  MonitorData? get selected => _selected;
+  List<MonitorSettings> get lstMonitors => List.unmodifiable(_monitors);
+  //MonitorSettings? get selected => _selected;
 
   Future<void> load() async {
     isLoading = true;
@@ -2121,7 +2149,7 @@ class MonitorService extends ChangeNotifier {
         .get();
 
     final list = snapshot.docs
-        .map((doc) => MonitorData.fromMap(doc.data(),doc.id, uid))
+        .map((doc) => MonitorSettings.fromMap(doc.data(),doc.id, uid))
         .toList();
 
     try {
@@ -2135,13 +2163,13 @@ class MonitorService extends ChangeNotifier {
   }
 
   void notify() => notifyListeners();
-  void setMonitors(List<MonitorData> list) {
+  void setMonitors(List<MonitorSettings> list) {
     _monitors
       ..clear()
       ..addAll(list);
     notifyListeners();
   }
-  void addMonitor(MonitorData mon) {
+  void addMonitor(MonitorSettings mon) {
     _monitors.add(mon);
     notifyListeners();
   }
@@ -2165,6 +2193,113 @@ class MonitorService extends ChangeNotifier {
     final mon = _monitors.firstWhere((m) => m.monitorId == id);
     mon.isConnectingToIot = value;
     notifyListeners();
+  }
+}
+
+class MonitorData {
+  // General
+  String monDocId;
+  String userDocId;
+  String? monitorType;
+  String monitorName;
+
+  // Tracking
+  //String? reg;
+  //double? distance_inside;
+  //double? distance_outside;
+  //String start_time;
+  //String end_time;
+
+  // Distance Wheel
+  String? operator;
+  String? supervisor;
+  double? distance;
+  int? lines;
+  Timestamp timestamp;
+
+  // Local-only (NOT saved)
+  bool isLoading = false;
+
+  MonitorData({
+    required this.monDocId,
+    required this.userDocId,
+    required this.monitorName,
+    required this.monitorType,
+
+    // Tracking
+    //this.reg = "",
+    //this.distance_inside = 0,
+    //this.distance_outside = 0,
+    //this.start_time = "",
+    //this.end_time = "",
+
+    // Wheel
+    this.operator = "",
+    this.supervisor = "",
+    this.distance = 0,
+    this.lines = 0,
+    required this.timestamp,
+  });
+
+  // From Firebase
+  factory MonitorData.fromDoc(DocumentSnapshot doc) {
+    final map = doc.data() as Map<String, dynamic>;
+
+    return MonitorData(
+      monDocId: map[LogMonDocId],
+      userDocId: map[LogMonUserDocId],
+      monitorType: map[LogMonType],
+      monitorName: map[LogMonName],
+      operator: map[LogMonOperator] ?? '',
+      supervisor: map[LogMonSupervisor] ?? '',
+      distance: (map[LogMonDistance] as num?)?.toDouble() ?? 0,
+      lines: (map[LogMonLines] as num?)?.toInt() ?? 0,
+      timestamp: map[LogMonTimestamp],
+    );
+  }
+}
+class MonitorDataService extends ChangeNotifier {
+  String monDocId;
+  String? monitorType;
+  String monitorName;
+  String image;
+  String reg;
+  List<MonitorData> lstMonitorData = [];
+
+  // Local
+  bool isLoading = true;
+
+  MonitorDataService({
+    required this.monDocId,
+    required this.monitorType,
+    required this.monitorName,
+    this.reg = "",
+    this.image = '',
+    required this.lstMonitorData
+  });
+
+
+  Future<MonitorDataService> fromSnapshot( DocumentSnapshot monitorSnapshot) async {
+    isLoading = true;
+    final map = monitorSnapshot.data() as Map<String, dynamic>;
+
+    // IOT Data - subcollection
+    final dataSnapshot = await monitorSnapshot.reference
+        .collection(CollectionIotData)
+        .get();
+
+    final dataList = dataSnapshot.docs
+        .map((doc) => MonitorData.fromDoc(doc))
+        .toList();
+
+    isLoading = false;
+
+    return MonitorDataService(
+      monDocId : monitorSnapshot.id,
+      monitorType: map[FIRE_MON_TYPE] ?? '',
+      monitorName: map[FIRE_MON_BT_NAME] ?? '',
+      lstMonitorData: dataList,
+    );
   }
 }
 
@@ -2203,24 +2338,24 @@ class BaseStationData {
   factory BaseStationData.fromMap(Map<String, dynamic> map, String docId) {
     return BaseStationData(
       docId: docId,
-      baseName: map[SettingBaseName] ?? 'none',
-      baseDesc: map[SettingBaseDesc] ?? 'none',
-      ipAddress: map[SettingBaseIpAdr] ?? 'New Item',
-      bluetoothName: map[SettingBaseBlueDeviceName] ?? 'None',
-      bluetoothMac: map[SettingMonBlueMac] ?? '',
-      image: map[SettingBaseImage] ?? '',
+      baseName: map[FIRE_BASE_NAME] ?? 'none',
+      baseDesc: map[FIRE_BASE_DESC] ?? 'none',
+      ipAddress: map[FIRE_BASE_IP] ?? 'New Item',
+      bluetoothName: map[FIRE_BASE_BT_NAME] ?? 'None',
+      bluetoothMac: map[FIRE_MON_BT_MAC] ?? '',
+      image: map[FIRE_BASE_IMAGE] ?? '',
     );
   }
 
   // To Firebase (NO local fields)
   Map<String, dynamic> toMap() {
     return {
-      SettingBaseName : baseName,
-      SettingBaseDesc : baseDesc,
-      SettingBaseIpAdr : ipAddress,
-      SettingBaseBlueDeviceName : bluetoothName,
-      SettingBaseBlueMac : bluetoothMac,
-      SettingBaseImage: image
+      FIRE_BASE_NAME : baseName,
+      FIRE_BASE_DESC : baseDesc,
+      FIRE_BASE_IP : ipAddress,
+      FIRE_BASE_BT_NAME : bluetoothName,
+      FIRE_BASE_BT_MAC : bluetoothMac,
+      FIRE_BASE_IMAGE: image
     };
   }
 }
@@ -2291,6 +2426,7 @@ class BaseStationService extends ChangeNotifier {
     notifyListeners();
   }
 }
+
 //---------------------------------------------------
 // Widgets
 //---------------------------------------------------

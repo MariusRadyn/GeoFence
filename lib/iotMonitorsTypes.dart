@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 
 // Vehicle
 class IotVehicleType extends StatefulWidget {
-  final MonitorData monitorData;
+  final MonitorSettings monitorData;
   final Function(String) onChangedVehicleName;
   final Function(String) onChangedFuelConsumption;
   final Function(String) onChangedReg;
@@ -212,7 +212,7 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
 
 // Wheel
 class IotDistanceWheelType extends StatefulWidget {
-  final MonitorData monitorData;
+  final MonitorSettings monitorData;
   final Function(String) onChangedName;
   final Function(String) onChangedTicksPerM;
   final Function(String) onChangedMonId;

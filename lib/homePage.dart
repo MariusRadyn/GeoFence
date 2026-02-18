@@ -8,6 +8,7 @@ import 'package:geofence/settingsPage.dart';
 import 'package:geofence/trackingHistoryPage.dart';
 //import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/utils.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'iotMonitorsPage.dart';
 
@@ -18,13 +19,20 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
   late SettingsService settings;
 
   final TextEditingController _pwController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController2 = TextEditingController();
   final TextEditingController _userController = TextEditingController();
+
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  final double drawerWidth = 250;
+
+  final Color colorMenuIcons = Colors.blue;
+  final Color colorMenuText = Colors.blueGrey;
 
   @override
   void initState() {
@@ -37,6 +45,21 @@ class _HomePageState extends State<HomePage> {
         UserDataService().userdata!.isLoggedIn = true;
       });
     }
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+
+    _animation = Tween<double>(
+      begin: -drawerWidth,
+      end: 0,
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeInOut,
+      ),
+    );
   }
 
   @override
@@ -54,6 +77,13 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  void toggleDrawer() {
+    if (_controller.isCompleted) {
+      _controller.reverse();
+    } else {
+      _controller.forward();
+    }
+  }
   void showSignUpScreen (BuildContext context){
     double width = MediaQuery.of(context).size.width * 0.8;
     double height = MediaQuery.of(context).size.height * 0.6;
@@ -517,14 +547,17 @@ class _HomePageState extends State<HomePage> {
 
 
     return Scaffold(
-
       appBar: AppBar(
-        iconTheme: IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: COLOR_ICE_BLUE),
         backgroundColor: APP_BAR_COLOR,
+        leading: GestureDetector(
+          onTap: toggleDrawer,
+          child: Icon(Icons.menu),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('GeoFence ' + APP_VERSION ,
+            Text('LimiTLess iOT',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.normal,
@@ -607,162 +640,370 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       backgroundColor: APP_BACKGROUND_COLOR,
-
-      drawer: Drawer(
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 1.0), // optional glass effect
-          ),
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              DrawerHeader(
-                decoration: BoxDecoration(
-                  gradient: MyTileGradient(),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-
-                    /// TOP ROW
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(
-                          "Menu",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                          ),
-                        ),
-
-                        Image.asset(
-                          'assets/limitless.png',
-                          width: 80, // 👈 reduce from 100
-                          height: 80,
-                          fit: BoxFit.contain,
-                        ),
-                      ],
-                    ),
-
-                    Spacer(), // 👈 pushes bottom info down nicely
-
-                    /// BOTTOM INFO
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        MyText(
-                          text: APP_VERSION,
-                          color: Colors.grey,
-                        ),
-                        MyText(
-                          text: UserDataService().userdata?.displayName ?? "Not Logged in",
-                          color: Colors.grey,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              ListTile(
-                leading: Icon(Icons.gps_fixed),
-                title: Text("Track"),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.fence),
-                title: Text("GeoFence"),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.cell_tower),
-                title: Text("Base Station"),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.monitor),
-                title: Text("iOT Monitors"),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.history),
-                title: Text("Tracking History"),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
       body: isLoading
         ? Scaffold(
             backgroundColor: APP_BACKGROUND_COLOR,
             body: MyProgressCircle(),
          )
-      : SingleChildScrollView(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            const SizedBox(height: 50),
+      : Stack(
+        children:[
+          // =========================
+          // Page Data
+          // =========================
+          SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                const SizedBox(height: 50),
 
-            // Track Vehicle
-            MyCustomTileWithPic(
-              imagePath: 'assets/track.jpg',
-              header: 'Track',
-              description: 'Track your vehicle as it moves inside and outside of your GeoFences',
-              widget: TrackingPage(),
+                // Track Vehicle
+                MyCustomTileWithPic(
+                  imagePath: 'assets/track.jpg',
+                  header: 'Track',
+                  description: 'Track your vehicle as it moves inside and outside of your GeoFences',
+                  widget: TrackingPage(),
+                ),
+
+                const SizedBox(height: 10),
+
+                // GeoFence
+                const MyCustomTileWithPic(
+                  imagePath: 'assets/geofence.jpg',
+                  header: 'GeoFence',
+                  description: 'Set all the fence perimeters where you would like to record refundable tax rebate',
+                  widget: GeoFencePage(),
+                ),
+
+                const SizedBox(height: 10),
+
+                // Base Stations
+                MyCustomTileWithPic(
+                  imagePath: 'assets/base_station.png',
+                  header: 'Base Stations',
+                  description: 'Add multiple base stations that acts as master network controllers.',
+                  widget: BaseStationPage(userId: UserDataService().userdata!.userID),
+                ),
+
+                const SizedBox(height: 10),
+
+                // iOT Monitors
+                const MyCustomTileWithPic(
+                  imagePath: 'assets/iot.png',
+                  header: 'iOT Monitors',
+                  description: 'Add multiple iOT monitors for various use cases',
+                  widget: IotMonitorsPage(),
+                ),
+
+                const SizedBox(height: 10),
+
+                const MyCustomTileWithPic(
+                  imagePath: 'assets/report.png',
+                  header: 'Tracking History',
+                  description: 'View tracking history',
+                  widget: TrackingHistoryPage(),
+                ),
+              ],
             ),
+          ),
 
-            const SizedBox(height: 10),
+          // =========================
+          // Menu Drawer
+          // =========================
+          AnimatedBuilder(
+            animation: _animation,
+            builder: (context, child) {
+              return Positioned(
+                left: _animation.value,
+                top: 0,
+                bottom: 0,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0,5,0,0),
+                  child: Container(
+                    width: drawerWidth,
+                    decoration: BoxDecoration(
+                        borderRadius: BorderRadius.only(
+                            topRight: Radius.circular(20),
+                            bottomRight: Radius.circular(20)
+                        ),
+                      color: Colors.white,
+                    ),
 
-            // GeoFence
-            const MyCustomTileWithPic(
-              imagePath: 'assets/geofence.jpg',
-              header: 'GeoFence',
-              description: 'Set all the fence perimeters where you would like to record refundable tax rebate',
-              widget: GeoFencePage(),
-            ),
+                    // Menu
+                    child: SafeArea(
+                      child:  Column(
+                          children: [
+                            Container(
+                              height: 140,
+                              width: drawerWidth,
+                              decoration: BoxDecoration(
+                                gradient: MyTileGradient(),
+                                borderRadius: BorderRadius.only(
+                                    topRight: Radius.circular(20),
+                                ),
+                              ),
 
-            const SizedBox(height: 10),
+                              // Menu Header
+                              child: Column(
+                                children: [
+                                  /// TOP ROW
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        "Menu",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 24,
+                                        ),
+                                      ),
 
-            // Base Stations
-            MyCustomTileWithPic(
-              imagePath: 'assets/base_station.png',
-              header: 'Base Stations',
-              description: 'Add multiple base stations that acts as master network controllers.',
-              widget: BaseStationPage(userId: UserDataService().userdata!.userID),
-            ),
+                                      Image.asset(
+                                        'assets/limitless.png',
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ],
+                                  ),
 
-            const SizedBox(height: 10),
+                                  Spacer(),
 
-            // iOT Monitors
-            const MyCustomTileWithPic(
-              imagePath: 'assets/iot.png',
-              header: 'iOT Monitors',
-              description: 'Add multiple iOT monitors for various use cases',
-              widget: IotMonitorsPage(),
-            ),
+                                  /// BOTTOM INFO
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          MyText(
+                                            text: APP_VERSION,
+                                            color: Colors.grey,
+                                          ),
+                                          MyText(
+                                            text: UserDataService().userdata?.displayName ?? "Not Logged in",
+                                            color: Colors.grey,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
 
-            const SizedBox(height: 10),
+                                  SizedBox(height: 10,)
+                                ],
+                              ),
+                            ),
 
-            const MyCustomTileWithPic(
-              imagePath: 'assets/report.png',
-              header: 'Tracking History',
-              description: 'View tracking history',
-              widget: TrackingHistoryPage(),
-            ),
-          ],
-        ),
+                            // Menu
+                            Expanded(
+                              child: ListView(
+                                padding: EdgeInsets.zero,
+                                children: [
+
+                                  // -------------------------
+                                  // (HEADING) Tracking
+                                  // -------------------------
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    child: MyTextHeader(
+                                      text: "Tracking",
+                                      color: Colors.black,
+                                      fontsize: 18,
+                                      linecolor: APP_BACKGROUND_COLOR,
+                                    ),
+                                  ),
+
+                                  // Track
+                                  ListTile(
+                                    leading: Icon(Icons.gps_fixed, color: colorMenuIcons),
+                                    title: Text("Track",
+                                      style: TextStyle(color: colorMenuText),
+                                    ),
+                                    onTap: () {
+                                      toggleDrawer();
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) => TrackingPage()),
+                                      );
+                                    },
+                                  ),
+
+                                  // GeoFence
+                                  ListTile(
+                                    leading: Icon(Icons.fence, color: colorMenuIcons),
+                                    title: Text("GeoFence",
+                                        style: TextStyle(color: colorMenuText)
+                                    ),
+                                    onTap: () {
+                                      toggleDrawer();
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) => GeoFencePage()),
+                                      );
+                                    },
+                                  ),
+
+                                  // Tracking History
+                                  ListTile(
+                                    leading: Icon(
+                                        Icons.history,
+                                        color: colorMenuIcons
+                                    ),
+                                    title: Text("Tracking History",
+                                        style: TextStyle(color: colorMenuText)
+                                    ),
+                                    onTap: () {
+                                      toggleDrawer();
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) => TrackingHistoryPage()),
+                                      );
+                                    },
+                                  ),
+
+
+                                  // -------------------------
+                                  // (HEADING) IOT Monitor
+                                  // -------------------------
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(10,20,10,0),
+                                    child: MyTextHeader(
+                                      text: "iOT",
+                                      color: Colors.black,
+                                      fontsize: 18,
+                                      linecolor: APP_BACKGROUND_COLOR,
+                                    ),
+                                  ),
+
+                                  // Base Station
+                                  ListTile(
+                                    leading: Icon(
+                                        Icons.cell_tower,
+                                        color: colorMenuIcons
+                                    ),
+                                    title: Text("Base Station",
+                                        style: TextStyle(color: colorMenuText)
+                                    ),
+                                    onTap: () {
+                                      toggleDrawer();
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) => BaseStationPage(userId: UserDataService().userdata!.userID)),
+                                      );
+                                    },
+                                  ),
+
+                                  // IOT Monitors
+                                  ListTile(
+                                    leading: Icon(
+                                        Icons.monitor,
+                                        color: colorMenuIcons
+                                    ),
+                                    title: Text("iOT Monitors",
+                                      style: TextStyle(color: colorMenuText),
+                                    ),
+                                    onTap: () {
+                                      toggleDrawer();
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) => IotMonitorsPage()),
+                                      );
+                                    },
+                                  ),
+
+
+                                  // -------------------------
+                                  // (HEADING) Settings
+                                  // -------------------------
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(10,20,10,0),
+                                    child: MyTextHeader(
+                                      text: "Settings",
+                                      color: Colors.black,
+                                      fontsize: 18,
+                                      linecolor: APP_BACKGROUND_COLOR,
+                                    ),
+                                  ),
+
+                                  // Settings
+                                  ListTile(
+                                    leading: Icon(
+                                        Icons.settings,
+                                        color: colorMenuIcons
+                                    ),
+                                    title: Text("Settings",
+                                        style: TextStyle(color: colorMenuText)
+                                    ),
+                                    onTap: () {
+                                      toggleDrawer();
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) => SettingsPage(userId: UserDataService().userdata!.userID)),
+                                      );
+                                    },
+                                  ),
+
+                                SizedBox(height: 5,)
+                                ],
+                              ),
+                            ),
+                          ]
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // =========================
+          // Side Swipe Handle
+          // =========================
+          // AnimatedBuilder(
+          //   animation: _controller,
+          //   builder: (context, child) {
+          //     return Positioned(
+          //       left: 0,
+          //       top: MediaQuery.of(context).size.height / 2 - 30,
+          //       child: Opacity(
+          //         opacity: 1 - _controller.value,
+          //         child: IgnorePointer(
+          //           ignoring: _controller.value > 0.9,
+          //           child: GestureDetector(
+          //             onTap: toggleDrawer,
+          //             child: Container(
+          //               width: 15,
+          //               height: 100,
+          //               decoration: BoxDecoration(
+          //                 color: Colors.lightBlueAccent,
+          //                 borderRadius: const BorderRadius.horizontal(
+          //                   right: Radius.circular(25),
+          //                 ),
+          //                 boxShadow: const [
+          //                   BoxShadow(
+          //                     color: Colors.black26,
+          //                     blurRadius: 6,
+          //                   ),
+          //                 ],
+          //               ),
+          //               // child: const Icon(
+          //               //   Icons.chevron_right,
+          //               //   color: Colors.white,
+          //               // ),
+          //             ),
+          //           ),
+          //         ),
+          //       ),
+          //     );
+          //   },
+          // ),
+        ]
       ),
     );
   }

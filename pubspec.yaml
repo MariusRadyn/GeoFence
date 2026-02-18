@@ -106,6 +106,9 @@ flutter:
     - assets/tractor.jpg
     - assets/generator.jpg
     - assets/limitless.png
+    #- assets/limitless_iot.png
+    - assets/limitless_iot2.png
+    #- assets/limitlessIotWord.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

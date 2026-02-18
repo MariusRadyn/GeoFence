@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geofence/homePage.dart';
+import 'package:geofence/utils.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -70,7 +71,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     // Navigate to main screen after animation completes
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        Future.delayed(const Duration(milliseconds: 500), () {
+        Future.delayed(const Duration(milliseconds: 1500), () {
            Navigator.of(context).pushReplacement(
              MaterialPageRoute(builder: (_) => HomePage()),
           );
@@ -88,53 +89,86 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: APP_BACKGROUND_COLOR,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Expanded(
+              child: Stack(
+                children: [
 
-            // Animated App Icon
-            AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                return Transform.scale(
-                  scale: _iconScaleAnimation.value,
-                  child: Transform.rotate(
-                    angle: _iconRotationAnimation.value,
-                    child: Image.asset(
-                      'assets/appicon_blue.png',
-                      width: 120,
-                      height: 120,
+                  // Center everything relative to screen
+                  Positioned.fill(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+
+                        final centerY = constraints.maxHeight * 0.45;
+                        final spacing = 30.0; // 👈 adjust this for vertical spacing
+                        final offsetY = 100;
+
+                        return Stack(
+                          children: [
+
+                            // =====================
+                            // Animated App Icon
+                            // =====================
+                            Positioned(
+                              top: centerY - offsetY, // move upward from center
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: AnimatedBuilder(
+                                  animation: _controller,
+                                  builder: (context, child) {
+                                    return Transform.scale(
+                                      scale: _iconScaleAnimation.value,
+                                      child: Transform.rotate(
+                                        angle: _iconRotationAnimation.value,
+                                        child: Image.asset(
+                                          'assets/limitless.png',
+                                          width: 150,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+
+                            // =====================
+                            // Animated App Name
+                            // =====================
+                            Positioned(
+                              top: centerY - offsetY + spacing,
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: AnimatedBuilder(
+                                  animation: _controller,
+                                  builder: (context, child) {
+                                    return FadeTransition(
+                                      opacity: _textOpacityAnimation,
+                                      child: SlideTransition(
+                                        position: _textSlideAnimation,
+                                        child: Image.asset(
+                                          'assets/limitlessIotWord.png',
+                                          width: 300,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-
-            // Animated App Name
-            AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                return FadeTransition(
-                  opacity: _textOpacityAnimation,
-                  child: SlideTransition(
-                    position: _textSlideAnimation,
-                    child: const Text(
-                      'GeoFence',
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.normal,
-                        fontFamily: "Poppins",
-                        color: Colors.black,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+                ],
+              ),
+            )
           ],
         ),
       ),
