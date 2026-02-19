@@ -350,7 +350,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
             Column(
               children: [
                 MyTextTileWithEditDelete(
-                  text: 'Total',
+                  header: 'Total',
                   subtext:
                       'Total Rebate: R${nrFormatter.format(_totalRebate)}\n'
                       'Total Distance: ${nrFormatter.format(_totalKM)}km\n'
@@ -383,7 +383,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
                               SizedBox(height: 20),
 
                               MyTextTileWithEditDelete(
-                                text: DateFormat('yyyy-MM-dd (kk:mm) ').format(session['start_time'].toDate()),
+                                header: DateFormat('yyyy-MM-dd (kk:mm) ').format(session['start_time'].toDate()),
                                 subtext:
                                   //'ID: ${session.id}\n'
                                   'Vehicle: $vehicleName\n'

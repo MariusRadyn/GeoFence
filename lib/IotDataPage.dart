@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:geofence/IotDataLogsPage.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
 import 'trackingHistoryMap.dart';
@@ -23,20 +24,11 @@ class _IotDataPageState extends State<IotDataPage> {
   List<Map<String, dynamic>>? _vehicles = [];
   DateTime _selectedDateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _selectedDateTo = DateTime(DateTime.now().year, DateTime.now().month + 1, 0, );
-  double _totalRebate = 0.0;
-  double _totalKM = 0.0;
-  double _totalLiters = 0.0;
 
 
   @override
   void initState() {
     super.initState();
-    fetchVehicles();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      User? user = _auth.currentUser;
-    });
   }
 
   @override
@@ -45,129 +37,6 @@ class _IotDataPageState extends State<IotDataPage> {
     settings = context.read<SettingsService>();
   }
 
-  Future<void> fetchVehicles() async {
-    _vehicles = await getVehicles();
-    setState(() {}); // Refresh UI after fetching data
-
-    print(jsonEncode(_vehicles)); // Pretty-print JSON format
-  }
-  Future<List<Map<String, dynamic>>> getVehicles() async {
-    final QuerySnapshot snapshot = await FirebaseFirestore.instance
-        .collection(CollectionUsers)
-        .doc(_auth.currentUser!.uid)
-        .collection(CollectionMonitors)
-        .get();
-
-    return snapshot.docs.map((doc) {
-      return {
-        'vehicle_id': doc.id, // Add document ID manually
-        ...doc.data() as Map<String, dynamic>, // Merge Firestore fields
-      };
-    }).toList();
-
-  }
-  void _deleteSession(QueryDocumentSnapshot session, String vehicle, String reg) async {
-    showDialog(
-        context: context,
-        builder: (context){
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(
-                color: Colors.blue, // Border color
-                width: 2, // Border width
-              ),
-            ),
-            backgroundColor: APP_TILE_COLOR,
-            shadowColor: Colors.black,
-            title: const Text(
-              "Delete",
-              style: TextStyle(color: Colors.white),
-            ),
-            content: Text(
-              "",
-              //"${DateFormat('yyyy-MM-dd – kk:mm').format(session['start_time'].toDate())}\n${vehicle}\n${reg}\n\nAre you sure?",
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 18,
-              ),
-            ),
-            actions: [
-              TextButton(
-                child: const Text(
-                  'No',
-                  style: TextStyle(
-                    color:  Colors.white,
-                    fontFamily: "Poppins",
-                    fontSize: 20,
-                  ),
-                ),
-                onPressed: () => Navigator.pop(context),
-              ),
-              TextButton(
-                  child: const Text(
-                    'Yes',
-                    style: TextStyle(
-                      color:  Colors.white,
-                      fontFamily: "Poppins",
-                      fontSize: 20,
-                    ),
-                  ),
-                  onPressed: () async {
-                    User? user = _auth.currentUser;
-                    _deleteSessionWithLocations(user?.uid, session.id);
-                    Navigator.pop(context);
-                  }
-              ),
-            ],
-          );
-        }
-    );
-  }
-  Future<void> _deleteSessionWithLocations(String? userId, String sessionId) async {
-    final sessionRef = _firestore
-        .collection(CollectionUsers)
-        .doc(userId)
-        .collection(CollectionTrackingSessions)
-        .doc(sessionId);
-
-    // Delete all documents in the CollectionLocations subcollection
-    final locations = await sessionRef.collection(CollectionLocations).get();
-    for (var doc in locations.docs) {
-      await doc.reference.delete();
-    }
-
-    // Now delete the session itself
-    await sessionRef.delete();
-  }
-  String? _getVehicleNameById(String vehicleId) {
-    return _vehicles?.firstWhere(
-          (vehicle) => vehicle['vehicle_id'] == vehicleId,
-      orElse: () => {'name': 'Unknown'}, // Default if not found
-    )['name'] as String;
-  }
-  String? _getVehicleRegById(String vehicleId) {
-    return _vehicles?.firstWhere(
-          (vehicle) => vehicle['vehicle_id'] == vehicleId,
-      orElse: () => {'registrationNumber': 'Unknown'}, // Default if not found
-    )['registrationNumber'] as String;
-  }
-  double? _getVehicleFuelConsumptiomById(String vehicleId) {
-    dynamic fuel = _vehicles?.firstWhere(
-          (vehicle) => vehicle['vehicle_id'] == vehicleId,
-      orElse: () => {'fuelConsumption': 0}, // Default if not found
-    )['fuelConsumption'];
-
-    if(fuel is double){
-      return fuel;
-    }
-    else if(fuel is int){
-      return fuel.toDouble();
-    }
-    else{
-      throw Exception("Value from firestore not double or int");
-    }
-  }
   Future<void> _pickDateFrom() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -195,63 +64,6 @@ class _IotDataPageState extends State<IotDataPage> {
         _selectedDateTo = picked;
       });
     }
-  }
-  Future<void> _sendReportToEmail (String email) async{
-    final subject = Uri.encodeComponent('Tracking Report');
-    final body = Uri.encodeComponent('Here is your requested tracking report.');
-    final uri = Uri.parse('mailto:$email?subject=$subject&body=$body');
-
-    // if (await canLaunchUrl(uri)) {
-    // await launchUrl(uri);
-    // } else {
-    // throw 'Could not launch $uri';
-    // }
-    MyGlobalSnackBar.show('Email sent');
-  }
-  void emailReport(BuildContext context) {
-    final TextEditingController emailTextController = TextEditingController();
-
-    showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: const BorderSide(
-              color: Colors.blue, // Border color
-              width: 2, // Border width
-            ),
-          ),
-          backgroundColor: APP_TILE_COLOR,
-          shadowColor: Colors.black,
-          title: Text('Email Address',
-            style: TextStyle(color: Colors.white)),
-          content: TextField(
-            controller: emailTextController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: InputDecoration(
-              labelText: 'Enter Email Address',
-              hintText: 'example@email.com'
-            ),
-            style: TextStyle(color: Colors.grey),
-          ),
-          actions: [
-            TextButton(
-              child:
-              Text('Cancel',style:
-                TextStyle(color: Colors.grey)),
-              onPressed: () => Navigator.pop(context),
-            ),
-            TextButton(
-              child: Text('Send',
-                style: TextStyle(color: Colors.grey),),
-              onPressed: (){
-                Navigator.pop(context);
-                _sendReportToEmail(emailTextController.text.trim());
-              }
-            ),
-          ],
-        )
-    );
   }
 
   @override
@@ -298,24 +110,24 @@ class _IotDataPageState extends State<IotDataPage> {
       body: Container(
         color: APP_BACKGROUND_COLOR,
         child: StreamBuilder<QuerySnapshot>(
-          stream: _firestore
-              .collectionGroup(CollectionMonitorData)
-              .where(FIRE_MON_USER_DOC_ID, isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-              .where(FIRE_MON_TIMESTAMP, isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedDateFrom))
-              .where(FIRE_MON_TIMESTAMP, isLessThanOrEqualTo: Timestamp.fromDate(_selectedDateTo))
-              .orderBy(FIRE_MON_TIMESTAMP, descending: true)
+          stream:
+          _firestore
+              .collection(CollectionUsers).doc(FirebaseAuth.instance.currentUser?.uid)
+              .collection(CollectionMonitors)
+              .where(FIRE_MON_LAST_LOG_TIMESTAMP, isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedDateFrom))
+              .where(FIRE_MON_LAST_LOG_TIMESTAMP, isLessThanOrEqualTo: Timestamp.fromDate(_selectedDateTo))
+              .orderBy(FIRE_MON_LAST_LOG_TIMESTAMP, descending: true)
               .snapshots(),
 
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return Center(child: CircularProgressIndicator());
+          builder: (context, monitorSnapshot) {
+            if (monitorSnapshot.connectionState == ConnectionState.waiting ) {
+              return Center(child: MyProgressCircle());
             }
 
-            var sessions = snapshot.data!.docs;
-            if (sessions.isEmpty) {
+            if (!monitorSnapshot.hasData || monitorSnapshot.data!.docs.isEmpty) {
               return const Center(
                 child: Text(
-                  "No IOT Data history found",
+                  "No IOT History Data",
                   style: TextStyle(
                     color: Colors.grey,
                     fontSize: 20,
@@ -323,96 +135,93 @@ class _IotDataPageState extends State<IotDataPage> {
                 ),
               );
             }
-            
-            // Calculate totals
-            for (var session in sessions) {
-              final vehicleId = session['vehicle_id'];
-              final distanceInside = (session['distance_inside'] ?? 0).toDouble();
-              final vehicleConsumption = _getVehicleFuelConsumptiomById(vehicleId) ?? 0;
-              final rebate = settings.fireSettings?.rebateValuePerLiter ?? 0;
-              double litersUsed = 0.0;
-              double thisRebate = 0;
 
-              if (vehicleConsumption > 0) {
-                litersUsed = distanceInside / vehicleConsumption;
-                thisRebate = litersUsed * rebate;
-              }
-
-              _totalRebate += thisRebate;
-              _totalKM += distanceInside;
-              _totalLiters += litersUsed;
+            var monitors = monitorSnapshot.data!.docs;
+            if (monitors.isEmpty) {
+              return const Center(
+                child: Text(
+                  "No IOT History Data",
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 20,
+                  ),
+                ),
+              );
             }
 
-            return _vehicles == null
-                ? Center(child: CircularProgressIndicator())
-                :
-            Column(
+            return  Column(
               children: [
-                MyTextTileWithEditDelete(
-                  text: 'Total',
-                  subtext:
-                      'Total Rebate: R${nrFormatter.format(_totalRebate)}\n'
-                      'Total Distance: ${nrFormatter.format(_totalKM)}km\n'
-                      'Total Liters: ${nrFormatter.format(_totalLiters)}L',
-
-                  onTapReport: (){
-                     emailReport(context);
-                  },
-                ),
                 Expanded(
                   child: ListView.builder(
-                    itemCount: sessions.length,
+                    itemCount: monitors.length,
                     itemBuilder: (context, index) {
+                      var monitorData = monitors[index];
 
-                        var session = sessions[index];
-                        String vehicleName = _getVehicleNameById(session['vehicle_id']) ?? "Unknown Vehicle";
-                        String vehicleReg = _getVehicleRegById(session['vehicle_id']) ?? "Unknown";
-                        double vehicleConsumption = _getVehicleFuelConsumptiomById(session['vehicle_id']) ?? 0;
-                        double rebate = settings.fireSettings?.rebateValuePerLiter ?? 0;
-                        double insideKM = session['distance_inside'];
-                        double outsideKM = session['distance_outside'];
-                        double litersUsed = 0.0;
+                      return StreamBuilder<QuerySnapshot>(
+                        stream: monitorData.reference
+                            .collection(CollectionMonitorData)
+                            .snapshots(),
+                        builder: (context, iotSnapshot){
 
-                        if(vehicleConsumption > 0){
-                          litersUsed =  insideKM / vehicleConsumption;
-                        }
+                          if (!iotSnapshot.hasData) {
+                            return ListTile(title: Text("Loading..."));
+                          }
+
+                          final iotData = iotSnapshot.data!.docs;
+
+                          // Get Summary
+                          double distance = 0;
+                          num lines = 0;
+
+                          iotData.forEach((doc) {
+                            distance += doc.get(LogMonDistance) ?? 0.0;
+                            lines += doc.get(LogMonLines) ?? 0;
+                          });
+
+                          String iotName = monitorData[LogMonName];
+                          String nrOfItems = iotData.length.toString();
+                          String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[FIRE_MON_LAST_LOG_TIMESTAMP].toDate());
+                          String dist = distance.toStringAsFixed(2);
+
+                          String image;
+                          String img = monitorData[FIRE_MON_IMAGE];
+                          img.isEmpty ? image = "assets/distanceWheel.jpg" : image = img;
 
                           return Column(
                             children: [
                               SizedBox(height: 20),
 
                               MyTextTileWithEditDelete(
-                                text: DateFormat('yyyy-MM-dd (kk:mm) ').format(session['start_time'].toDate()),
-                                subtext:
-                                  //'ID: ${session.id}\n'
-                                  'Vehicle: $vehicleName\n'
-                                  'Reg: $vehicleReg\n'
-                                  'Inside: ${nrFormatter.format(insideKM)} km\n'
-                                  'Outside: ${nrFormatter.format(outsideKM)} km\n'
-                                  'Liters Used: ${nrFormatter.format(litersUsed)} L\n'
-                                  'Rebate: R${nrFormatter.format(litersUsed * rebate)}\n',
+                                image: image,
+                                header: '$iotName',
+                                subtext: 'Logs: $nrOfItems\nDistance: $dist m\nLines: $lines',
+                                headerColor: Colors.white,
+                                textColor: Colors.white,
+                                gradient: LinearGradient(colors: [Colors.blueGrey,Colors.grey]),
+                                height: 150,
 
-                                onTapDelete: (){
-                                    _deleteSession(session, vehicleName, vehicleReg);
-                                  } ,
-
-                                  onTapTile: (){
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => TrackingHistoryMap(
-                                        userId: _auth.currentUser?.uid,
-                                        trackSessionId: session.id,
-                                      )),
-                                    );
-                                  },
+                                onTapTile: (){
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => IotDataLogsPage(
+                                      monitorName: monitorData[FIRE_MON_NAME],
+                                      image: image,
+                                      snapshot: iotData,
+                                      userDocId: FirebaseAuth.instance.currentUser?.uid ,
+                                      monDocId: monitorData.id,
+                                    )),
+                                  );
+                                },
                               ),
 
                               SizedBox(height: 1)
                             ],
                           );
-                        },
-                                  ),
-                    ),
+                        }
+                      );
+                    },
+                  ),
+                ),
               ],
             );
           },

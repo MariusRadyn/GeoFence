@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:geofence/IotDataPage.dart';
 import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/baseStationPage.dart';
 import 'package:geofence/geofencePage.dart';
@@ -557,7 +558,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('LimiTLess iOT',
+            Text('LimitLess iOT',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.normal,
@@ -912,6 +913,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                         context,
                                         MaterialPageRoute(
                                             builder: (context) => IotMonitorsPage()),
+                                      );
+                                    },
+                                  ),
+
+                                  // IOT Data
+                                  ListTile(
+                                    leading: Icon(
+                                        Icons.monitor,
+                                        color: colorMenuIcons
+                                    ),
+                                    title: Text("iOT Data",
+                                      style: TextStyle(color: colorMenuText),
+                                    ),
+                                    onTap: () {
+                                      toggleDrawer();
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) => IotDataPage()),
                                       );
                                     },
                                   ),

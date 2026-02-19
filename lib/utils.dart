@@ -108,7 +108,7 @@ const String MonTypeWheel = "Distance Wheel";
 const LogMonDocId = 'monDocId';
 const LogMonUserDocId = 'userDocId';
 const LogMonType = 'iotType';
-const LogMonName = 'iotName';
+const LogMonName = 'name';
 const LogMonDistance = 'distance';
 const LogMonLines = 'lines';
 const LogMonOperator = 'operator';
@@ -137,10 +137,11 @@ const FIRE_MON_BT_MAC = 'bluetoothMAC';
 const FIRE_MON_IMAGE = 'picture';
 const FIRE_MON_TYPE = 'type';
 const FIRE_MON_ID = 'monitorId';
-const FIRE_MON_DOC_ID = 'monDocId';
-const FIRE_MON_USER_DOC_ID = 'userDocId';
+//const FIRE_MON_DOC_ID = 'monDocId';
+//const FIRE_MON_USER_DOC_ID = 'userDocId';
 const FIRE_MON_TICKS_PER_M = 'ticksPerM';
 const FIRE_MON_TIMESTAMP = 'timestamp';
+const FIRE_MON_LAST_LOG_TIMESTAMP = 'lastLogTimestamp';
 
 // Firebase - Tracking settings
 const FIRE_TRACK_DIST_IN = 'distance_inside';
@@ -1030,102 +1031,139 @@ class MyTextHeader extends StatelessWidget {
   }
 }
 class MyTextTileWithEditDelete extends StatelessWidget {
-  final String text;
+  final String header;
   final String subtext;
-  final Function? onTapEdit;
-  final Function? onTapDelete;
-  final Function? onTapTile;
-  final Function? onTapReport;
+  final VoidCallback? onTapEdit;
+  final VoidCallback? onTapDelete;
+  final VoidCallback? onTapTile;
+  final VoidCallback? onTapReport;
+  final LinearGradient? gradient;
+  final Color? backgroundColor;
+  final Color headerColor;
+  final Color textColor;
+  final String? image;
+  final double? height;
 
-  const MyTextTileWithEditDelete({
-    required this.text,
+  MyTextTileWithEditDelete({
+    required this.header,
     required this.subtext,
     this.onTapEdit,
     this.onTapDelete,
     this.onTapTile,
     this.onTapReport,
+    LinearGradient? gradient ,
+    this.backgroundColor,
+    this.headerColor = Colors.white,
+    this.textColor = Colors.white,
+    this.image,
+    this.height,
     super.key
-  });
+  }) : gradient = gradient ?? MyTileGradient();
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: (){
+      onTap: () {
         if(onTapTile != null) {
           onTapTile!();
         }
-        },
-      child: Container(
-
-        decoration: BoxDecoration(
-          color: APP_TILE_COLOR,
-          border: Border.all(
-            color: Colors.grey,
-            width: 1,
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20,0,20,0),
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(30),
+            gradient: gradient,
           ),
-          borderRadius: BorderRadius.circular(5),
-          gradient: MyTileGradient(),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    MyText(
-                      text: text,
-                      color: Colors.white,
-                      fontsize: 18,
-                    ),
-                    SizedBox(height: 1),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(30,0,10,0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
 
-                    MyText(
-                      text: subtext,
-                      color: Colors.grey,
-                      fontsize: 14,
+                // Text
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+
+                      // Header
+                      MyText(
+                        text: header,
+                        color: headerColor,
+                        fontsize: 18,
+                      ),
+
+                      SizedBox(height: 1),
+
+                      // Text
+                      MyText(
+                        text: subtext,
+                        color: textColor,
+                        fontsize: 14,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Image
+                image == null ? SizedBox() :
+                Row(
+                  children: [
+                    Container(
+                      height: 50,
+                      width: 50,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        image: DecorationImage(
+                          image: AssetImage(image!),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
+                    SizedBox(width: 10),
                   ],
                 ),
-              ),
-            ),
 
-            const SizedBox(width: 10),
+                const SizedBox(width: 10),
 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if(onTapEdit != null)
-                  IconButton(
-                    icon: Icon(Icons.edit, color: Colors.white,),
-                    onPressed: () => onTapEdit!(),
-                    iconSize: 25,
-                    constraints: BoxConstraints(),
-                  ),
+                // Icons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if(onTapEdit != null)
+                      IconButton(
+                        icon: Icon(Icons.edit, color: Colors.white,),
+                        onPressed: () => onTapEdit!(),
+                        iconSize: 35,
+                        constraints: BoxConstraints(),
+                      ),
 
-                if(onTapDelete != null)
-                  IconButton(
-                    icon: Icon(Icons.delete, color: Colors.red,),
-                    onPressed: () => onTapDelete!(),
-                    iconSize: 25,
-                    constraints: BoxConstraints(),
-                  ),
+                    if(onTapDelete != null)
+                      IconButton(
+                        icon: Icon(Icons.delete, color: Colors.red,),
+                        onPressed: () => onTapDelete!(),
+                        iconSize: 35,
+                        constraints: BoxConstraints(),
+                      ),
 
-                if(onTapReport != null)
-                  IconButton(
-                    icon: Icon(Icons.list_alt, color: Colors.blue,),
-                    onPressed: () => onTapReport!(),
-                    iconSize: 25,
-                    constraints: BoxConstraints(),
-                  ),
+                    if(onTapReport != null)
+                      IconButton(
+                        icon: Icon(Icons.list_alt, color: Colors.blue,),
+                        onPressed: () => onTapReport!(),
+                        iconSize: 35,
+                        constraints: BoxConstraints(),
+                      ),
+                  ],
+                ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -2285,7 +2323,7 @@ class MonitorDataService extends ChangeNotifier {
 
     // IOT Data - subcollection
     final dataSnapshot = await monitorSnapshot.reference
-        .collection(CollectionIotData)
+        .collection(CollectionMonitorData)
         .get();
 
     final dataList = dataSnapshot.docs
@@ -2512,13 +2550,13 @@ LinearGradient MyTileGradient() {
       end: Alignment.bottomRight,
       stops: [
       0.1,
+      0.3,
       0.7,
-      0.9,
       ],
       colors: [
-      Colors.black,
-      APP_BACKGROUND_COLOR,
-      APP_TILE_COLOR,
+        APP_TILE_COLOR,
+        APP_BACKGROUND_COLOR,
+        APP_TILE_COLOR,
       ],
   );
 }
