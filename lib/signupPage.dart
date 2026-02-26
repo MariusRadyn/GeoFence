@@ -125,7 +125,7 @@ class _signupPageState extends State<signupPage> {
     String email = _emailController.text;
     String password = _pwController.text;
 
-    User? user = await _auth.fireAuthCreateUser(context, email, password);
+    User? user = await _auth.fireAuthCreateUserWithEmail(context, email, password);
 
     if (user != null) {
       userData?.userID = user.uid;

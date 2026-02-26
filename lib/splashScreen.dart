@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geofence/homePage.dart';
+import 'package:geofence/main.dart';
 import 'package:geofence/utils.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -39,7 +40,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       parent: _controller,
       curve: const Interval(0.0, 0.6, curve: Curves.easeInOut),
     ));
-
     _iconRotationAnimation = Tween<double>(
       begin: 0.0,
       end: 2 * 3.14159, // Full rotation in radians
@@ -56,7 +56,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       parent: _controller,
       curve: const Interval(0.6, 0.8, curve: Curves.easeIn),
     ));
-
     _textSlideAnimation = Tween<Offset>(
       begin: const Offset(0.0, 0.5),
       end: Offset.zero,
@@ -73,8 +72,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       if (status == AnimationStatus.completed) {
         Future.delayed(const Duration(milliseconds: 1500), () {
            Navigator.of(context).pushReplacement(
+             //MaterialPageRoute(builder: (_) => AuthGate()),
              MaterialPageRoute(builder: (_) => HomePage()),
-          );
+           );
         });
       }
     });
@@ -104,7 +104,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       builder: (context, constraints) {
 
                         final centerY = constraints.maxHeight * 0.45;
-                        final spacing = 30.0; // 👈 adjust this for vertical spacing
+                        final spacing = 50.0; // 👈 adjust this for vertical spacing
                         final offsetY = 100;
 
                         return Stack(
@@ -126,7 +126,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                                       child: Transform.rotate(
                                         angle: _iconRotationAnimation.value,
                                         child: Image.asset(
-                                          'assets/limitless.png',
+                                          ICON_LIMITLESS_LOGO,
                                           width: 150,
                                         ),
                                       ),
@@ -152,8 +152,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                                       child: SlideTransition(
                                         position: _textSlideAnimation,
                                         child: Image.asset(
-                                          'assets/limitlessIotWord.png',
-                                          width: 300,
+                                          ICON_LIMITLESS_WORD,
+                                          width: 200,
                                         ),
                                       ),
                                     );

@@ -121,17 +121,6 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
         title: MyText(text: "iOT Log Data", fontsize: 18,),
         backgroundColor: APP_BAR_COLOR,
         foregroundColor: Colors.white,
-        actions: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: Colors.white,
-            child: CircleAvatar(
-              radius: 18,
-              backgroundImage: AssetImage(widget.image),
-            ),
-          ),
-          SizedBox(width: 10,)
-        ],
       ),
       body: Container(
         color: APP_BACKGROUND_COLOR,
@@ -150,6 +139,66 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
 
             return Column(
               children: [
+                Stack(
+                  children: [
+                    // Backdrop
+                    Container(
+                      alignment: Alignment.topCenter,
+                      height: 170,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          stops: [0.3, 0.9],
+                          colors: [Colors.blueGrey, APP_BACKGROUND_COLOR],
+                        ),
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(100),
+                          bottomRight: Radius.circular(100),
+                        ),
+                      ),
+                    ),
+
+                    // Avatar
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                // Navigation logic could go here
+                              },
+                              child: CircleAvatar(
+                                radius: 55,
+                                backgroundColor: Colors.white,
+                                child: CircleAvatar(
+                                  backgroundImage: AssetImage(widget.image),
+                                  radius: 50,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Heading
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.only(top: 120),
+                        child: MyText(
+                          text:widget.monitorName,
+                          fontsize: 25,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
                 Expanded(
                   child: ListView.builder(
                     itemCount: docs.length,
@@ -164,19 +213,19 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
 
                       String image;
                       String img = widget.image;
-                      img.isEmpty ? image = "assets/distanceWheel.jpg" : image = img;
+                      img.isEmpty ? image = IMAGE_WHEEL : image = img;
 
                       return Column(
                         children: [
                           SizedBox(height: 20),
 
                           MyTextTileWithEditDelete(
-                            header: widget.monitorName,
-                            subtext: 'Operator: $operator\nSupervisor: $sup\nLines: $nrOfItems\nDistance: $dist m\n$date',
+                            header: date,
+                            subtext: 'Operator: $operator\nSupervisor: $sup\nLines: $nrOfItems\nDistance: $dist m',
                             headerColor: Colors.white,
                             textColor: Colors.white,
-                            gradient: LinearGradient(colors: [Colors.blueGrey,Colors.grey]),
-                            height: 150,
+                            gradient: LinearGradient(colors: [Colors.blueGrey,APP_BACKGROUND_COLOR]),
+                            height: 130,
 
                             onTapDelete: (){
                                _delete('${widget.monitorName}\n$date', widget.userDocId, widget.monDocId, monitorData.id);

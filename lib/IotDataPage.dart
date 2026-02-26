@@ -185,7 +185,7 @@ class _IotDataPageState extends State<IotDataPage> {
 
                           String image;
                           String img = monitorData[FIRE_MON_IMAGE];
-                          img.isEmpty ? image = "assets/distanceWheel.jpg" : image = img;
+                          img.isEmpty ? image = IMAGE_WHEEL : image = img;
 
                           return Column(
                             children: [

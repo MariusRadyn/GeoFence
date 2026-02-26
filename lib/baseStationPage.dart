@@ -15,16 +15,11 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'Bluetooth2.dart';
 import 'MqttService.dart';
-//import 'package:lan_scanner/lan_scanner.dart';
-//import 'package:network_info_plus/network_info_plus.dart';
-//import 'Bluetooth2.dart';
 
 class BaseStationPage extends StatefulWidget {
-  final String userId;
-
   const BaseStationPage({
     super.key,
-    required this.userId
+
   });
 
   @override
@@ -782,118 +777,3 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
   }
 }
-
-
-// Future<void> _getPairedDevices() async {
-//   try {
-//     List<BluetoothDevice> devices = await FlutterBluePlus.connectedDevices;
-//     setState(() {
-//       lstPairedDevices = devices;
-//
-//       if(devices.length == 0){
-//         lstPairedDevices = [
-//           BluetoothDevice(remoteId: DeviceIdentifier("00:00:00:00:00:00")),
-//         ];
-//       }
-//
-//       // Debug - Set Manual List
-//       if(Debug){
-//         lstPairedDevices = [
-//           BluetoothDevice(
-//             remoteId: DeviceIdentifier("00:11:22:33:44:55"),
-//           ),
-//           BluetoothDevice(
-//             remoteId: DeviceIdentifier("AA:BB:CC:DD:EE:FF"),
-//           ),
-//         ];
-//       }
-//     });
-//   } catch (e) {
-//     print('Error getting connected devices: $e');
-//   }
-// }
-// void _getAvailableDevices() async {
-//   lstAvailableDevices.clear();
-//
-//   FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
-//
-//   FlutterBluePlus.scanResults.listen((results) {
-//     setState(() {
-//       lstAvailableDevices = results;
-//     });
-//   });
-// }
-// Future<void> _startScan() async {
-//   if (await FlutterBluePlus.isSupported == false) {
-//     ScaffoldMessenger.of(context).showSnackBar(
-//       SnackBar(content: Text('Bluetooth not supported')),
-//     );
-//     return;
-//   }
-//
-//   setState(() {
-//     isScanning = true;
-//     lstAvailableDevices.clear();
-//   });
-//
-//   // Listen to scan results
-//   FlutterBluePlus.scanResults.listen((results) {
-//     setState(() {
-//       lstAvailableDevices = results;
-//     });
-//   });
-//
-//   // Start scanning
-//   await FlutterBluePlus.startScan(timeout: Duration(seconds: 10));
-//
-//   setState(() {
-//     isScanning = false;
-//   });
-// }
-// Future<void> _stopScan() async {
-//   await FlutterBluePlus.stopScan();
-//   setState(() {
-//     isScanning = false;
-//   });
-// }
-// Future<void> _connectToDevice(BluetoothDevice device) async {
-//   try {
-//     await device.connect();
-//     setState(() {
-//       //pairedDevice = device;
-//     });
-//
-//     ScaffoldMessenger.of(context).showSnackBar(
-//       SnackBar(content: Text('Connected to ${device.name}')),
-//     );
-//
-//     // Discover services after connection
-//     List<BluetoothService> services = await device.discoverServices();
-//     print('Discovered ${services.length} services');
-//
-//   } catch (e) {
-//     ScaffoldMessenger.of(context).showSnackBar(
-//       SnackBar(content: Text('Failed to connect: $e')),
-//     );
-//   }
-// }
-// Future<void> _disconnect() async {
-//   if (pairedDevice != null) {
-//     await pairedDevice!.disconnect();
-//     setState(() {
-//       pairedDevice = null;
-//     });
-//     ScaffoldMessenger.of(context).showSnackBar(
-//       SnackBar(content: Text('Disconnected')),
-//     );
-//   }
-// }
-// Future<void> _requestPermissions() async {
-//   await [
-//     Permission.bluetooth,
-//     Permission.bluetoothScan,
-//     Permission.bluetoothConnect,
-//     Permission.location,
-//   ].request();
-// }
-//

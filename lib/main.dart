@@ -1,11 +1,13 @@
 
- import 'package:firebase_core/firebase_core.dart';
- import 'package:flutter/material.dart';
- import 'package:geofence/splashScreen.dart';
- import 'package:geofence/utils.dart';
- import 'package:geofence/firebase_options.dart';
- import 'package:provider/provider.dart';
- import 'gpsServices.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:geofence/splashScreen.dart';
+import 'package:geofence/utils.dart';
+import 'package:geofence/firebase_options.dart';
+import 'package:provider/provider.dart';
+import 'gpsServices.dart';
+import 'homePage.dart';
 
 
 Future<void> main() async {

@@ -9,6 +9,7 @@ import 'package:path/path.dart' as path;
 import 'package:image_picker/image_picker.dart';
 import 'package:geofence/utils.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:provider/provider.dart';
 
 FirebaseStorage fireStorageInstance = FirebaseStorage.instance;
 List<Reference> fireAllSongsRef = [];
@@ -236,69 +237,35 @@ Future<void> fireDbCreateUser(User user) async {
 // Firestore Authentication
 // ----------------------------------------------------------------------------
 class FirebaseAuthService {
-
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  Future<User?> fireAuthCreateUser(BuildContext context, String email, String password) async {
-    //final _userData = Provider.of<UserData>(context, listen: false);
-    UserData? userData = UserDataService().userdata;
 
+  Future<User?> fireAuthCreateUserWithEmail(BuildContext context, String email, String password) async {
     try {
+      // Create User
       UserCredential credential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
+      // Send Verify Email
+      final user = credential.user;
+      if (user != null) {
+        await user.sendEmailVerification();
+      }
+
       return credential.user;
     } catch (e) {
       if (e is FirebaseAuthException) {
-        switch (e.code) {
-          ///  - **email-already-in-use**:
-          ///  - Thrown if there already exists an account with the given email address.
-          /// - **invalid-email**:
-          ///  - Thrown if the email address is not valid.
-          /// - **operation-not-allowed**:
-          ///  - Thrown if email/password accounts are not enabled. Enable
-          ///    email/password accounts in the Firebase Console, under the Auth tab.
-          /// - **weak-password**:
-          ///  - Thrown if the password is not strong enough.
-          /// - **too-many-requests**:
-          ///  - Thrown if the user sent too many requests at the same time, for security
-          ///     the api will not allow too many attemps at the same time, user will have
-          ///     to wait for some time
-          /// - **user-token-expired**:
-          ///  - Thrown if the user is no longer authenticated since his refresh token
-          ///    has been expired
-          /// - **network-request-failed**:
-          ///  - Thrown if there was a network request error, for example the user don't
-          ///    don't have internet connection
-          /// - **operation-not-allowed**:
-          ///  - Thrown if email/password accounts are not enabled. Enable
-          ///    email/password accounts in the Firebase Console, under the Auth tab.
-          case 'email-already-in-use':
-            userData!.errorMsg = "Email already in use.";
-            break;
-
-          case 'invalid-email':
-            userData!.errorMsg = "Invalid Email.";
-            break;
-
-          case 'weak-password':
-            userData!.errorMsg =
-                "Weak Password. Must be at least 6 characters and contain a symbol.";
-            break;
-
-          default:
-            userData!.errorMsg = e.code;
-        }
+        MyAlertDialog(context, "Login Error", e.toString());
+      }else{
+        MyAlertDialog(context, "Login Error", e.toString());
       }
+
       print("Firebase Auth Error: $e");
       return null;
     }
   }
-  Future<User?> fireAuthSignIn(BuildContext context, String email, String password) async {
-    //final _userData = Provider.of<UserData>(context, listen: false);
-    UserData? userData = UserDataService().userdata;
-
+  Future<User?> fireAuthSignInWithEmail(BuildContext context, String email, String password) async {
     try {
       UserCredential credential = await _auth.signInWithEmailAndPassword(
         email: email,
@@ -306,46 +273,12 @@ class FirebaseAuthService {
       );
 
       return credential.user;
-    } catch (e) {
+    }
+    catch (e) {
       if (e is FirebaseAuthException) {
-        switch (e.code) {
-          //- **invalid-email**:
-          ///  - Thrown if the email address is not valid.
-          /// - **user-disabled**:
-          ///  - Thrown if the user corresponding to the given email has been disabled.
-          /// - **user-not-found**:
-          ///  - Thrown if there is no user corresponding to the given email.
-          /// - **wrong-password**:
-          ///  - Thrown if the password is invalid for the given email, or the account
-          ///    corresponding to the email does not have a password set.
-          /// - **too-many-requests**:
-          ///  - Thrown if the user sent too many requests at the same time, for security
-          ///     the api will not allow too many attemps at the same time, user will have
-          ///     to wait for some time
-          /// - **user-token-expired**:
-          ///  - Thrown if the user is no longer authenticated since his refresh token
-          ///    has been expired
-          /// - **network-request-failed**:
-          ///  - Thrown if there was a network request error, for example the user don't
-          ///    don't have internet connection
-          /// - **INVALID_LOGIN_CREDENTIALS** or **invalid-credential**:
-          ///  - Thrown if the password is invalid for the given email, or the account
-          ///    corresponding to the email does not have a password set.
-          ///    depending on if you are using firebase emulator or not the code is
-          ///    different
-          /// - **operation-not-allowed**:
-          ///  - Thrown if email/password accounts are not enabled. Enable
-          ///    email/password accounts in the Firebase Console, under the Auth tab.
-          ///
-          case 'invalid-email':
-          case 'wrong-password':
-          case 'invalid-credential':
-            userData!.errorMsg = "Invalid email or password.";
-            break;
-
-          default:
-            userData!.errorMsg = e.code;
-        }
+        MyAlertDialog(context, "Login Error", e.toString());
+      }else{
+        MyAlertDialog(context, "Login Error", e.toString());
       }
 
       print("Firebase Auth Error: $e");
@@ -359,11 +292,14 @@ class FirebaseAuthService {
       print("Firebase Auth Error: $e");
     }
   }
-  Future<void> fireAuthResetPassword(String email) async {
+  Future<bool> fireAuthResetPassword(BuildContext context, String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
-    } catch (e) {
-      print("Firebase Auth Error: $e");
+      return true;
+    } on FirebaseAuthException catch (e) {
+      print("Firebase Auth Error: ${e.code}");
+      MyAlertDialog(context, "Reset Password Error", e.code);
+      return false;
     }
   }
   void fireAuthChangeListner() {

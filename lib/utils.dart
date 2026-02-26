@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:collection/collection.dart';
@@ -27,6 +28,27 @@ final mqtt_Service = MqttService();
 
 // keytool -keystore C:\Users\mradyn\.android\debug.keystore -list
 // PW android
+
+//---------------------------------------------------
+// Constants Images
+//---------------------------------------------------
+const String IMAGE_WHEEL = "assets/distanceWheel.jpg";
+const String IMAGE_VEHICLE = "assets/red_pickup2.png";
+const String IMAGE_MOBILE_MACHINE = "'assets/tractor.jpg'";
+const String IMAGE_STATIONARY_MACHINE = "assets/generator.jpg";
+const String IMAGE_NO_IMAGE = 'assets/noImage.jpg';
+const String IMAGE_PROFILE = 'assets/profile.png';
+
+const String ICON_WARNING = "assets/warning.png";
+const String ICON_GOOGLE = 'assets/google_icon.png';
+const String ICON_FACEBOOK = 'assets/facebook_icon.png';
+const String ICON_TRACK = 'assets/track.jpg';
+const String ICON_GEOFENCE = 'assets/geofence.jpg';
+const String ICON_IOT = 'assets/iot.png';
+const String ICON_BASE = 'assets/base_station.png';
+const String ICON_REPORT = 'assets/report.png';
+const String ICON_LIMITLESS_LOGO = 'assets/limitless_logo.png';
+const String ICON_LIMITLESS_WORD = 'assets/limitlessIotWord.png';
 
 //---------------------------------------------------
 // Constants Colors
@@ -58,10 +80,7 @@ final String fireUserName = 'user1';
 final String fireUserRecyclebin = '${fireUserName}_recycle/';
 const String DB_TABLE_USERS = 'UserTable';
 
-final String iconWARNING = "assets/warning.png";
-final String iconGOOGLE = 'assets/google_icon.png';
-final String iconFACEBOOK = 'assets/facebook_icon.png';
-final String picPROFILE = 'assets/profile.png';
+
 
 //---------------------------------------------------
 // Firebase Settings
@@ -274,7 +293,7 @@ class _myMessageBox extends StatelessWidget {
   _myMessageBox({
     required this.message,
     this.header = '',
-    this.image = 'assets/warning.png',
+    this.image = ICON_WARNING,
     this.borderColor = Colors.blueAccent,
     super.key,
   });
@@ -369,7 +388,7 @@ class MyDialogWidget extends StatelessWidget {
     required this.but2Text,
     this.onPressedBut1,
     this.onPressedBut2,
-    this.image = "assets/warning.png",
+    this.image = ICON_WARNING,
   });
 
   @override
@@ -498,9 +517,7 @@ class BluetoothData{
 }
 class MyTextFormField extends StatefulWidget {
   final TextEditingController? controller;
-  @override
-  final Key? key;
-  final bool? isPasswordField;
+  final bool isPasswordField;
   final bool isReadOnly;
   final String? hintText;
   final String? labelText;
@@ -516,9 +533,9 @@ class MyTextFormField extends StatefulWidget {
   final Color? foregroundColor;
 
   const MyTextFormField({
+    super.key,
     this.controller,
-    this.isPasswordField,
-    this.key,
+    this.isPasswordField = false,
     this.hintText,
     this.labelText,
     this.helperText,
@@ -555,8 +572,9 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
       inputFormatters = null; // No restriction
     }
 
-    return SizedBox(
+    return Container(
       width: widget.width,
+      height: 55,
       child: TextFormField(
         style: TextStyle(
           fontSize: 15,
@@ -587,6 +605,7 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
           ),
 
           filled: true,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
           fillColor: widget.backgroundColor,
           suffix: Text(widget.suffix),
           hintText: widget.hintText,
@@ -805,14 +824,14 @@ class MyIcon extends StatelessWidget {
   }
 }
 class MyTextOption extends StatelessWidget {
-  TextEditingController controller = TextEditingController();
+  final TextEditingController controller;
   final String label;
   final String description;
   final String measure;
   final String prefix;
   final String suffix;
 
-  MyTextOption({super.key, 
+  const MyTextOption({super.key,
     required this.controller,
     required this.label,
     this.description = "",
@@ -909,7 +928,6 @@ class MyTextOption extends StatelessWidget {
   }
 }
 class MyToggleOption extends StatelessWidget {
-
   final bool value;
   final String label;
   final String subtitle;
@@ -969,7 +987,6 @@ class MyToggleOption extends StatelessWidget {
   }
 }
 class MyText extends StatelessWidget {
-
   final String text;
   final double? fontsize;
   final Color color;
@@ -1062,6 +1079,9 @@ class MyTextTileWithEditDelete extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
+    double imgHeight = height == null ? 30 : height! - 30;
+
     return GestureDetector(
       onTap: () {
         if(onTapTile != null) {
@@ -1111,21 +1131,21 @@ class MyTextTileWithEditDelete extends StatelessWidget {
                 ),
 
                 // Image
-                image == null ? SizedBox() :
-                Row(
+                image == null
+                    ? SizedBox()
+                    : Row(
                   children: [
                     Container(
-                      height: 50,
-                      width: 50,
+                      height: imgHeight,
+                      width: imgHeight,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.all(Radius.elliptical(30, 30)),
                         image: DecorationImage(
                           image: AssetImage(image!),
                           fit: BoxFit.cover,
                         ),
                       ),
                     ),
-                    SizedBox(width: 10),
                   ],
                 ),
 
@@ -1146,7 +1166,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
 
                     if(onTapDelete != null)
                       IconButton(
-                        icon: Icon(Icons.delete, color: Colors.red,),
+                        icon: Icon(Icons.delete_forever, color: Colors.pinkAccent),
                         onPressed: () => onTapDelete!(),
                         iconSize: 35,
                         constraints: BoxConstraints(),
@@ -1197,16 +1217,17 @@ class MyCircleIconButton extends StatelessWidget {
 }
 class MyVehicleData extends StatefulWidget {
   final DocumentSnapshot? vehicleSnapshot;
-  String bluetoothDeviceName = "";
-  String bluetoothMAC = "";
-  List<BluetoothDevice> pairedDevices = [];
+  final String bluetoothDeviceName;
+  final String bluetoothMAC;
+  final List<BluetoothDevice> pairedDevices;
 
   MyVehicleData({
     super.key,
     required this.vehicleSnapshot,
     this.bluetoothMAC = "",
-    this.bluetoothDeviceName = ""
-  });
+    this.bluetoothDeviceName = "",
+    List<BluetoothDevice>? pairedDevices
+  }) : pairedDevices = pairedDevices ?? [];
 
   @override
   State<MyVehicleData> createState() => _MyVehiclesDataState();
@@ -1216,29 +1237,43 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
   TextEditingController fuelConsumptionController = TextEditingController();
   TextEditingController vehicleRegController = TextEditingController();
   BluetoothDevice? selectedDevice;
-  List<BluetoothDevice> pairedDevices = [
-    //   BluetoothDevice.fromId("00:11:22:33:44:55"),
-    //   BluetoothDevice.fromId("00:11:22:33:44:65"),
-    //   BluetoothDevice.fromId("00:11:22:33:44:75"),
-    //   BluetoothDevice.fromId("00:11:22:33:44:85"),
-    //   BluetoothDevice.fromId("00:11:22:33:44:95"),
-  ];
+
+  late String bluetoothDeviceName;
+  late String bluetoothMAC;
+  late List<BluetoothDevice> pairedDevices;
+
+  @override
+  void initState() {
+    super.initState();
+    bluetoothDeviceName = widget.bluetoothDeviceName;
+    bluetoothMAC = widget.bluetoothMAC;
+    pairedDevices = List.from(widget.pairedDevices);
+    loadSettings();
+  }
 
   void loadSettings() {
     vehicleNameController = TextEditingController(
         text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_NAME] : ''
     );
-
     fuelConsumptionController = TextEditingController(
         text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_FUEL_CONSUMPTION].toString() : ''
     );
-
     vehicleRegController = TextEditingController(
         text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_REGISTRATION] : ''
     );
 
-    widget.bluetoothDeviceName = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_BT_NAME] : "";
-    widget.bluetoothMAC = widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_BT_MAC] : "";
+    if (widget.vehicleSnapshot != null) {
+      bluetoothDeviceName = widget.vehicleSnapshot![FIRE_MON_BT_NAME];
+      bluetoothMAC = widget.vehicleSnapshot![FIRE_MON_BT_MAC];
+    }
+  }
+
+  @override
+  void dispose() {
+    vehicleNameController.dispose();
+    fuelConsumptionController.dispose();
+    vehicleRegController.dispose();
+    super.dispose();
   }
 
   @override
@@ -1450,8 +1485,8 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
                         setState(() {
                           if(device != null){
                             selectedDevice = device;
-                            widget.bluetoothMAC = device.remoteId.toString();
-                            widget.bluetoothDeviceName = device.platformName;
+                            bluetoothMAC = device.remoteId.toString();
+                            bluetoothDeviceName = device.platformName;
                           }
                         });
                         //if (onDeviceSelected != null) {
@@ -1704,6 +1739,7 @@ class UserData{
   String errorMsg = "";
   String photoURL = "";
   bool isLoggedIn = false;
+  bool hasError = false;
   bool emailValidated = false;
 
   UserData({
@@ -1763,6 +1799,8 @@ class UserDataService extends ChangeNotifier {
   UserData? _userdata;
   UserData? get userdata => _userdata;
   bool isLoading = false;
+  bool isLoggedIn = false;
+  bool isEmailConfirmed = false;
   bool firebaseError = false;
 
   final _auth = FirebaseAuth.instance;
@@ -1774,6 +1812,7 @@ class UserDataService extends ChangeNotifier {
     if (uid == null) {
       firebaseError = true;
       isLoading = false;
+      isLoggedIn = false;
       return;
     }
 
@@ -1790,20 +1829,24 @@ class UserDataService extends ChangeNotifier {
       _userdata?.userID = uid;
       notifyListeners();
     }
-
+    //if(_use)
     isLoading = false;
+    isLoggedIn = true;
   }
-  Future<void> create(UserData newUserData) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
+  Future<void> create(UserData newUserData, {required String uid}) async {
     _userdata = newUserData;
-    await _db.collection(CollectionUsers).doc(uid).update({
-      FieldsUserData : newUserData.toMap(),
-    });
 
-    notifyListeners();
+    try {
+      await _db.collection(CollectionUsers).doc(uid).set({
+        FieldsUserData: newUserData.toMap(),
+      }, SetOptions(merge: true));
+
+      notifyListeners();
+    } catch (e) {
+      print("Failed to save user data: $e");
+    }
   }
+
   Future<void> updateFields(Map<String, dynamic> updates) async {
     try {
       final current = _userdata;
@@ -2587,7 +2630,7 @@ Widget MyProgressCircle() {
 //---------------------------------------------------
 ButtonStyle MyButtonStyle(Color backgroundColor) {
   return TextButton.styleFrom(
-    minimumSize: const Size(100, 50),
+    minimumSize: ui.Size(100, 30),
     backgroundColor: backgroundColor,
     shadowColor: Colors.white,
   );

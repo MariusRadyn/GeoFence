@@ -59,6 +59,8 @@ dependencies:
   http: ^1.3.0
   collection: ^1.19.0
   shared_preferences: ^2.5.3
+  flutter_launcher_icons: ^0.13.1
+
   #lan_scanner: ^4.0.0
   #network_info_plus: ^6.0.0
   path: any
@@ -105,9 +107,9 @@ flutter:
     - assets/noImage.jpg
     - assets/tractor.jpg
     - assets/generator.jpg
-    - assets/limitless.png
+    - assets/limitless_logo.png
     #- assets/limitless_iot.png
-    - assets/limitless_iot2.png
+    #- assets/limitless_iot2.png
     - assets/limitlessIotWord.png
 
   # An image asset can refer to one or more resolution-specific "variants", see

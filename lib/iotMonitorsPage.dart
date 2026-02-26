@@ -384,7 +384,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
   }
   Future<ImageProvider<Object>> _getMonitorImageProvider( BuildContext context, String vehicleId, MonitorSettings? monitor) async {
-    if (_isUploading) return AssetImage('assets/noImage.jpg');
+    if (_isUploading) return AssetImage(IMAGE_NO_IMAGE);
     String downloadUrl = monitor?.image ?? '';
     String monType = monitor?.monitorType ?? '';
 
@@ -406,19 +406,19 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
         // Finally - Load Default
         switch (monType) {
           case MonTypeVehicle:
-            return AssetImage('assets/red_pickup2.png');
+            return AssetImage(IMAGE_VEHICLE);
 
           case MonTypeWheel:
-            return AssetImage('assets/distanceWheel.jpg');
+            return AssetImage(IMAGE_WHEEL);
 
           case MonTypeMobileMachineMon:
-            return AssetImage('assets/tractor.jpg');
+            return AssetImage(IMAGE_MOBILE_MACHINE);
 
           case MonTypeStationaryMachineMon:
-            return AssetImage('assets/generator.jpg');
+            return AssetImage(IMAGE_STATIONARY_MACHINE);
 
           default:
-            return AssetImage('assets/noImage.jpg');
+            return AssetImage(IMAGE_NO_IMAGE);
         }
       }
       // Load from FireStore
@@ -427,7 +427,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
     } catch (e) {
       debugPrint('Download error: $e');
-      return AssetImage('assets/noImage.jpg');
+      return AssetImage(IMAGE_NO_IMAGE);
     }
   }
   void _updateTabs(int length) {
@@ -900,7 +900,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                       }
 
                       final ImageProvider<Object> imageProvider =
-                          imgSnapshot.data ?? const AssetImage('assets/noImage.jpg');
+                          imgSnapshot.data ?? const AssetImage(IMAGE_NO_IMAGE);
 
                       return ListView(
                         controller: _scrollControllers[index],

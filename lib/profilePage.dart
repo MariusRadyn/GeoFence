@@ -79,7 +79,7 @@ class _profilePageState extends State<profilePage> {
                       backgroundColor: Colors.white,
                       child: CircleAvatar(
                         backgroundImage: (UserDataService().userdata?.photoURL.isEmpty ?? true)
-                            ? AssetImage(picPROFILE)
+                            ? AssetImage(IMAGE_PROFILE)
                             : NetworkImage(UserDataService().userdata!.photoURL) as ImageProvider,
                         radius: 50,
                       ),
