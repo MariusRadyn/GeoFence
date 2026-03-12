@@ -584,6 +584,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       if (monitorOld != null && monitorOld.monitorId != fromId) {
         MyQuestionAlertBox(
           context: context,
+          header: "Monitor Alert",
           message:
           "$fromId exists in Monitor: '${monitorOld.monitorName}'.\n"
               "Do you want to change the monitor to this one?\n"
@@ -612,7 +613,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       }
 
       final payload =  {
-        MQTT_JSON_USER_DOC_ID: UserDataService().userdata!.userID,
+        MQTT_JSON_USER_DOC_ID: context.read<UserDataService>().userdata!.userID,
         MQTT_JSON_MON_DOC_ID: monitorService.lstMonitors[_selectedIndex].monDocId,
         MQTT_JSON_IOT_NAME: monitorService.lstMonitors[_selectedIndex].monitorName,
         MQTT_JSON_IOT_TYPE: monitorService.lstMonitors[_selectedIndex].monitorType,
@@ -991,6 +992,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                               if(_monitor.image != '' ){
                                                 MyQuestionAlertBox(
                                                     context: context,
+                                                    header: "Delete",
                                                     message: 'Delete Current Picture?',
                                                     onPress:(){
                                                       setState(() {

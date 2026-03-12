@@ -4,6 +4,7 @@ import 'package:geofence/firebase.dart';
 import 'package:geofence/homePage.dart';
 //import 'package:teamplayerwebapp/theme/theme_manager.dart';
 import 'package:geofence/utils.dart';
+import 'package:provider/provider.dart';
 //import 'package:teamplayerwebapp/utils/helpers.dart';
 
 class signupPage extends StatefulWidget {
@@ -32,8 +33,7 @@ class _signupPageState extends State<signupPage> {
 
   @override
   Widget build(BuildContext context) {
-    //UserData _userData = Provider.of<UserData>(context, listen: false);
-    UserData? userData = UserDataService().userdata;
+    UserData? userData = context.read<UserDataService>().userdata;
 
     return Scaffold(
       appBar: AppBar(

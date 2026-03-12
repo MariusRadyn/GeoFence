@@ -5,10 +5,12 @@ import 'package:geofence/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
 
 const double DRAW_WIDTH = 60;
 double _sheetPosition = 0.25;
 final double _dragSensitivity = 600;
+enum BottomBarMode { normal, addingGeoFence }
 
 class GeoFencePage extends StatefulWidget {
   const GeoFencePage({super.key});
@@ -24,7 +26,9 @@ class _GeoFencePageState extends State<GeoFencePage> {
   final Set<Marker> _geoMarkers = {};
   final List<LatLng> _currentPolygonPoints = [];
   final TextEditingController _geoFenceNameController = TextEditingController();
-  final DraggableScrollableController _controller = DraggableScrollableController();
+  final DraggableScrollableController _scrollController = DraggableScrollableController();
+  BottomBarMode _bottomBarMode = BottomBarMode.normal;
+
   bool _isDrawing = false;
   bool _isEditing = false;
   bool _isSaving = false;
@@ -43,6 +47,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
   bool _errorGeoFence = false;
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  Future<Position>? currentPosition;
 
   // Drawer Pointers
   int _drawerPntr = 0;
@@ -55,10 +60,32 @@ class _GeoFencePageState extends State<GeoFencePage> {
   void initState() {
     super.initState();
 
+    _scrollController.addListener(() {
+      double size = _scrollController.size;
+
+      if (_scrollController.size <= 0.25) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+        ).then((_) {
+          if (!mounted) return;
+          setState(() {
+            _isBotScrolDrawerVisible = false;
+          });
+        });
+      }
+    });
+
     if(mounted){
-      _loadGeoFences();
-      _getLocation();
+      _initialize();
     }
+  }
+
+  Future<void> _initialize() async {
+    await _loadGeoFences();
+    if (!mounted) return;
+    _getLocation();
   }
 
   @override
@@ -67,7 +94,6 @@ class _GeoFencePageState extends State<GeoFencePage> {
     _mapController?.dispose();
     super.dispose();
   }
-  Future<Position>? currentPosition;
 
   final CameraPosition _initialPosition = const CameraPosition(
     target: LatLng(-29.0, 24.0), // Default to South Africa
@@ -94,7 +120,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
     }
   }
   Future<void> _loadGeoFences() async {
-    UserData? userData = UserDataService().userdata;
+    UserData? userData = context.read<UserDataService>().userdata;
 
     setState(() {
       _isLoading = true;
@@ -223,29 +249,26 @@ class _GeoFencePageState extends State<GeoFencePage> {
       _appBarTitle = 'Fence: $name';
     });
 
-    _controller.animateTo(
+    _scrollController.animateTo(
       0.25,
       duration: Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
 
   }
-  void _nextFence() {
+  void _xnextFence() {
     if (_markers.isEmpty) return;
 
     setState(() {
-      if (_fencePntr == _markers.length) {
-        _fencePntr = 0;
-      } else {
-        _fencePntr++;
-      }
+      if (_fencePntr == _markers.length) {_fencePntr = 0;}
+      else  {_fencePntr++;}
 
       int ptr = 0;
 
       for (Marker mark in _markers) {
         if (ptr == _fencePntr) {
           _mapController?.animateCamera(
-            CameraUpdate.newLatLng(LatLng(mark.position.latitude, mark.position.longitude)),
+            CameraUpdate.newLatLngZoom(LatLng(mark.position.latitude, mark.position.longitude),18),
           );
           print(mark.infoWindow.title);
           return;
@@ -255,6 +278,27 @@ class _GeoFencePageState extends State<GeoFencePage> {
         }
       }
     });
+  }
+  void _nextFence() {
+
+    if (_markers.isEmpty) return;
+
+    setState(() {
+
+      _fencePntr = (_fencePntr + 1) % _markers.length;
+
+      final marker = _markers.elementAt(_fencePntr);
+
+      _mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          LatLng(marker.position.latitude, marker.position.longitude),
+          18,
+        ),
+      );
+
+      //print(marker.infoWindow.title);
+    });
+
   }
   void _startDrawing() {
     setState(() {
@@ -270,13 +314,13 @@ class _GeoFencePageState extends State<GeoFencePage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Tap on the map to add points to your geo fence'),
+        content: Text('Tap on the map to add GEO points'),
         duration: Duration(seconds:  10),
         showCloseIcon: true,
       ),
     );
   }
-  void _saveGeoFence() async {
+  Future<void> _saveGeoFence() async {
     if (_currentPolygonPoints.length < 3) {
       myMessageBox(context, 'You need at least 3 points to create a geofence' );
       return;
@@ -285,7 +329,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
     _geoFenceNameController.text = '';
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Name your Geo Fence'),
         content: TextField(
           controller: _geoFenceNameController,
@@ -293,20 +337,18 @@ class _GeoFencePageState extends State<GeoFencePage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () async {
               if (_geoFenceNameController.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please enter a name for your geo fence')),
-                );
+                MyGlobalSnackBar.show('Please enter a name for your geo fence');
                 return;
               }
 
-              Navigator.pop(context);
-              await _saveGeoFenceToFirebase(context, _geoFenceNameController.text);
+              Navigator.pop(dialogContext);
+              await _saveGeoFenceToFirebase(_geoFenceNameController.text);
               await _loadGeoFences();
 
               ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -323,9 +365,8 @@ class _GeoFencePageState extends State<GeoFencePage> {
       ),
     );
   }
-  Future<void> _saveGeoFenceToFirebase(BuildContext context, String name) async {
-    //final _userData = Provider.of<UserData>(context, listen: false);
-    final userData = UserDataService().userdata;
+  Future<void> _saveGeoFenceToFirebase(String name) async {
+    final userData = context.read<UserDataService>().userdata;
 
     setState(() {
       _isLoading = true;
@@ -425,63 +466,50 @@ class _GeoFencePageState extends State<GeoFencePage> {
       const SnackBar(content: Text('Tap on the map to add or modify points')),
     );
   }
-  Future<void> _deleteGeoFence(BuildContext context, String firestoreId, String name) async {
-    //final _userData = Provider.of<UserData>(context, listen: false);
-    UserData? userData = UserDataService().userdata;
+  Future<void> _deleteGeoFence(String firestoreId, String name) async {
+    UserData? userData = context.read<UserDataService>().userdata;
 
-    if(firestoreId == ""){
+    if(firestoreId.isEmpty){
       myMessageBox(context, "Please select a Fence");
       return;
     }
-    final bool confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete Fence "$name"?'),
-        content: const Text('This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    ) ?? false;
 
-    if (confirm) {
-      setState(() {
+    if (userData == null) {
+      myMessageBox(context, "User not loaded");
+      return;
+    }
+
+    setState(() {
         _isLoading = true;
       });
 
       try {
-        final userId = userData!.userID;// _auth.currentUser!.uid;
+        final userId = userData!.userID;
         await firestore
-            .collection('users')
+            .collection(CollectionUsers)
             .doc(userId)
-            .collection('geofences')
+            .collection(CollectionGeoFences)
             .doc(firestoreId)
             .delete();
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Geofence "$name" deleted')),
-        );
+        if (!context.mounted) return;
+        MyGlobalSnackBar.show('Geofence "$name" deleted');
 
         // Reload all geo fences
         await _loadGeoFences();
+        if (!context.mounted) return;
+        _nextFence();
 
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting geo fence: $e')),
-        );
+        if (!context.mounted) return;
+        MyGlobalSnackBar.show('Error deleting GEO Fence: $e');
+
       } finally {
         setState(() {
           _isLoading = false;
+          _isBotScrolDrawerVisible = false;
         });
       }
-    }
   }
   void _openStreetView(LatLng location) async {
     // final url = 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${location.latitude},${location.longitude}';
@@ -512,6 +540,86 @@ class _GeoFencePageState extends State<GeoFencePage> {
     return lst;
   }
 
+  // Bottom Nav Buttons ---------------------------------
+  BottomNavigationBar buildBottomBar() {
+    switch (_bottomBarMode) {
+      case BottomBarMode.normal:
+        return BottomNavigationBar(
+          type: BottomNavigationBarType.fixed, // Force Background color
+          onTap: _onNormalBarTap,
+          backgroundColor: APP_BAR_COLOR,
+          unselectedItemColor: Colors.white,
+          selectedItemColor: Colors.white,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.map, color: Colors.grey), label: "Street", ),
+            BottomNavigationBarItem(icon: Icon(Icons.add, color: Colors.grey), label: "Add"),
+            BottomNavigationBarItem(icon: Icon(Icons.navigate_next, color: Colors.grey), label: "Next"),
+            BottomNavigationBarItem(icon: Icon(Icons.refresh, color: Colors.grey), label: "Refresh"),
+          ],
+        );
+
+      case BottomBarMode.addingGeoFence:
+        return BottomNavigationBar(
+          onTap: _onAddingBarTap,
+          type: BottomNavigationBarType.fixed, // Force Background color
+          backgroundColor: APP_BAR_COLOR,
+          unselectedItemColor: Colors.white,
+          selectedItemColor: Colors.white,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.save, color: Colors.grey), label: "Save"),
+            BottomNavigationBarItem(icon: Icon(Icons.refresh, color: Colors.grey), label: "Refresh"),
+            BottomNavigationBarItem(icon: Icon(Icons.arrow_back, color: Colors.grey), label: "Back"),
+          ],
+        );
+    }
+  }
+  void _onNormalBarTap(index) async {
+    // Street
+    if(index == 0){
+      _toggleStreetView();
+    }
+
+    // Add Fence
+    if(index == 1){
+      _startDrawing();
+      _bottomBarMode = BottomBarMode.addingGeoFence;
+    }
+
+    // Next
+    if(index == 2) {
+      _nextFence();
+    }
+
+    // Refresh
+    if(index == 3) {
+      await _loadGeoFences();
+      await _getLocation();
+    }
+  }
+  void _onAddingBarTap(index) async {
+
+    // Save
+    if(index == 0){
+      await _saveGeoFence();
+      await _loadGeoFences();
+      await _getLocation();
+      _bottomBarMode = BottomBarMode.normal;
+    }
+
+    // Refresh
+    if(index == 1) {
+      await _loadGeoFences();
+      await _getLocation();
+    }
+
+    // Back
+    if(index == 2) {
+      _cancelDrawing();
+      await _loadGeoFences();
+      await _getLocation();
+      _bottomBarMode = BottomBarMode.normal;
+    }
+  }
 
   // Drawers -------------------------------------------------------------------
   void _setDrawerPointer(int pntr){
@@ -730,7 +838,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
             iconColor: Colors.white,
             textColor: Colors.white,
             onTap: () => {
-              _deleteGeoFence(context, fenceData.firestoreId, fenceData.name),
+              _deleteGeoFence(fenceData.firestoreId, fenceData.name),
               ScaffoldMessenger.of(context).hideCurrentSnackBar(),
             },
           ),
@@ -767,169 +875,173 @@ class _GeoFencePageState extends State<GeoFencePage> {
           : SizedBox(), // Empty container when hidden
     );
   }
-  Widget FenceBottomScrollDraw(){
-
-
-    return DraggableScrollableSheet(
-      snap: true,
-      initialChildSize: _sheetPosition,
-      minChildSize: 0, // Minimum height
-      maxChildSize: 0.9, // Can be dragged to full screen
-      snapSizes: [0.25, 0.9], // Snap points
-      expand: true,
-      controller: _controller,
-      builder: (BuildContext context, ScrollController scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 10,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Column(
-            children: <Widget>[
-              const SizedBox(height: 15),
-
-              // Scroll Handle
-              Container(
-                width: 40,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.circular(10),
+  Widget FenceBottomScrollDraw({required bool visible}){
+    return Visibility(
+      visible: visible,
+      maintainState: true,
+      maintainAnimation: true,
+      maintainSize: true,
+      child: DraggableScrollableSheet(
+        snap: true,
+        initialChildSize: _sheetPosition,
+        minChildSize: 0.25, // Minimum height
+        maxChildSize: 0.9, // Can be dragged to full screen
+        snapSizes: [0.25, 0.9], // Snap points
+        expand: true,
+        controller: _scrollController,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              boxShadow: [
+                BoxShadow( color: Colors.black26, blurRadius: 10, spreadRadius: 2,
                 ),
-              ),
-
-              // Scroll Control (Desktop only)
-              Grabber(
-                isOnDesktopAndWeb: isOnDesktop(),
-
-                onVerticalDragUpdate: (DragUpdateDetails details) {
-                  _controller.animateTo(
-                      _sheetPosition,
-                      duration: Duration(milliseconds: 300),
-                      curve: Curves.easeInOut
-                  );
-
-                  setState(() {
-                    _sheetPosition -= details.delta.dy / _dragSensitivity;
-                    if (_sheetPosition < 0.25) {
-                      _sheetPosition = 0.25;
-                    }
-                    if (_sheetPosition > 1.0) {
-                      _sheetPosition = 1.0;
-                    }
-                  });
-                },
-              ),
-
-              // Scrollable
-              Flexible(
-                child: ListView(
-                  controller: scrollController,
-                  physics: AlwaysScrollableScrollPhysics(),
-                  children:[
-                    Container(
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 10, right: 10),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children:[
-                            SizedBox(height: 2),
-
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    fenceData.name,
-                                    textAlign: TextAlign.left,
-                                    style: const TextStyle(
-                                        fontSize: 20,
-                                        color: Colors.black
+              ],
+            ),
+            child: Column(
+              children: <Widget>[
+                const SizedBox(height: 15),
+      
+                // Scroll Handle
+                Container(
+                  width: 40,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+      
+                // Scroll Control (Desktop only)
+                // Grabber(
+                //   isOnDesktopAndWeb: isOnDesktop(),
+                //
+                //   onVerticalDragUpdate: (DragUpdateDetails details) {
+                //    _scrollController.animateTo(
+                //        _sheetPosition,
+                //        duration: Duration(milliseconds: 300),
+                //        curve: Curves.easeInOut
+                //    );
+                //
+                //     setState(() {
+                //       _sheetPosition -= details.delta.dy / _dragSensitivity;
+                //       if (_sheetPosition < 0.25) {
+                //         _sheetPosition = 0.25;
+                //       }
+                //       if (_sheetPosition > 1.0) {
+                //         _sheetPosition = 1.0;
+                //       }
+                //     });
+                //   },
+                // ),
+      
+                // Scrollable
+                Flexible(
+                  child: ListView(
+                    controller: scrollController,
+                    physics: AlwaysScrollableScrollPhysics(),
+                    children:[
+                      Container(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 10, right: 10),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children:[
+                              SizedBox(height: 2),
+      
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      fenceData.name,
+                                      textAlign: TextAlign.left,
+                                      style: const TextStyle(
+                                          fontSize: 20,
+                                          color: Colors.black
+                                      ),
                                     ),
                                   ),
-                                ),
-
-                                MyIcon(
-                                  text: 'Edit',
-                                  icon: Icons.edit_note,
-                                  iconColor: Colors.blue,
-                                  textColor: Colors.black,
-                                  iconSize: 20,
-                                  onTap: () {
-
-                                  },
-                                ),
-
-                                SizedBox(width: 10),
-
-                                MyIcon(
-                                  text: 'Delete',
-                                  icon: Icons.delete_forever,
-                                  iconColor: Colors.red,
-                                  textColor: Colors.black,
-                                  iconSize: 20,
-                                  onTap: () {
-                                    _deleteGeoFence(
-                                      context,
-                                        fenceData.firestoreId,
-                                        fenceData.name,
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 5),
-                            const Divider(
-                              thickness: 2,
-                              color: Colors.grey,
-                              endIndent: 10,
-                            ),
-                            const SizedBox(height: 10),
-
-                            const Text(
-                                'Points',
-                              style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey
+      
+                                  MyIcon(
+                                    text: 'Edit',
+                                    icon: Icons.edit_note,
+                                    iconColor: Colors.blue,
+                                    textColor: Colors.black,
+                                    iconSize: 20,
+                                    onTap: () {
+      
+                                    },
+                                  ),
+      
+                                  SizedBox(width: 10),
+      
+                                  MyIcon(
+                                    text: 'Delete',
+                                    icon: Icons.delete_forever,
+                                    iconColor: Colors.red,
+                                    textColor: Colors.black,
+                                    iconSize: 20,
+                                    onTap: () {
+                                      MyQuestionAlertBox(
+                                        context: context,
+                                        header: "Delete Fence",
+                                        message: "Delete: ${fenceData.name}\nAre you Sure?",
+                                        onPress: (){
+                                          _deleteGeoFence(fenceData.firestoreId,fenceData.name);
+                                        });
+                                    },
+                                  ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(height: 3),
-
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: fenceData.points.isEmpty
-                                    ? [Text('No Points')]
-                                    : GetFencePoints()
+      
+                              const SizedBox(height: 5),
+                              const Divider(
+                                thickness: 2,
+                                color: Colors.grey,
+                                endIndent: 10,
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 10),
+      
+                              const Text(
+                                  'Points',
+                                style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+      
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: fenceData.points.isEmpty
+                                      ? [Text('No Points')]
+                                      : GetFencePoints()
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
+      ),
     );
 }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: APP_BACKGROUND_COLOR,
       appBar: AppBar(
         foregroundColor: Colors.white,
         backgroundColor: APP_BAR_COLOR,
@@ -947,6 +1059,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
           ),
         ],
       ),
+      bottomNavigationBar: buildBottomBar(),
       body: Row(
         children:[
 
@@ -957,12 +1070,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
 
                 // Loading
                 if (_isLoading == true)
-                  Container(
-                    color: Colors.black,
-                    child: const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
+                  MyProgressCircle(),
 
                 if(_isLoading == false)
                   GoogleMap(
@@ -981,19 +1089,21 @@ class _GeoFencePageState extends State<GeoFencePage> {
                     onTap: _onMapTap,
                   ),
 
-                if(_isBotScrolDrawerVisible)
-                  FenceBottomScrollDraw(),
+                FenceBottomScrollDraw(
+                  visible: _isBotScrolDrawerVisible,
+                ),
+
               ],
             ),
           ),
 
-          Visibility(
-            visible: _drawerPntr == _showMainDrawer,
-            child: AnimatedSwitcher(
-              duration: Duration(microseconds: 3000),
-              child: MenuDrawer(),
-            ) ,
-          ),
+          // Visibility(
+          //   visible: _drawerPntr == _showMainDrawer,
+          //   child: AnimatedSwitcher(
+          //     duration: Duration(microseconds: 3000),
+          //     child: MenuDrawer(),
+          //   ) ,
+          // ),
 
           Visibility(
             visible: _drawerPntr == _showAddMarkerDrawer,

@@ -17,9 +17,9 @@ import 'Bluetooth2.dart';
 import 'MqttService.dart';
 
 class BaseStationPage extends StatefulWidget {
-  const BaseStationPage({
-    super.key,
 
+  BaseStationPage({
+    super.key,
   });
 
   @override
@@ -29,6 +29,7 @@ class BaseStationPage extends StatefulWidget {
 class _BaseStationState extends State<BaseStationPage> with TickerProviderStateMixin{
   late SettingsService settingsService;
   late BaseStationService baseService;
+  late UserDataService userService;
 
   bool Debug = false;
   bool isLoading = true;
@@ -68,6 +69,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
       settingsService = context.read<SettingsService>();
       baseService = context.read<BaseStationService>();
+      userService = context.read<UserDataService>();
     });
   }
 
@@ -486,12 +488,13 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                   ),
 
                   // Delete Button
-                  if(_baseService.lstBaseStations.isNotEmpty)
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.delete_forever),
-                      label: 'Delete',
-                      backgroundColor: Colors.grey,
-                    ),
+
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.delete_forever),
+                    label: 'Delete',
+                    backgroundColor: Colors.grey,
+                  ),
+
                 ]
             ),
 

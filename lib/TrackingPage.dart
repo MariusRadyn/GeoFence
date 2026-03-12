@@ -31,7 +31,8 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   //final FirebaseAuth _auth = FirebaseAuth.instance;
   final FlutterTts _flutterTts = FlutterTts();
-  bool _isLoading = false;
+  bool _isLoading_Geofence = true;
+  bool _isLoading_Vehicles = true;
   bool _isTracking = false;
   bool _newTrackingStarted = false;
   final Map<String, bool> _insideGeofence = {};
@@ -55,31 +56,50 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeTracking();
 
-    //Future.microtask(() async {
-    //  if (!mounted) return;
-    //});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
 
-    //WidgetsBinding.instance.addPostFrameCallback((_) {
-    //});
+      if (_vehicles.isEmpty && !_isLoading_Vehicles) {
+        MyAlertDialog(
+          context,
+          "Vehicle Not Found",
+          "No Vehicles Found.\nPlease set one in 'IOT Monitors'",
+        );
+      }
+
+      _initializeTracking();
+    });
+  }
+
+  Future<void> _initializeTracking() async {
+    await _loadGeoFences();
+    if (!mounted) return;
+
+    await _loadVehicles();
+    if (!mounted) return;
+
+    _initTts();
+    if (!mounted) return;
+
+    _getLocation();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     settings = context.read<SettingsService>();
-    setState(() {
+
+    if(settings.fireSettings != null){
       _distanceFilter = settings.fireSettings!.logPointPerMeter;
       _isVoicePromptOn = settings.fireSettings!.isVoicePromptOn;
-    });
-
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _stopTracking();
+    _stopTracking(fromDispose: true);
     _mapController?.dispose();
     super.dispose();
   }
@@ -97,25 +117,22 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     }
   }
 
-  Future<void> _initializeTracking() async {
-    await _loadGeoFences(context);
-    await _loadVehicles();
-    _initTts();
-    _getLocation();
-  }
-  Future<void> _loadGeoFences(BuildContext context) async {
+
+  Future<void> _loadGeoFences() async {
     _geofenceList.clear();
 
     setState(() {
-      _isLoading = true;
+      _isLoading_Geofence = true;
       _polygons.clear();
       _markers.clear();
     });
+
     try {
-      final userId = UserDataService().userdata!.userID;
+      final user = context.read<UserDataService>();
+
       final geoFencesSnapshot = await firestore
           .collection(CollectionUsers)
-          .doc(userId)
+          .doc(user.userdata!.userID)
           .collection(CollectionGeoFences)
           .get();
 
@@ -168,7 +185,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       // Focus map on user's location if available
       final userDoc = await firestore
           .collection(CollectionUsers)
-          .doc(userId)
+          .doc(user.userdata!.userID)
           .get();
 
       if (userDoc.exists && userDoc.data()!.containsKey('location')) {
@@ -178,16 +195,16 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading geo fences: $e')),
-      );
+      MyGlobalSnackBar.show('Error loading GEO Fences: $e');
     } finally {
       setState(() {
-        _isLoading = false;
+        _isLoading_Geofence = false;
       });
     }
   }
   Future<void> _getLocation() async {
+    if(_vehicles.isEmpty)return;
+
     writeLog('GetLocation');
     Position pos = await determinePosition();
 
@@ -212,33 +229,43 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
   Future<void> _loadVehicles() async {
     String userId = "";
     try {
-      userId = UserDataService().userdata!.userID;
+      userId = context.read<UserDataService>().userdata!.userID;
 
-      UserDataService().userdata!.userID;
+      setState(() {
+        _isLoading_Vehicles = true;
+      });
+
       final vehiclesSnapshot = await _firestore
           .collection(CollectionUsers)
           .doc(userId)
           .collection(CollectionMonitors)
           .get();
 
-      List<Map<String, dynamic>> vehicles = [];
+      if(vehiclesSnapshot.docs.isNotEmpty){
+        List<Map<String, dynamic>> vehicles = [];
 
-      for (var doc in vehiclesSnapshot.docs) {
-        final data = doc.data();
-        vehicles.add({
-          'id': doc.id,
-          'name': data['name'] ?? 'Unknown Vehicle',
-          'registrationNumber': data['registrationNumber'] ?? '',
-          'fuelConsumption': data['fuelConsumption'] ?? 0.0,
+        for (var doc in vehiclesSnapshot.docs) {
+          final data = doc.data();
+          vehicles.add({
+            'id': doc.id,
+            'name': data['name'] ?? 'Unknown Vehicle',
+            'registrationNumber': data['registrationNumber'] ?? '',
+            'fuelConsumption': data['fuelConsumption'] ?? 0.0,
+          });
+        }
+
+        setState(() {
+          _vehicles = vehicles;
+          _selectedVehicleId = vehicles[0]['id'];
+          _isLoading_Vehicles = false;
         });
       }
 
-      setState(() {
-        _vehicles = vehicles;
-        _selectedVehicleId = vehicles[0]['id'];
-      });
     } catch (e) {
-      GlobalMsg.show("Error", 'Error loading vehicles: $e\nUserID: $userId');
+      setState(() {
+        _isLoading_Vehicles = false;
+      });
+      MyGlobalSnackBar.show('Error loading vehicles: $e\nUserID: $userId');
     }
   }
   void _initTts() async {
@@ -285,19 +312,17 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       //await LocationService.startLocationTracking();
       _startPositionTracking();
 
-      if(_isVoicePromptOn)  _flutterTts.speak('Tracking Started. Waiting for first movement');
+      if(_isVoicePromptOn)  _flutterTts.speak('Tracking Started. Waiting for First Movement');
 
       setState(() {
         _statusMessage = "Tracking";
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tracking started')),
-      );
+      MyGlobalSnackBar.show('Tracking started');
+
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error starting tracking: $e')),
-      );
+      MyGlobalSnackBar.show('Error Starting Tracking: $e');
+
     }
   }
   void _startPositionTracking() {
@@ -380,7 +405,8 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
           _newTrackingStarted = false;
           if(_isVoicePromptOn) _flutterTts.speak('Movement Detected');
 
-          final userId = UserDataService().userdata!.userID;
+          final userId = context.read<UserDataService>().userdata!.userID;
+
           final sessionRef = await _firestore
               .collection(CollectionUsers)
               .doc(userId)
@@ -431,7 +457,8 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       }
 
       // Update tracking session with new data
-      final userId = UserDataService().userdata!.userID;
+      final userId = context.read<UserDataService>().userdata!.userID;
+
       final trackingRef = _firestore
           .collection(CollectionUsers)
           .doc(userId)
@@ -460,59 +487,63 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       });
     }
   }
-  Future<void> _stopTracking() async {
+  Future<void> _stopTracking({bool fromDispose = false}) async {
+
     if (_trackingSessionId == null) {
+      if (!fromDispose && mounted) {
         setState(() {
           _isTracking = false;
           _statusMessage = "Stop";
         });
-        return;
+      }
+      return;
     }
 
-    setState(() {
-      _isTracking = false;
-      _isLoading = true;
-      _statusMessage = "Stop";
-    });
+    if (!fromDispose && mounted) {
+      setState(() {
+        _isTracking = false;
+        _statusMessage = "Stop";
+      });
+    }
 
-      try {
-        await LocationService.stopLocationTracking();
-        // Stop position updates
-        //await _positionStream?.cancel();
-        //_positionStream = null;
+    try {
+      await LocationService.stopLocationTracking();
+      final userId = context.read<UserDataService>().userdata!.userID;
 
-        // Mark tracking session as inactive
-        final userId = UserDataService().userdata!.userID;
-        await _firestore
-            .collection('users')
-            .doc(userId)
-            .collection('tracking_sessions')
-            .doc(_trackingSessionId)
-            .update({
-          'is_active': false,
-          'end_time': FieldValue.serverTimestamp(),
-        });
+      await _firestore
+          .collection(CollectionUsers)
+          .doc(userId)
+          .collection(CollectionTrackingSessions)
+          .doc(_trackingSessionId)
+          .update({
+        'is_active': false,
+        'end_time': FieldValue.serverTimestamp(),
+      });
 
+      if (!fromDispose && mounted) {
         setState(() {
           _trackingSessionId = null;
           _statusMessage = "Tracking stopped";
         });
 
-        if(_isVoicePromptOn)  _flutterTts.speak('Tracking Stopped');
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tracking stopped')),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error stopping tracking: $e')),
-        );
-      } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        if (_isVoicePromptOn) {
+          _flutterTts.speak('Tracking Stopped');
+        }
+        MyGlobalSnackBar.show('Tracking stopped');
       }
+    } catch (e) {
+      if (!fromDispose && mounted) {
+        MyGlobalSnackBar.show('Error stopping tracking: $e');
+      }
+
+    // } finally {
+    //   if (!fromDispose && mounted) {
+    //     setState(() {
+    //       _isLoading_Geofence = false;
+    //     });
+    //   }
     }
+  }
   Widget _buildVehicleSelector() {
     return Card(
       color: APP_TILE_COLOR,
@@ -595,6 +626,20 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
+
+    if(_isLoading_Vehicles || _isLoading_Geofence){
+      return MyProgressCircle();
+    }
+
+    if (_vehicles.isEmpty) {
+      return Center(
+        child: MyText(
+          text: "No Vehicles Found",
+          color: Colors.grey,
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: APP_BACKGROUND_COLOR,
       appBar: AppBar(
@@ -611,14 +656,15 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
           unselectedItemColor: Colors.grey,
           selectedItemColor: Colors.grey,
           items: [
-          BottomNavigationBarItem(icon: Icon(Icons.navigate_next, size: 35),label: "GeoFence"),
-          BottomNavigationBarItem(icon: Icon(Icons.refresh, size: 35),label: "Refresh" ),
-          BottomNavigationBarItem(
-              icon: _isTracking
-                  ? Icon(Icons.location_off, size: 35, color: Colors.red)
-                  : Icon(Icons.location_on, size: 35, color: Colors.grey),
-              label: (_trackingSessionId == null) ? "Track" : "Stop" ),
-        ]
+            BottomNavigationBarItem(icon: Icon(Icons.navigate_next, size: 35),label: "GeoFence"),
+            BottomNavigationBarItem(icon: Icon(Icons.refresh, size: 35),label: "Refresh" ),
+            BottomNavigationBarItem(
+                icon: _isTracking
+                ? Icon(Icons.location_off, size: 35, color: Colors.red)
+                : Icon(Icons.location_on, size: 35, color: Colors.grey),
+            label: (_trackingSessionId == null) ? "Track" : "Stop"
+            ),
+          ]
       ),
       body: Stack(
         children: [
@@ -642,7 +688,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
               ),
             ],
           ),
-          if (_isLoading)
+          if (_isLoading_Geofence)
             Container(
               color: Colors.black.withOpacity(0.3),
               child: const Center(

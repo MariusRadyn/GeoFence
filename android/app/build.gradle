@@ -19,7 +19,9 @@ if (localPropertiesFile.exists()) {
 def MAP_API_KEY = localProperties.getProperty("MAP_API_KEY")
 
 android {
-    namespace = "com.geofence.app"
+    //namespace = "com.geofence.app"
+    namespace = "com.trinity.limitless"
+
 
     compileSdk = flutter.compileSdkVersion
     //ndkVersion = flutter.ndkVersion
@@ -37,7 +39,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.geofence.app"
+        applicationId = "com.trinity.limitless"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 23.0
@@ -57,7 +59,7 @@ android {
 }
 dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
-    implementation platform('com.google.firebase:firebase-bom:33.14.0')
+    implementation platform('com.google.firebase:firebase-bom:34.9.0')
 }
 
 flutter {

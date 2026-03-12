@@ -12,6 +12,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -337,7 +338,7 @@ class _myMessageBox extends StatelessWidget {
                 SizedBox(width: 8),
                 MyText(
                   text:  header,
-                  fontsize: 20,
+                  fontsize: 18,
                   color: Colors.white,
                 ),
               ],
@@ -362,7 +363,8 @@ class _myMessageBox extends StatelessWidget {
               },
               child: const MyText(
                 text: "OK",
-                fontsize: 16,
+                fontsize: 20,
+                color: Colors.blueAccent,
               ),
             ),
           ],
@@ -398,24 +400,45 @@ class MyDialogWidget extends StatelessWidget {
         children: [
           Expanded(flex: 1, child: Image.asset(image, height: 30, width: 30)),
           SizedBox(width: 20),
-          Expanded(flex: 4, child: Text(header, textAlign: TextAlign.start)),
+
+          // Header
+          Expanded(flex: 4, child: MyText(
+            text: header,
+            fontsize: 18,
+            color: Colors.white
+            ),
+          ),
         ],
       ),
-      content: Text(message, textAlign: TextAlign.center),
+
+      // Message
+      content: MyText(
+        text: message,
+        fontsize: 14,
+        color: Colors.grey,
+      ),
       actions: <Widget>[
         TextButton(
           style: TextButton.styleFrom(
             textStyle: Theme.of(context).textTheme.labelLarge,
           ),
           onPressed: onPressedBut1,
-          child: Text(but1Text),
+          child: MyText(
+            text: but1Text,
+            fontsize: 20,
+            color: Colors.blueAccent,
+          ),
         ),
         TextButton(
           style: TextButton.styleFrom(
             textStyle: Theme.of(context).textTheme.labelLarge,
           ),
           onPressed: onPressedBut2,
-          child: Text(but2Text),
+          child: MyText(
+            text: but2Text,
+            fontsize: 20,
+            color: Colors.blueAccent,
+          ),
         ),
       ],
     );
@@ -457,6 +480,7 @@ class Grabber extends StatelessWidget {
     );
   }
 }
+
 //---------------------------------------------------
 // Dialog
 //---------------------------------------------------
@@ -474,13 +498,31 @@ void MyAlertDialog(BuildContext context, String header, String message){
         ),
         backgroundColor: APP_TILE_COLOR,
         shadowColor: Colors.black,
-        title: Text(header,style: TextStyle(color: Colors.white),),
-        content: Text(message,style: TextStyle(color: Colors.grey),),
+
+        // Header
+        title: Text(header,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+          ),
+        ),
+
+        // Message
+        content: Text(message,
+          style: TextStyle(
+              color: Colors.grey,
+            fontSize: 14
+          ),
+        ),
         actions: [
          TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK',style: TextStyle(color: Colors.blueAccent),),
-          ),
+            child: const MyText(
+              text: 'OK',
+              color: Colors.blueAccent,
+              fontsize: 20
+            ),
+         ),
         ],
       ),
   );
@@ -661,12 +703,14 @@ class MyCustomTileWithPic extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    UserDataService user = context.read<UserDataService>();
+
     return Padding(
       padding: const EdgeInsets.only(top: 5, bottom: 5),
       child: Center(
         child: GestureDetector(
           onTap: (){
-            if(UserDataService().userdata?.isLoggedIn == true){
+            if(user.isLoggedIn == true){
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => widget),
@@ -1565,6 +1609,7 @@ class MyGlobalSnackBar {
 }
 Future<T?> MyQuestionAlertBox<T> ({
   required BuildContext context,
+  required String header,
   required String message,
   VoidCallback? onPress,
 }) {
@@ -1581,27 +1626,29 @@ Future<T?> MyQuestionAlertBox<T> ({
             ),
             backgroundColor: APP_TILE_COLOR,
             shadowColor: Colors.black,
-            title: const MyText(
-                text: "Delete",
-                color: Colors.white
+            title: MyText(
+                text: header,
+                color: Colors.white,
+              fontsize: 18,
             ),
             content: MyText(
               text: message,
               color: Colors.grey,
-              fontsize: 18,
+              fontsize: 16,
             ),
             actions: [
               TextButton(
                 child: const MyText(
                   text: 'No',
                   fontsize: 20,
+                  color: Colors.blue,
                 ),
                 onPressed: () => Navigator.pop(context),
               ),
               TextButton(
                   child: const MyText(
                     text: 'Yes',
-                    color:  Colors.white,
+                    color:  Colors.blue,
                     fontsize: 20,
                   ),
 
@@ -1738,7 +1785,7 @@ class UserData{
   String email = "";
   String errorMsg = "";
   String photoURL = "";
-  bool isLoggedIn = false;
+  //bool isLoggedIn = false;
   bool hasError = false;
   bool emailValidated = false;
 
@@ -1749,7 +1796,7 @@ class UserData{
     this.email = "",
     this.errorMsg = "",
     this.photoURL = "",
-    this.isLoggedIn = false,
+    //this.isLoggedIn = false,
     this.emailValidated = false,
   });
 
@@ -1759,7 +1806,7 @@ class UserData{
       surname: map['surname'] ?? "",
       email: map['email'] ?? "",
       photoURL: map['photoURL'] ?? "",
-      isLoggedIn: map['isLoggedIn'] ?? false,
+      //isLoggedIn: map['isLoggedIn'] ?? false,
       emailValidated: map['emailValidated'] ?? false,
     );
   }
@@ -1769,7 +1816,7 @@ class UserData{
       'surname': surname,
       'email': email,
       'photoURL': photoURL,
-      'isLoggedIn': isLoggedIn,
+      //'isLoggedIn': isLoggedIn,
       'emailValidated': emailValidated
     };
   }
@@ -1778,7 +1825,7 @@ class UserData{
     String? surname,
     String? email,
     String? photoURL,
-    bool? isLoggedIn,
+    //bool? isLoggedIn,
     bool? emailValidated,
   }){
     return UserData(
@@ -1786,29 +1833,46 @@ class UserData{
       surname: surname ?? this.surname,
       email: email ?? this.email,
       photoURL: photoURL ?? this.photoURL,
-      isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+      //isLoggedIn: isLoggedIn ?? this.isLoggedIn,
       emailValidated: emailValidated ?? this.emailValidated,
     );
   }
 }
 class UserDataService extends ChangeNotifier {
-  static final UserDataService _instance = UserDataService._internal();
-  factory UserDataService() => _instance;
-  UserDataService._internal();
+  //static final UserDataService _instance = UserDataService._internal();
+  //factory UserDataService() => _instance;
+  //UserDataService._internal();
 
   UserData? _userdata;
   UserData? get userdata => _userdata;
+
   bool isLoading = false;
   bool isLoggedIn = false;
-  bool isEmailConfirmed = false;
   bool firebaseError = false;
 
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
 
+  UserDataService() {
+    FirebaseAuth.instance.authStateChanges().listen(_onAuthChanged);
+  }
+
+  Future<void> _onAuthChanged(User? user) async {
+
+    if (user == null) {
+      _userdata = null;
+      isLoggedIn = false;
+      isLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    await load(); // automatically load Firestore user data
+  }
+
   Future<void> load() async {
-    var i  = FirebaseAuth.instance;
     final uid = FirebaseAuth.instance.currentUser?.uid;
+
     if (uid == null) {
       firebaseError = true;
       isLoading = false;
@@ -1818,6 +1882,7 @@ class UserDataService extends ChangeNotifier {
 
     isLoading = true;
     firebaseError = false;
+    notifyListeners();
 
     final doc = await _db
         .collection(CollectionUsers)
@@ -1827,11 +1892,15 @@ class UserDataService extends ChangeNotifier {
     if (doc.exists) {
       _userdata = UserData.fromMap(doc.data()?[FieldsUserData] ?? {});
       _userdata?.userID = uid;
-      notifyListeners();
+      _userdata?.emailValidated = FirebaseAuth.instance.currentUser!.emailVerified;
+      isLoggedIn = true;
+    } else {
+      _userdata = null;
+      isLoggedIn = false;
     }
-    //if(_use)
+
     isLoading = false;
-    isLoggedIn = true;
+    notifyListeners();
   }
   Future<void> create(UserData newUserData, {required String uid}) async {
     _userdata = newUserData;
@@ -1857,7 +1926,7 @@ class UserDataService extends ChangeNotifier {
         surname: updates['surname'] ?? current.surname,
         email: updates['email'] ?? current.email,
         emailValidated: updates['emailValidated'] ?? current.emailValidated,
-        isLoggedIn: updates['isLoggedIn'] ?? current.isLoggedIn,
+        //isLoggedIn: updates['isLoggedIn'] ?? current.isLoggedIn,
       );
 
       _userdata = updated;
@@ -2512,11 +2581,11 @@ class BaseStationService extends ChangeNotifier {
 // Widgets
 //---------------------------------------------------
 Widget ShowWelcomeMsg(BuildContext context) {
-  UserData? userData = UserDataService().userdata;
+  UserDataService user = context.read<UserDataService>();
 
-  if (userData!.isLoggedIn) {
+  if (user.isLoggedIn) {
     return Text(
-      'Welcome ${userData.displayName}',
+      'Welcome ${user.userdata!.displayName}',
       style: const TextStyle(
         color: Colors.black,
         fontSize: 20,

@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/IotDataPage.dart';
 import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/baseStationPage.dart';
 import 'package:geofence/geofencePage.dart';
+import 'package:geofence/profilePage.dart';
 import 'package:geofence/settingsPage.dart';
 import 'package:geofence/trackingHistoryPage.dart';
 import 'package:geofence/utils.dart';
@@ -23,6 +25,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   late AnimationController _controller;
   late Animation<double> _animation;
   final double drawerWidth = 250;
+  Timer? _loadingTimer;
 
   final Color colorMenuIcons = Colors.blue;
   final Color colorMenuText = Colors.blueGrey;
@@ -64,6 +67,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _emailController.dispose();
     _pwController.dispose();
     _pwController2.dispose();
+    _loadingTimer?.cancel();
 
     super.dispose();
   }
@@ -248,16 +252,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       );
 
       if (user != null) {
-        userService.create(
-            UserData(
-              displayName: _userController.text ?? "",
-              email: _emailController.text ?? "",
-              emailValidated: user.emailVerified ?? false,
-            ),
-            uid: user.uid
-        );
+        final doc = await FirebaseFirestore.instance
+            .collection(CollectionUsers)
+            .doc(user.uid)
+            .get();
 
-        print('User Created');
+        // Create user ONLY if it does not exist
+        if (!doc.exists) {
+          userService.create(
+              UserData(
+                displayName: _userController.text ?? "",
+                email: _emailController.text ?? "",
+                emailValidated: user.emailVerified ?? false,
+              ),
+              uid: user.uid
+          );
+
+          print('User Created');
+        }
+
         return user;
 
       } else {
@@ -285,16 +298,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ),
     );
   }
-  void loginWithEmail(BuildContext context) async {
+  Future<bool> loginWithEmail(BuildContext context) async {
     UserDataService userService = context.read<UserDataService>();
 
     if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
       myMessageBox(context, 'Please enter both email and password.');
-      return;
+      return false;
     }
     if (!_emailController.text.contains('@')) {
       myMessageBox(context, 'Please enter a valid email address.');
-      return;
+      return false;
     }
 
     try {
@@ -318,63 +331,68 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         // );
 
         if(userService.userdata != null){
-          userService.userdata!.isLoggedIn = true;
+          userService.isLoggedIn = true;
         }
         printMsg('User logged in');
 
-        MaterialPageRoute(
-            builder: (context) => HomePage()
-        );
       } else {
         // Logged ERROR
         if(userService.userdata != null){
-          userService.userdata!.isLoggedIn = false;
+          userService.isLoggedIn = false;
         }
         GlobalMsg.show("Login Error: ", userService.userdata!.errorMsg);
       }
     } catch (e) {
       printMsg('Error: $e');
+      return false;
     }
+    return true;
   }
-  void loginWithGoogle(BuildContext context) async {
-    bool showError = false;
+  Future<bool> loginWithGoogle(BuildContext context) async {
+    UserDataService userService = context.read<UserDataService>();
 
     try {
       UserCredential? userCred = await firebaseAuthService.signInWithGoogle();
 
-      if (userCred.user != null && userCred.user!.emailVerified) {
+      final doc = await FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(userCred.user!.uid)
+          .get();
 
-        // UserDataService().create(UserData(
-        //   displayName:  userCred.user?.displayName ?? "",
-        //   email: userCred.user?.email ?? "",
-        //   emailValidated: userCred.user?.emailVerified ?? false,
-        //   photoURL: userCred.user?.photoURL ?? "",
-        //   isLoggedIn: true,
-        // ));
+      // Create user ONLY if it does not exist
+      if (!doc.exists) {
+        if (userCred.user != null && userCred.user!.emailVerified) {
+          userService.create(
+              UserData(
+                displayName:  userCred.user?.displayName ?? "",
+                email: userCred.user?.email ?? "",
+                emailValidated: true,
+                photoURL: userCred.user?.photoURL ?? "",
+                //isLoggedIn: true,
+              ),
+              uid: userCred.user!.uid
+          );
 
-        printMsg('User logged in with Google');
+          printMsg('User logged in with Google');
 
-      } else {
-        if(!userCred.user!.emailVerified){
-          GlobalMsg.show("Error", "Email address not verified");
-        }
-        else {
-          GlobalMsg.show("Error", "Firebase User Credential == Null");
+        } else {
+          if(!userCred.user!.emailVerified){
+            GlobalMsg.show("Error", "Email address not verified");
+            return false;
+          }
+          else {
+            GlobalMsg.show("Error", "Firebase User Credential == Null");
+            return false;
+          }
         }
       }
-
     } catch (e) {
       printMsg('Sign in With Google Error: $e');
-      showError = true;
-      UserDataService().userdata?.errorMsg = e.toString();
-
-    } finally {
-      if (showError) {
-        if(UserDataService().userdata != null) {
-          myMessageBox(context, UserDataService().userdata!.errorMsg);
-        }
-      }
+      myMessageBox(context, 'Google Sign in Error: $e');
+      return false;
     }
+
+    return true;
   }
   Future<bool> resetPasswordWithEmail(BuildContext context) async {
     UserDataService userService = context.read<UserDataService>();
@@ -391,7 +409,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     try {
       if(await firebaseAuthService.fireAuthResetPassword(context, _emailController.text)) {
         if(userService.userdata != null){
-          userService.userdata!.isLoggedIn = false;
+          userService.isLoggedIn = false;
         }
         printMsg('Password Reset');
         return true;
@@ -403,93 +421,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       return false;
     }
   }
-  void showLogoutDialog (BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Container(
-              decoration: BoxDecoration(
-                  gradient: MyTileGradient(),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: Colors.blue,
-                      width: 2
-                  )
-              ),
 
-              margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
-              width: MediaQuery.of(context).size.width * 0.8,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(height: 20),
-
-                  // Heading
-                  const MyText(
-                    text:  "Log Out",
-                    fontsize: 20,
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Message
-                  const MyText(
-                    text:  "Are you sure?",
-                    fontsize: 18,
-                    color: Colors.grey,
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // No Button
-                      TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                        style: MyButtonStyle(COLOR_ORANGE),
-                        child: const MyText(
-                          text:  "No",
-                        ),
-                      ),
-
-                      const SizedBox(width: 20),
-
-                      // OK Button
-                      TextButton(
-                        onPressed: () async {
-                          await FirebaseAuth.instance.signOut();
-                          if (!context.mounted) return;
-                          Navigator.pop(context);
-                        },
-
-                        style: MyButtonStyle(COLOR_ORANGE),
-                        child: const MyText(
-                          text: 'Yes',
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 10),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-  void showLoginScreen (BuildContext context){
-    showDialog<void>(
+  Future<void> showLoginScreen (BuildContext context) async{
+    await showDialog<void>(
       context: context,
       builder: (BuildContext context) {
         return
@@ -598,8 +532,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                             // OK Button
                             TextButton(
-                              onPressed: () {
-                                loginWithEmail(context);
+                              onPressed: () async {
+                                await loginWithEmail(context);
+                                Navigator.of(context).pop();
                               },
                               style: MyButtonStyle(COLOR_ORANGE),
                               child: const MyText(
@@ -644,8 +579,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             // Sign In with Google
                             _buildSocialLoginButton(
                               context: context,
-                              onPressed: () {
-                                loginWithGoogle(context);
+                              onPressed: () async {
+                                await loginWithGoogle(context);
                                 Navigator.of(context).pop();
                               },
                               iconPath: ICON_GOOGLE,
@@ -760,6 +695,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       },
     );
   }
+  void _startLoadingTimeout() {
+    _loadingTimer?.cancel();
+
+    _loadingTimer = Timer(const Duration(seconds: 15), () async {
+      if (FirebaseAuth.instance.currentUser != null) {
+        await FirebaseAuth.instance.signOut();
+      }
+    });
+  }
+  void _cancelLoadingTimeout() {
+    _loadingTimer?.cancel();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -773,7 +720,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               builder: (context, settings, user,__){
 
                 final isLoading = settings.isLoading || user.isLoading || snapshot.connectionState == ConnectionState.waiting;
-                final userLoggedIn = snapshot.hasData;
+                final userLoggedIn = snapshot.hasData && user.userdata != null;
 
                 ImageProvider profileImage;
 
@@ -783,6 +730,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   profileImage = NetworkImage(user.userdata!.photoURL);
                 } else {
                   profileImage = AssetImage(IMAGE_PROFILE);
+                }
+
+                if (isLoading) {
+                  _startLoadingTimeout();
+                } else {
+                  _cancelLoadingTimeout();
                 }
 
                 return Scaffold(
@@ -830,7 +783,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           Padding(
                             padding: const EdgeInsets.only(right: 10, top: 2, bottom: 2),
                             child: GestureDetector(
-                              onTap: () {
+                              onTap: () async {
                                 if (!isLoading && userLoggedIn) {
                                   if (user.userdata?.emailValidated != true) {
                                     MyAlertDialog(
@@ -840,11 +793,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                     );
                                     return;
                                   }
-                                  showLogoutDialog(context);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => profilePage(
+                                      ),
+                                    ),
+                                  );
+                                  //showLogoutDialog(context);
                                 }
 
                                 if (!isLoading && !userLoggedIn) {
-                                 showLoginScreen(context);
+                                 await showLoginScreen(context);
+                                 await user.load();
                                 };
                               },
 
@@ -872,7 +833,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => SettingsPage(userId: UserDataService().userdata!.userID),
+                                    builder: (context) => SettingsPage(
+                                        userId: user.userdata!.userID
+                                    ),
                                   ),
                                 );
                               }
@@ -1026,7 +989,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                           color: Colors.grey,
                                                         ),
                                                         MyText(
-                                                          text: UserDataService().userdata?.displayName ?? "Not Logged in",
+                                                          text: user.userdata!.displayName ?? "Not Logged in",
                                                           color: Colors.grey,
                                                         ),
                                                       ],
@@ -1208,7 +1171,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                     Navigator.push(
                                                       context,
                                                       MaterialPageRoute(
-                                                          builder: (context) => SettingsPage(userId: UserDataService().userdata!.userID)),
+                                                          builder: (context) => SettingsPage(
+                                                              userId: user.userdata!.userID)
+                                                      ),
                                                     );
                                                   },
                                                 ),

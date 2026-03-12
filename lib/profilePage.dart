@@ -1,5 +1,7 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
+import 'package:provider/provider.dart';
 import 'firebase.dart';
 import 'homePage.dart';
 
@@ -19,18 +21,98 @@ class _profilePageState extends State<profilePage> {
   @override
   void initState() {
     super.initState();
-
-    if(UserDataService().userdata != null) {
-      setState(() {
-        if(UserDataService().userdata != null){
-          _displaynameControl.text =  UserDataService().userdata!.displayName;
-          _emailController.text =  UserDataService().userdata!.email;
-        }
-      });
-    }
   }
 
-  Widget buildLoginHeader() {
+  void showLogoutDialog (BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              decoration: BoxDecoration(
+                  gradient: MyTileGradient(),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: Colors.blue,
+                      width: 2
+                  )
+              ),
+
+              margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
+              width: MediaQuery.of(context).size.width * 0.8,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(height: 20),
+
+                  // Heading
+                  const MyText(
+                    text:  "Log Out",
+                    fontsize: 20,
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Message
+                  const MyText(
+                    text:  "Are you sure?",
+                    fontsize: 18,
+                    color: Colors.grey,
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // No Button
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        style: MyButtonStyle(COLOR_ORANGE),
+                        child: const MyText(
+                          text:  "No",
+                        ),
+                      ),
+
+                      const SizedBox(width: 20),
+
+                      // OK Button
+                      TextButton(
+                        onPressed: () async {
+                          await FirebaseAuth.instance.signOut();
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                        },
+
+                        style: MyButtonStyle(COLOR_ORANGE),
+                        child: const MyText(
+                          text: 'Yes',
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget buildLoginHeader(UserDataService user) {
+    _emailController.text = user.userdata!.email;
+    _displaynameControl.text = user.userdata!.displayName;
+
     return SafeArea(
       child: Stack(
         children: [
@@ -78,9 +160,9 @@ class _profilePageState extends State<profilePage> {
                       radius: 55,
                       backgroundColor: Colors.white,
                       child: CircleAvatar(
-                        backgroundImage: (UserDataService().userdata?.photoURL.isEmpty ?? true)
+                        backgroundImage: (user.userdata?.photoURL.isEmpty ?? true)
                             ? AssetImage(IMAGE_PROFILE)
-                            : NetworkImage(UserDataService().userdata!.photoURL) as ImageProvider,
+                            : NetworkImage(user.userdata!.photoURL) as ImageProvider,
                         radius: 50,
                       ),
                     ),
@@ -98,7 +180,7 @@ class _profilePageState extends State<profilePage> {
             ),
           ),
 
-          // Login Button
+          // Logout Button
           Center(
             child: Container(
               margin: const EdgeInsets.only(top: 180),
@@ -109,24 +191,17 @@ class _profilePageState extends State<profilePage> {
                 borderRadius: BorderRadius.all(Radius.circular(20)),
               ),
               child: TextButton(
-                child: Text(
-                  UserDataService().userdata!.isLoggedIn ? 'Log Out' : 'Log In',
+                child: Text('Log Out',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                   ),
                 ),
                 onPressed: () {
-                  UserDataService().userdata!.isLoggedIn
-                     ? Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => MyDialogWidget(
-                            message: "Log Out?",
-                            header: "Login",
-                            but1Text: "OK",
-                            but2Text: "Cancel"))
-                        )
-                     : UserDataService().logout();
+                  showLogoutDialog(context);
+                  //user.userdata!.isLoggedIn
+                  //? showLogoutDialog(context)
+                  //    : user.logout();
                 },
               ),
             ),
@@ -135,83 +210,13 @@ class _profilePageState extends State<profilePage> {
       ),
     );
   }
-
-  @override
-  Widget build(BuildContext context) {
-    //UserData _userData = Provider.of<UserData>(context, listen: false);
-    UserData? userData = UserDataService().userdata;
-
-    return Scaffold(
-      backgroundColor: APP_BACKGROUND_COLOR,
-      appBar: AppBar(
-        title: MyAppbarTitle('Profile'),
-        backgroundColor: APP_BAR_COLOR,
-        foregroundColor: Colors.white,
-      ),
-      body: Padding(
-        padding: EdgeInsets.only(left: 20, right: 20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: <Widget>[
-
-            // Header
-            buildLoginHeader(),
-
-            Container(
-
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-
-                  SizedBox(height: 20),
-
-                  // Display Name
-                  MyTextFormField(
-                    backgroundColor: APP_BACKGROUND_COLOR,
-                    foregroundColor: Colors.white,
-                    controller: _displaynameControl,
-                    hintText: "Type display name here",
-                    labelText: "Display Name",
-                    onFieldSubmitted: (value){
-                      UserDataService().updateFields({
-                        "displayName":value
-                      });
-                    },
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Email
-                  MyTextFormField(
-                    backgroundColor: APP_BACKGROUND_COLOR,
-                    foregroundColor: Colors.white,
-                    controller: _emailController,
-                    hintText: "No email address",
-                    labelText: "Email",
-                    isPasswordField: false,
-                    isReadOnly: true,
-                  ),
-
-                  SizedBox(height: 20),
-
-                ],
-              ),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  void login(UserData? userData) async {
+  void xlogin(UserDataService? user) async {
     FirebaseAuthService auth = FirebaseAuthService();
 
     try {
       //User? user = await _auth.fireAuthSignIn(context, _emailControl.text, _pwControl.text);
 
-      if (userData != null && userData.isLoggedIn) {
-
+      if (user != null && user.isLoggedIn) {
         print('User logged in');
 
         Navigator.push(
@@ -220,11 +225,96 @@ class _profilePageState extends State<profilePage> {
               builder: (context) => HomePage(),
             ));
       } else {
-        print(userData!.errorMsg);
-        myMessageBox(context, userData.errorMsg);
+        myMessageBox(context, user!.userdata!.errorMsg);
       }
     } catch (e) {
       print('Error: $e');
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+
+    return Consumer<UserDataService>(
+      builder: (_, user,__) {
+
+        // Logged out - Back to Home
+        if (user.userdata == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => HomePage(),
+              ),
+            );
+          });
+
+          return const SizedBox(); // temporary widget
+        }
+
+        return Scaffold(
+          backgroundColor: APP_BACKGROUND_COLOR,
+          appBar: AppBar(
+            title: MyAppbarTitle('Profile'),
+            backgroundColor: APP_BAR_COLOR,
+            foregroundColor: Colors.white,
+          ),
+          body: Padding(
+            padding: EdgeInsets.only(left: 20, right: 20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+
+                // Header
+                buildLoginHeader(user),
+
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+
+                        SizedBox(height: 20),
+
+                        // Display Name
+                        MyTextFormField(
+                          backgroundColor: APP_BACKGROUND_COLOR,
+                          foregroundColor: Colors.white,
+                          controller: _displaynameControl,
+                          hintText: "Enter Name",
+                          labelText: "Display Name",
+                          onFieldSubmitted: (value) {
+                            user.updateFields({
+                              "displayName": value
+                            });
+                          },
+                        ),
+
+                        SizedBox(height: 20),
+
+                        // Email
+                        MyTextFormField(
+                          backgroundColor: APP_BACKGROUND_COLOR,
+                          foregroundColor: Colors.white,
+                          controller: _emailController,
+                          hintText: "Enter Email",
+                          labelText: "Email",
+                          isPasswordField: false,
+                          isReadOnly: true,
+                        ),
+
+                        SizedBox(height: 20),
+
+                      ],
+                    ),
+                  ),
+                )
+              ],
+            ),
+          ),
+        );
+      }
+    );
   }
 }

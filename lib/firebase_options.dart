@@ -31,10 +31,7 @@ class DefaultFirebaseOptions {
           'you can reconfigure this by running the FlutterFire CLI again.',
         );
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -48,21 +45,21 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCg4Zb2e1soq74wYV2dv7YN8RlxrMsPFhw',
-    appId: '1:615271668557:web:2e9304293638ccddf2f504',
-    messagingSenderId: '615271668557',
-    projectId: 'geofence-23924',
-    authDomain: 'geofence-23924.firebaseapp.com',
-    storageBucket: 'geofence-23924.firebasestorage.app',
-    measurementId: 'G-Q6C84ES7QG',
+    apiKey: 'AIzaSyADykx581l-LZkYgZP1OB7uryD3Pq9U7ow',
+    appId: '1:974321856114:web:a2c85995e56169ad531ceb',
+    messagingSenderId: '974321856114',
+    projectId: 'limitless-iot',
+    authDomain: 'limitless-iot.firebaseapp.com',
+    storageBucket: 'limitless-iot.firebasestorage.app',
+    measurementId: 'G-MBCPLLRD6N',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyC0YJm6nBZvOZ5kOn9Mlaa2eKuXh2dlFOs',
-    appId: '1:615271668557:android:e934e35a4392e85ff2f504',
-    messagingSenderId: '615271668557',
-    projectId: 'geofence-23924',
-    storageBucket: 'geofence-23924.firebasestorage.app',
+    apiKey: 'AIzaSyDh3cuszLYtdp2GxYIscJOUj8-bFkqEzSA',
+    appId: '1:974321856114:android:bee3f2311d6702e1531ceb',
+    messagingSenderId: '974321856114',
+    projectId: 'limitless-iot',
+    storageBucket: 'limitless-iot.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -73,4 +70,15 @@ class DefaultFirebaseOptions {
     storageBucket: 'geofence-23924.firebasestorage.app',
     iosBundleId: 'com.example.geofence',
   );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyADykx581l-LZkYgZP1OB7uryD3Pq9U7ow',
+    appId: '1:974321856114:web:3940912be3e5c7bc531ceb',
+    messagingSenderId: '974321856114',
+    projectId: 'limitless-iot',
+    authDomain: 'limitless-iot.firebaseapp.com',
+    storageBucket: 'limitless-iot.firebasestorage.app',
+    measurementId: 'G-ZB73RCNPYG',
+  );
+
 }

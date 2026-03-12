@@ -1,4 +1,4 @@
-package com.geofence.app
+package com.trinity.limitless
 
 import io.flutter.embedding.android.FlutterActivity
 

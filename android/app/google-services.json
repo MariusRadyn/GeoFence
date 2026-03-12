@@ -1,49 +1,34 @@
 {
   "project_info": {
-    "project_number": "615271668557",
-    "project_id": "geofence-23924",
-    "storage_bucket": "geofence-23924.firebasestorage.app"
+    "project_number": "974321856114",
+    "project_id": "limitless-iot",
+    "storage_bucket": "limitless-iot.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:615271668557:android:e934e35a4392e85ff2f504",
+        "mobilesdk_app_id": "1:974321856114:android:bee3f2311d6702e1531ceb",
         "android_client_info": {
           "package_name": "com.geofence.app"
         }
       },
       "oauth_client": [
         {
-          "client_id": "615271668557-cktmamku78slr5jo700ilj64ol9cv8pu.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.geofence.app",
-            "certificate_hash": "9c90fd03a46b7280043db75b66c81790afb17a01"
-          }
-        },
-        {
-          "client_id": "615271668557-4rir6g6stpgta23eok46fpf9oa6dk8cn.apps.googleusercontent.com",
+          "client_id": "974321856114-vootivkpba3mc5avtelnulb2bqcov7eg.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyC0YJm6nBZvOZ5kOn9Mlaa2eKuXh2dlFOs"
+          "current_key": "AIzaSyDh3cuszLYtdp2GxYIscJOUj8-bFkqEzSA"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "615271668557-4rir6g6stpgta23eok46fpf9oa6dk8cn.apps.googleusercontent.com",
+              "client_id": "974321856114-vootivkpba3mc5avtelnulb2bqcov7eg.apps.googleusercontent.com",
               "client_type": 3
-            },
-            {
-              "client_id": "615271668557-75r7qo9up462pb4t8e1lq8oqvkvumbni.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.example.geofence"
-              }
             }
           ]
         }
@@ -51,35 +36,36 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:615271668557:android:9c2cd62fb530bdbbf2f504",
+        "mobilesdk_app_id": "1:974321856114:android:3454577a5e4adb5e531ceb",
         "android_client_info": {
-          "package_name": "com.geofence.com"
+          "package_name": "com.trinity.limitless"
         }
       },
       "oauth_client": [
         {
-          "client_id": "615271668557-4rir6g6stpgta23eok46fpf9oa6dk8cn.apps.googleusercontent.com",
+          "client_id": "974321856114-co9nlhcc1qrf3abokah8kpvd7nip2cus.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.trinity.limitless",
+            "certificate_hash": "9c90fd03a46b7280043db75b66c81790afb17a01"
+          }
+        },
+        {
+          "client_id": "974321856114-vootivkpba3mc5avtelnulb2bqcov7eg.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyC0YJm6nBZvOZ5kOn9Mlaa2eKuXh2dlFOs"
+          "current_key": "AIzaSyDh3cuszLYtdp2GxYIscJOUj8-bFkqEzSA"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "615271668557-4rir6g6stpgta23eok46fpf9oa6dk8cn.apps.googleusercontent.com",
+              "client_id": "974321856114-vootivkpba3mc5avtelnulb2bqcov7eg.apps.googleusercontent.com",
               "client_type": 3
-            },
-            {
-              "client_id": "615271668557-75r7qo9up462pb4t8e1lq8oqvkvumbni.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.example.geofence"
-              }
             }
           ]
         }
