@@ -81,8 +81,6 @@ final String fireUserName = 'user1';
 final String fireUserRecyclebin = '${fireUserName}_recycle/';
 const String DB_TABLE_USERS = 'UserTable';
 
-
-
 //---------------------------------------------------
 // Firebase Settings
 //---------------------------------------------------
@@ -1743,6 +1741,21 @@ class MyDropdown extends StatelessWidget {
     );
   }
 }
+class MyBottomNavItem extends BottomNavigationBarItem {
+  MyBottomNavItem({
+    required IconData icon,
+    required String label,
+    Color color = Colors.white,
+    double size = 35,
+  }) : super(
+    icon: Icon(
+      icon,
+      size: size,
+      color: color,
+    ),
+    label: label,
+  );
+}
 
 Future<bool> _isWifiConnected(String ip, int port) async {
   try {
@@ -2649,7 +2662,7 @@ Widget MyAppbarTitle(String text){
             fontFamily: 'Poppins',
             fontWeight: FontWeight.normal,
             fontSize: 22,
-            color: Colors.grey
+            color: Colors.white
             ),
         ),
       ],
@@ -2691,6 +2704,14 @@ Widget MyProgressCircle() {
       child: CircularProgressIndicator(
           color: PROGRESS_CIRCLE_COLOR
       )
+  );
+}
+Widget MyCenterMsg(String msg){
+  return Container(
+    color: APP_BACKGROUND_COLOR,
+    child: Center(
+      child: MyText(text: msg),
+    ),
   );
 }
 

@@ -653,6 +653,27 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       debugPrint('Wheel distance: ${monitor.wheelDistance}');
     }
   }
+  void onBotNavBarTap(int index, MonitorSettingsService monService) {
+
+    //setState(() => _selectedIndex = index);
+    // Add
+    if(index == 0)_addMonitor();
+
+    // Delete
+    if(index == 1) {
+      if (monService.lstMonitors.isEmpty) return;
+      final mon = monService.lstMonitors[ _tabController!.index];
+
+      MyQuestionAlertBox(
+          context: context,
+          header: "Delete",
+          message: "${mon.monitorName}\n${mon.reg}\n\nAre you sure?",
+          onPress: (){
+            _deleteMonitor(mon);
+          }
+      );
+    }
+  }
 
   Widget _buildBody(MonitorSettings monitor, Key key) {
     try{
@@ -842,13 +863,10 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
           bottomNavigationBar: BottomNavigationBar(
               currentIndex: _selectedIndex,
               backgroundColor: APP_BAR_COLOR,
-              unselectedItemColor: Colors.grey,
-              selectedItemColor: Colors.grey,
+              unselectedItemColor: Colors.white,
+              selectedItemColor: Colors.white,
               onTap: (index) {
-                 if (index == 1 && _monitorService.lstMonitors.isEmpty) return;
-                 setState(() => _selectedIndex = index);
-                 if(index == 0)_addMonitor();
-                 if(index == 1)_deleteMonitorDialog();
+                onBotNavBarTap(index, _monitorService);
               },
               items: [
                 // Add Button
@@ -874,12 +892,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
           ),
 
           body: _monitorService.lstMonitors.isEmpty
-            ?  Container(
-              color: APP_BACKGROUND_COLOR,
-              child: Center(
-                  child: MyText(text: "No Monitors"),
-                ),
-              )
+            ?  MyCenterMsg('No Base Monitors')
               :Container(
             color: APP_BACKGROUND_COLOR,
             child: TabBarView(

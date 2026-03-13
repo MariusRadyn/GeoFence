@@ -501,14 +501,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
             body: (_baseService.lstBaseStations.isEmpty)
 
             // (Body) No Base Stations
-                ? Container(
-              color: APP_BACKGROUND_COLOR,
-              child: Center(
-                child: Text('No Base Stations',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            )
+                ? MyCenterMsg('No Base Stations')
 
             // (Body) Has Base Stations
                 : Column(

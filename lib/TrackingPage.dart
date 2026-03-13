@@ -117,7 +117,6 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     }
   }
 
-
   Future<void> _loadGeoFences() async {
     _geofenceList.clear();
 
@@ -239,6 +238,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
           .collection(CollectionUsers)
           .doc(userId)
           .collection(CollectionMonitors)
+          .where('type',isEqualTo: MonTypeVehicle)
           .get();
 
       if(vehiclesSnapshot.docs.isNotEmpty){
@@ -257,6 +257,11 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
         setState(() {
           _vehicles = vehicles;
           _selectedVehicleId = vehicles[0]['id'];
+          _isLoading_Vehicles = false;
+        });
+      }
+      else{
+        setState(() {
           _isLoading_Vehicles = false;
         });
       }
@@ -459,25 +464,36 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       // Update tracking session with new data
       final userId = context.read<UserDataService>().userdata!.userID;
 
+      final batch = _firestore.batch();
       final trackingRef = _firestore
           .collection(CollectionUsers)
           .doc(userId)
           .collection(CollectionTrackingSessions)
           .doc(_trackingSessionId);
 
-      // Save location data
-      await trackingRef.collection('locations').add({
+      final locationRef = trackingRef.collection('locations').doc();
+
+      // Ensure the session exists
+      await trackingRef.set({
+        'distance_inside': 0,
+        'distance_outside': 0,
+        'started_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      batch.set(locationRef, {
         'latitude': position.latitude,
         'longitude': position.longitude,
         'timestamp': FieldValue.serverTimestamp(),
         'inside_geofence': insideAny,
+        'distance_from_last': distance,
       });
 
-      // Update session with distance
-      await trackingRef.update({
+      batch.update(trackingRef, {
         insideAny ? 'distance_inside' : 'distance_outside':
         FieldValue.increment(distance),
       });
+
+      await batch.commit();
 
       // Update status message
       setState(() {
@@ -631,14 +647,14 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       return MyProgressCircle();
     }
 
-    if (_vehicles.isEmpty) {
-      return Center(
-        child: MyText(
-          text: "No Vehicles Found",
-          color: Colors.grey,
-        ),
-      );
-    }
+    // if (_vehicles.isEmpty) {
+    //   return Center(
+    //     child: MyText(
+    //       text: "No Vehicles Found",
+    //       color: Colors.grey,
+    //     ),
+    //   );
+    // }
 
     return Scaffold(
       backgroundColor: APP_BACKGROUND_COLOR,
@@ -646,9 +662,6 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
         foregroundColor: Colors.white,
         backgroundColor: _isTracking ? Colors.redAccent : APP_BAR_COLOR,
         title: MyAppbarTitle(_statusMessage),
-        actions: [
-          //_buildVehicleSelector(),
-        ],
       ),
       bottomNavigationBar: BottomNavigationBar(
           onTap: _onBotBarTap,
@@ -656,21 +669,24 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
           unselectedItemColor: Colors.grey,
           selectedItemColor: Colors.grey,
           items: [
-            BottomNavigationBarItem(icon: Icon(Icons.navigate_next, size: 35),label: "GeoFence"),
-            BottomNavigationBarItem(icon: Icon(Icons.refresh, size: 35),label: "Refresh" ),
+            MyBottomNavItem(icon: Icons.navigate_next,label: "GeoFence"),
+            MyBottomNavItem(icon: Icons.refresh,label: "Refresh" ),
             BottomNavigationBarItem(
                 icon: _isTracking
                 ? Icon(Icons.location_off, size: 35, color: Colors.red)
-                : Icon(Icons.location_on, size: 35, color: Colors.grey),
+                : Icon(Icons.location_on, size: 35, color: Colors.white),
             label: (_trackingSessionId == null) ? "Track" : "Stop"
             ),
           ]
       ),
-      body: Stack(
+      body: _vehicles.isEmpty
+          ? MyCenterMsg('No Vehicles Found')
+          : Stack(
         children: [
           Column(
             children: [
               _buildVehicleSelector(),
+              SizedBox(height: 5),
 
               Expanded(
                 child: GoogleMap(
@@ -688,15 +704,6 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
               ),
             ],
           ),
-          if (_isLoading_Geofence)
-            Container(
-              color: Colors.black.withOpacity(0.3),
-              child: const Center(
-                child: CircularProgressIndicator(
-                  color: Colors.lightBlue,
-                ),
-              ),
-            ),
         ],
       ),
     );

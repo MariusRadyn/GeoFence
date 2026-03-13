@@ -254,39 +254,12 @@ class _GeoFencePageState extends State<GeoFencePage> {
       duration: Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
-
-  }
-  void _xnextFence() {
-    if (_markers.isEmpty) return;
-
-    setState(() {
-      if (_fencePntr == _markers.length) {_fencePntr = 0;}
-      else  {_fencePntr++;}
-
-      int ptr = 0;
-
-      for (Marker mark in _markers) {
-        if (ptr == _fencePntr) {
-          _mapController?.animateCamera(
-            CameraUpdate.newLatLngZoom(LatLng(mark.position.latitude, mark.position.longitude),18),
-          );
-          print(mark.infoWindow.title);
-          return;
-        }
-        else{
-          ptr++;
-        }
-      }
-    });
   }
   void _nextFence() {
-
     if (_markers.isEmpty) return;
 
     setState(() {
-
       _fencePntr = (_fencePntr + 1) % _markers.length;
-
       final marker = _markers.elementAt(_fencePntr);
 
       _mapController?.animateCamera(
@@ -295,10 +268,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
           18,
         ),
       );
-
-      //print(marker.infoWindow.title);
     });
-
   }
   void _startDrawing() {
     setState(() {
@@ -550,11 +520,11 @@ class _GeoFencePageState extends State<GeoFencePage> {
           backgroundColor: APP_BAR_COLOR,
           unselectedItemColor: Colors.white,
           selectedItemColor: Colors.white,
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.map, color: Colors.grey), label: "Street", ),
-            BottomNavigationBarItem(icon: Icon(Icons.add, color: Colors.grey), label: "Add"),
-            BottomNavigationBarItem(icon: Icon(Icons.navigate_next, color: Colors.grey), label: "Next"),
-            BottomNavigationBarItem(icon: Icon(Icons.refresh, color: Colors.grey), label: "Refresh"),
+          items: [
+            MyBottomNavItem(icon: Icons.map, label: "Street"),
+            MyBottomNavItem(icon: Icons.add, label: "Add"),
+            MyBottomNavItem(icon: Icons.navigate_next, label: "GeoFence"),
+            MyBottomNavItem(icon: Icons.refresh, label: "Refresh"),
           ],
         );
 
@@ -565,10 +535,10 @@ class _GeoFencePageState extends State<GeoFencePage> {
           backgroundColor: APP_BAR_COLOR,
           unselectedItemColor: Colors.white,
           selectedItemColor: Colors.white,
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.save, color: Colors.grey), label: "Save"),
-            BottomNavigationBarItem(icon: Icon(Icons.refresh, color: Colors.grey), label: "Refresh"),
-            BottomNavigationBarItem(icon: Icon(Icons.arrow_back, color: Colors.grey), label: "Back"),
+          items: [
+            MyBottomNavItem(icon: Icons.save, label: "Save"),
+            MyBottomNavItem(icon: Icons.refresh, label: "Refresh"),
+            MyBottomNavItem(icon: Icons.arrow_back, label: "Back"),
           ],
         );
     }
