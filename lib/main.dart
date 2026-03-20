@@ -33,6 +33,7 @@ Future<void> main() async {
           ChangeNotifierProvider(create: (_) => UserDataService()..load()),
           ChangeNotifierProvider(create: (_) => MonitorSettingsService()..load()),
           ChangeNotifierProvider(create: (_) => BaseStationService()..load()),
+          ChangeNotifierProvider(create: (_) => OperatorService()..load()),
         ],
         child: MyApp(),
       ),

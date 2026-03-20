@@ -14,6 +14,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geofence/utils.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 class IotMonitorsPage extends StatefulWidget {
@@ -24,16 +25,13 @@ class IotMonitorsPage extends StatefulWidget {
 }
 
 class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderStateMixin {
-  late SettingsService settingService;
-  late MonitorSettingsService monitorService;
-  late BaseStationService baseService;
   TabController? _tabController;
   late List<ScrollController> _scrollControllers;
   late final List<GlobalKey<IotDistanceWheelTypeState>> _tabKeys;
 
   VoidCallback? _baseListener;
   final Map<String, Future<DocumentSnapshot<Map<String, dynamic>>>> _docFutures = {};
-  int _selectedIndex = 0;
+  final int _selectedIndex = 0;
   bool scanBusy = false;
   bool _hasScrolled = false;
   final ImagePicker _imagePicker = ImagePicker();
@@ -45,20 +43,15 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
 
+  @override
   void initState() {
     super.initState();
 
-    _getBondedDevices();
-    _setupListener();
+    _getBluetoothDevices();
+    _setupMqttListener();
 
     if(!mounted) return;
-
-    settingService = context.read<SettingsService>();
-    monitorService = context.read<MonitorSettingsService>();
-    baseService = context.read<BaseStationService>();
     _tabKeys = [];
-
-    debugPrint("initState");
   }
 
   @override
@@ -70,38 +63,27 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
   void dispose() {
 
     if (_baseListener != null) {
+      final baseService = context.read<BaseStationService>();
       baseService.removeListener(_baseListener!);
       _baseListener = null;
     }
 
     _tabController?.dispose();
-    //controllerWheelDistance.dispose();
-    //controllerWheelTicksPerM.dispose();
-    //controllerWheelId.dispose();
-    //controllerWheelName.dispose();
     super.dispose();
   }
 
-  Future<void> _getBondedDevices() async {
-    try {
-      List<BluetoothDevice> devices = await FlutterBluePlus.bondedDevices;
-
-      // Sort by name (optional)
-      devices.sort(
-          (a, b) => (a.platformName ?? '').compareTo(b.platformName ?? ''));
-
-      setState(() {
-        lstPairedDevices = devices;
-      });
-    } catch (e) {
-      print('Error getting paired devices: $e');
-    }
+  Future<void> _getBluetoothDevices() async {
+    setState(() async {
+      lstPairedDevices = await getBluetoothDevices();
+    });
   }
   void _saveMonitor(MonitorSettings monitor) async {
     if (_tabController == null) return;
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
+
+    final monitorService = context.read<MonitorSettingsService>();
 
     final ref = FirebaseFirestore.instance
         .collection(CollectionUsers)
@@ -134,6 +116,8 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     );
 
     final doc = await ref.add(monitor.toMap());
+
+    final monitorService = context.read<MonitorSettingsService>();
     await monitorService.load();
     if (!mounted) return;
 
@@ -159,6 +143,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
           .doc(monitor.monDocId)
           .delete();
 
+      final monitorService = context.read<MonitorSettingsService>();
       await monitorService.load();
 
       setState(() {
@@ -202,54 +187,9 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             .get()
     );
   }
-  void _deleteMonitorDialog() async {
-    int index = _tabController!.index;
-    final monitor = monitorService.lstMonitors[index];
-
-    showDialog(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(
-                color: Colors.blue, // Border color
-                width: 2, // Border width
-              ),
-            ),
-            backgroundColor: APP_TILE_COLOR,
-            shadowColor: Colors.black,
-            title: const MyText(text: "Delete", color: Colors.white),
-            content: MyText(
-              text:
-                  "${monitor.monitorName}\n${monitor.reg}\n\nAre you sure?",
-              color: Colors.grey,
-              fontsize: 18,
-            ),
-            actions: [
-              TextButton(
-                child: const MyText(
-                  text: 'No',
-                  fontsize: 20,
-                ),
-                onPressed: () => Navigator.pop(context),
-              ),
-              TextButton(
-                  child: const MyText(
-                    text: 'Yes',
-                    color: Colors.white,
-                    fontsize: 20,
-                  ),
-                  onPressed: () async {
-                    _deleteMonitor(monitor);
-                    Navigator.pop(context);
-                  }),
-            ],
-          );
-        });
-  }
   Future<void> _pickAndUploadImage({ImageSource? source}) async {
     if (source == null) return;
+    final monitorService = context.read<MonitorSettingsService>();
 
     try {
       if (_tabController == null) return;
@@ -278,7 +218,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
       // Delete old image From Firebase
       final oldUrl = monitor.image;
-      if (oldUrl != null && oldUrl.toString().isNotEmpty) {
+      if (oldUrl.toString().isNotEmpty) {
         try {
           await FirebaseStorage.instance.refFromURL(oldUrl).delete();
         } catch (e) {
@@ -451,6 +391,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       );
     }
 
+    final monitorService = context.read<MonitorSettingsService>();
     _scrollControllers=List.generate(monitorService.lstMonitors.length, (_) => ScrollController());;
 
   }
@@ -476,7 +417,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
   }
 
   // MQTT
-  void _setupListener() {
+  void _setupMqttListener() {
     // Use WidgetsBinding to safely access context after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -520,7 +461,10 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     });
   }
   Future<bool> _scanMonitor(String ip)async{
-    if(settingService.isBaseStationConnected == false){
+    final settingsService = context.read<SettingsService>();
+    final monitorService = context.read<MonitorSettingsService>();
+
+    if(settingsService.isBaseStationConnected == false){
       MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
       return false;
     }
@@ -535,6 +479,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     return true;
   }
   Future<bool> _connectIot(String ip, MonitorSettings monitor)async{
+    final settingService = context.read<SettingsService>();
     if(settingService.isBaseStationConnected == false){
       MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
       return false;
@@ -551,6 +496,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     return true;
   }
   Future<bool> _disconnectIot(MonitorSettings monitor)async{
+    final settingService = context.read<SettingsService>();
     if(settingService.isBaseStationConnected == false){
       MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
       return false;
@@ -567,6 +513,8 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     final Map<String, dynamic> jsonData = jsonDecode(msg);
     final cmd = jsonData[MQTT_JSON_CMD];
     final fromId = jsonData[MQTT_JSON_FROM_DEVICE_ID];
+
+    final monitorService = context.read<MonitorSettingsService>();
 
     // Pair - Set Device ID
     if (cmd == MQTT_CMD_REQ_MONITOR) {
@@ -677,6 +625,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
   Widget _buildBody(MonitorSettings monitor, Key key) {
     try{
+      final settingService = context.read<SettingsService>();
 
       switch(monitor.monitorType){
         case MonTypeVehicle:
@@ -804,19 +753,19 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Consumer3<MonitorSettingsService, SettingsService, BaseStationService>(
-      builder: (context, _monitorService, _settingsService, _baseService,_){
-        if (_monitorService.isLoading || _baseService.isLoading || _settingsService.isLoading || _settingsService.isConnecting) {
+      builder: (context, monitorService, settingsService, baseService,_){
+        if (monitorService.isLoading || baseService.isLoading || settingsService.isLoading || settingsService.isConnecting) {
           return MyProgressCircle();
         }
         
-        if (_tabController != null && _monitorService.lstMonitors[_tabController!.index].isConnectedToIot && !_hasScrolled) {
+        if (_tabController != null && monitorService.lstMonitors[_tabController!.index].isConnectedToIot && !_hasScrolled) {
           _hasScrolled = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottomOnce(_scrollControllers[_tabController!.index]);
           });
         }
 
-        _updateTabs(_monitorService.lstMonitors.length);
+        _updateTabs(monitorService.lstMonitors.length);
 
         return Scaffold(
           appBar: AppBar(
@@ -835,11 +784,11 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                 ),
 
                 Text(
-                  _settingsService.isBaseStationConnected != true
+                  settingsService.isBaseStationConnected != true
                       ? "No Connection"
-                      : _settingsService.fireSettings == null
+                      : settingsService.fireSettings == null
                       ? "Loading ..."
-                      : _settingsService.fireSettings!.connectedDevice,
+                      : settingsService.fireSettings!.connectedDevice,
                   style: const TextStyle(
                     fontSize: 12,
                     color: Colors.blueGrey,
@@ -847,14 +796,14 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                 ),
               ],
             ),
-            bottom: _monitorService.lstMonitors.isNotEmpty
+            bottom: monitorService.lstMonitors.isNotEmpty
                 ? TabBar(
               controller: _tabController,
               isScrollable: true,
               indicatorColor: Colors.blueAccent,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.grey,
-              tabs: _monitorService.lstMonitors
+              tabs: monitorService.lstMonitors
                   .map((doc) => Tab(text: doc.monitorName ?? "New Item"))
                   .toList(),
             )
@@ -866,7 +815,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               unselectedItemColor: Colors.white,
               selectedItemColor: Colors.white,
               onTap: (index) {
-                onBotNavBarTap(index, _monitorService);
+                onBotNavBarTap(index, monitorService);
               },
               items: [
                 // Add Button
@@ -882,7 +831,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                 BottomNavigationBarItem(
                   icon: Icon(
                     Icons.delete_forever,
-                    color: _monitorService.lstMonitors.isEmpty
+                    color: monitorService.lstMonitors.isEmpty
                         ? Colors.grey
                         : Colors.white,
                   ),
@@ -891,15 +840,15 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               ]
           ),
 
-          body: _monitorService.lstMonitors.isEmpty
+          body: monitorService.lstMonitors.isEmpty
             ?  MyCenterMsg('No Base Monitors')
               :Container(
             color: APP_BACKGROUND_COLOR,
             child: TabBarView(
               controller: _tabController,
-              children: List.generate(_monitorService.lstMonitors.length, (index){
-                final _docId = _monitorService.lstMonitors[index].monDocId;
-                final _monitor = _monitorService.lstMonitors[index];
+              children: List.generate(monitorService.lstMonitors.length, (index){
+                final _docId = monitorService.lstMonitors[index].monDocId;
+                final _monitor = monitorService.lstMonitors[index];
 
                 return FutureBuilder<ImageProvider<Object>>(
                     future: _getMonitorImageProvider(context, _docId, _monitor),
@@ -1048,13 +997,14 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                               padding:
                               const EdgeInsets.fromLTRB(10, 0, 10, 20),
                               child: MyDropdown(
+                                value: _monitor.monitorType!,
+                                lstDropdownValues: settingMonitorTypeList,
                                 onChange: (value) {
                                   setState(() {
                                     _monitor.monitorType = value;
                                     _saveMonitor(_monitor);
                                   });
                                 },
-                                value: _monitor.monitorType!,
                               )
                           ),
 

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/IotDataPage.dart';
+import 'package:geofence/operatorsPage.dart';
 import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/baseStationPage.dart';
 import 'package:geofence/geofencePage.dart';
@@ -1143,6 +1144,24 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                   },
                                                 ),
 
+                                                // Operator Data
+                                                ListTile(
+                                                  leading: Icon(
+                                                      Icons.person,
+                                                      color: colorMenuIcons
+                                                  ),
+                                                  title: Text("Operators",
+                                                    style: TextStyle(color: colorMenuText),
+                                                  ),
+                                                  onTap: () {
+                                                    toggleDrawer();
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                          builder: (context) => OperatorsPage()),
+                                                    );
+                                                  },
+                                                ),
 
                                                 // -------------------------
                                                 // (HEADING) Settings

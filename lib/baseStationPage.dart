@@ -1,10 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:mqtt_client/mqtt_client.dart';
-import 'package:mqtt_client/mqtt_server_client.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:collection/collection.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -12,9 +8,6 @@ import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-
-import 'Bluetooth2.dart';
-import 'MqttService.dart';
 
 class BaseStationPage extends StatefulWidget {
 
@@ -27,10 +20,6 @@ class BaseStationPage extends StatefulWidget {
 }
 
 class _BaseStationState extends State<BaseStationPage> with TickerProviderStateMixin{
-  late SettingsService settingsService;
-  late BaseStationService baseService;
-  late UserDataService userService;
-
   bool Debug = false;
   bool isLoading = true;
   TabController? _tabController;
@@ -60,16 +49,12 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-
-    _getBondedDevices();
+    _getBluetoothDevices();
     _initTts();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-
-      settingsService = context.read<SettingsService>();
-      baseService = context.read<BaseStationService>();
-      userService = context.read<UserDataService>();
+      context.read<BaseStationService>().load();
     });
   }
 
@@ -93,6 +78,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   }
 
   Future<void> updateSettingFields(Map<String, dynamic> updates) async {
+    SettingsService settingsService = context.read<SettingsService>();
     await settingsService.updateFireSettingsFields(updates);
   }
   void getVoices() async {
@@ -107,22 +93,23 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   }
   void _saveBase(BaseStationData base) async {
     if (_tabController == null) return;
+    BaseStationService baseService = context.read<BaseStationService>();
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    final ref = FirebaseFirestore.instance
-        .collection(CollectionUsers)
-        .doc(uid)
-        .collection(CollectionServers);
-
-    await ref.doc(base.docId).set(
-      base.toMap(),
-      SetOptions(merge: true),              // UPDATE
-    );
-
-    // await _fetchBaseStations();
-    await baseService.load();
+    // final uid = FirebaseAuth.instance.currentUser?.uid;
+    // if (uid == null) return;
+    //
+    // final ref = FirebaseFirestore.instance
+    //     .collection(CollectionUsers)
+    //     .doc(uid)
+    //     .collection(CollectionServers);
+    //
+    // await ref.doc(base.docId).set(
+    //   base.toMap(),
+    //   SetOptions(merge: true),              // UPDATE
+    // );
+    //
+    // await baseService.load();
+    await baseService.save(base);
 
     if (_tabController != null &&  baseService.lstBaseStations.isNotEmpty) {
       final newIndex = baseService.lstBaseStations.indexWhere((d) => d.docId == base.docId);
@@ -130,38 +117,40 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
         _tabController!.animateTo(newIndex);
       }
     }
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Saved')));
   }
   void _addBase() async {
     if (!mounted) return;
 
-    String? uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    BaseStationService baseService = context.read<BaseStationService>();
 
-    final ref = FirebaseFirestore.instance
-        .collection(CollectionUsers)
-        .doc(uid)
-        .collection(CollectionServers);
+    // String? uid = FirebaseAuth.instance.currentUser?.uid;
+    // if (uid == null) return;
+    //
+    // final ref = FirebaseFirestore.instance
+    //     .collection(CollectionUsers)
+    //     .doc(uid)
+    //     .collection(CollectionServers);
+    //
+    // final base = BaseStationData(
+    //   baseName: 'New Base',
+    // );
+    //
+    // final doc = await ref.add(base.toMap());
+    // await baseService.load();
+    final docId = await baseService.addNew();
 
-    final base = BaseStationData(
-      baseName: 'New Base',
-    );
-
-    final doc = await ref.add(base.toMap());
-    //await _fetchBaseStations();
-    await baseService.load();
-
-    if (_tabController != null &&  baseService.lstBaseStations.isNotEmpty) {
-      final newIndex = baseService.lstBaseStations.indexWhere((d) => d.docId == doc.id);
-      if (newIndex != -1) {
-        _tabController!.animateTo(newIndex);
+    if(docId.isNotEmpty){
+      if (_tabController != null &&  baseService.lstBaseStations.isNotEmpty) {
+        final newIndex = baseService.lstBaseStations.indexWhere((d) => d.docId == docId);
+        if (newIndex != -1) {
+          _tabController!.animateTo(newIndex);
+        }
       }
     }
   }
   void _deleteBaseDialog() async {
     int index = _tabController!.index;
+    BaseStationService baseService = context.read<BaseStationService>();
     final base = baseService.lstBaseStations[index];
 
     showDialog(
@@ -212,81 +201,66 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     );
   }
   Future<void> _deleteBase(BaseStationData base) async {
-    try {
-      User? user = FirebaseAuth.instance.currentUser;
 
-      // 1️⃣ Delete from Firestore
-      await FirebaseFirestore.instance
-          .collection(CollectionUsers)
-          .doc(user?.uid)
-          .collection(CollectionServers)
-          .doc(base.docId)
-          .delete();
+    //User? user = FirebaseAuth.instance.currentUser;
+    BaseStationService baseService = context.read<BaseStationService>();
 
-      //await _fetchBaseStations();
-      await baseService.load();
+    // 1️⃣ Delete from Firestore
+    // await FirebaseFirestore.instance
+    //     .collection(CollectionUsers)
+    //     .doc(user?.uid)
+    //     .collection(CollectionServers)
+    //     .doc(base.docId)
+    //     .delete();
+    //
+    // await baseService.load();
+    await baseService.delete(base);
 
-      setState(() {
-        _tabController?.dispose();
+    setState(() {
+      _tabController?.dispose();
 
-        if (baseService.lstBaseStations.isNotEmpty) {
-          _tabController = TabController(
-            length: baseService.lstBaseStations.length,
-            vsync: this,
-          );
+      if (baseService.lstBaseStations.isNotEmpty) {
+        _tabController = TabController(
+          length: baseService.lstBaseStations.length,
+          vsync: this,
+        );
 
-          // 5️⃣ Ensure a safe tab is selected
-          int newIndex = 0;
-          if (_tabController!.index >= baseService.lstBaseStations.length) {
-            newIndex = baseService.lstBaseStations.length - 1;
-          } else {
-            newIndex = _tabController!.index;
-          }
-          _tabController!.animateTo(newIndex);
-
-          _controllersBluetooth.remove(base.docId)?.dispose();
-          _controllersDesc.remove(base.docId)?.dispose();
-          _controllersName.remove(base.docId)?.dispose();
-          _controllersIpAddress.remove(base.docId)?.dispose();
-
+        // 5️⃣ Ensure a safe tab is selected
+        int newIndex = 0;
+        if (_tabController!.index >= baseService.lstBaseStations.length) {
+          newIndex = baseService.lstBaseStations.length - 1;
         } else {
-          _tabController = null;
+          newIndex = _tabController!.index;
         }
-      });
-    } catch (e) {
-      print('Error deleting: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete Failed: $e')),
-      );
-    }
+        _tabController!.animateTo(newIndex);
+
+        _controllersBluetooth.remove(base.docId)?.dispose();
+        _controllersDesc.remove(base.docId)?.dispose();
+        _controllersName.remove(base.docId)?.dispose();
+        _controllersIpAddress.remove(base.docId)?.dispose();
+
+      } else {
+        _tabController = null;
+      }
+    });
   }
 
-  Future<void> _getBondedDevices() async {
-    try {
-      List<BluetoothDevice> devices = await FlutterBluePlus.bondedDevices;
+  Future<void> _getBluetoothDevices() async {
+    setState(() async {
+      lstPairedDevices = await getBluetoothDevices();
 
-      // Sort by name (optional)
-      devices.sort((a, b) => (a.platformName ?? '').compareTo(b.platformName ?? ''));
-
-      setState(() {
-        lstPairedDevices = devices;
-
-        // Debug - Set Manual List
-        if(Debug){
-          lstPairedDevices = [
-            BluetoothDevice(
-              remoteId: DeviceIdentifier("00:11:22:33:44:55"),
-            ),
-            BluetoothDevice(
-              remoteId: DeviceIdentifier("AA:BB:CC:DD:EE:FF"),
-            ),
-          ];
-        }
-      });
-
-    } catch (e) {
-      print('Error getting paired devices: $e');
-    }
+      // Debug - Set Manual List
+      if(Debug){
+        lstPairedDevices = [
+          BluetoothDevice(
+            remoteId: DeviceIdentifier("00:11:22:33:44:55"),
+          ),
+          BluetoothDevice(
+            remoteId: DeviceIdentifier("AA:BB:CC:DD:EE:FF"),
+          ),
+        ];
+      }
+    });
   }
   void _showBluetoothDevicesPopup(BaseStationData base) {
     showDialog(
@@ -455,11 +429,11 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   Widget build(BuildContext context){
 
       return Consumer2<BaseStationService, SettingsService>(
-        builder: (_ , _baseService , _settingsService, __){
-          if (_baseService.isLoading) {
+        builder: (_ , baseService , settingsService, __){
+          if (baseService.isLoading) {
             return MyProgressCircle();
           }
-          _updateTabController(_baseService.lstBaseStations.length);
+          _updateTabController(baseService.lstBaseStations.length);
 
           return Scaffold(
             appBar: AppBar(
@@ -474,7 +448,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                 unselectedItemColor: Colors.grey,
                 selectedItemColor: Colors.grey,
                 onTap: (index) {
-                  if (index == 1 && _baseService.lstBaseStations.isEmpty) return;
+                  if (index == 1 && baseService.lstBaseStations.isEmpty) return;
                   setState(() => _selectedIndex = index);
                   if(index == 0) _addBase();
                   if(index == 1) _deleteBaseDialog();
@@ -498,7 +472,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                 ]
             ),
 
-            body: (_baseService.lstBaseStations.isEmpty)
+            body: (baseService.lstBaseStations.isEmpty)
 
             // (Body) No Base Stations
                 ? MyCenterMsg('No Base Stations')
@@ -512,20 +486,24 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.grey,
                   indicatorColor: Colors.blue,
-                  tabs: _baseService.lstBaseStations
+                  tabs: baseService.lstBaseStations
                       .map((base) => Tab(text: base.baseName))
                       .toList(),
                 ),
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
-                    children:  List.generate(_baseService.lstBaseStations.length, (index){ //_baseService.lstBaseStations.map((base)  {
-                      final base = _baseService.lstBaseStations[index];
+                    children:  List.generate(baseService.lstBaseStations.length, (index){ //_baseService.lstBaseStations.map((base)  {
+                      final baseSelected = baseService.lstBaseStations[index];
 
-                      final _controllerName = _getControllerName(base);
-                      final _controllerDesc = _getControllerDesc(base);
-                      final _controllerIPAddress = _getControllerIpAdr(base);
-                      final _controllerBluetooth = _getControllerBluetooth(base);
+                      final _controllerName = _getControllerName(baseSelected);
+                      final _controllerDesc = _getControllerDesc(baseSelected);
+                      final _controllerIPAddress = _getControllerIpAdr(baseSelected);
+                      final _controllerBluetooth = _getControllerBluetooth(baseSelected);
+
+                      if(selectedDevice != null){
+                        _controllerBluetooth.text = selectedDevice?.platformName ?? '';
+                      }
 
                       return SingleChildScrollView(
                         padding: const EdgeInsets.all(5),
@@ -559,8 +537,8 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   onChanged: (value) {},
                                   onFieldSubmitted: (value){
                                     setState(() {
-                                      base.baseName = value;
-                                      _saveBase(base);
+                                      baseSelected.baseName = value;
+                                      _saveBase(baseSelected);
                                     });
                                   },
                                 ),
@@ -580,9 +558,9 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   },
                                   onFieldSubmitted: (value){
                                     setState(() {
-                                      base.baseDesc = value;
-                                      _baseService.setIpAddress(base, value);
-                                      _saveBase(base);
+                                      baseSelected.baseDesc = value;
+                                      baseService.setIpAddress(baseSelected, value);
+                                      _saveBase(baseSelected);
                                     });
                                   },
                                 ),
@@ -620,7 +598,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                           ),
                                         ),
                                         onPressed: (){
-                                          _showBluetoothDevicesPopup(base);
+                                          _showBluetoothDevicesPopup(baseSelected);
                                         }
                                     )
                                   ],
@@ -654,7 +632,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   ),
 
                                   onTap: () async {
-                                    final bluetoothName = base.bluetoothName;
+                                    final bluetoothName = baseSelected.bluetoothName;
 
                                     if(bluetoothName == ""){
                                       myMessageBox(
@@ -684,11 +662,11 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                     MyGlobalSnackBar.show('IP Address: $ipAdr');
 
                                     setState(() {
-                                      base.ipAddress = ipAdr;
-                                      _saveBase(base);
+                                      baseSelected.ipAddress = ipAdr;
+                                      _saveBase(baseSelected);
 
                                       settingsService.updateFireSettingsFields({
-                                        SettingConnectedDevice : base.baseName,
+                                        SettingConnectedDevice : baseSelected.baseName,
                                         SettingConnectedDeviceIp : ipAdr
                                       });
                                     });
@@ -701,7 +679,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                 children: [
                                   InkWell(
                                       onTap: () async {
-                                        final ip = base.ipAddress ;
+                                        final ip = baseSelected.ipAddress ;
 
                                         if(ip == ""){
                                           myMessageBox(context, "No IP Address");
@@ -709,15 +687,15 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                         }
 
                                         // Connect MQTT
-                                        if(base.isConnected == false){
-                                          if(await _settingsService.mqttConnect(ip)) {
+                                        if(baseSelected.isConnected == false){
+                                          if(await settingsService.mqttConnect(ip)) {
 
                                             // Pass
                                             setState(() {
-                                              base.isConnected = true;
+                                              baseSelected.isConnected = true;
 
                                               settingsService.updateFireSettingsFields({
-                                                SettingConnectedDevice : base.baseName,
+                                                SettingConnectedDevice : baseSelected.baseName,
                                                 SettingConnectedDeviceIp : ip
                                               });
                                             });
@@ -727,17 +705,17 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                             // Failed
                                             myMessageBox(context, "Wifi Connection FAILED");
                                             setState(() {
-                                              base.isConnected = false;
+                                              baseSelected.isConnected = false;
                                             });
                                             return;
                                           }
                                         }
                                         else {
                                           // Disconnect
-                                          _settingsService.mqttDisconnect();
+                                          settingsService.mqttDisconnect();
 
                                           setState(() {
-                                            base.isConnected = false;
+                                            baseSelected.isConnected = false;
                                           });
                                         }
                                       },
@@ -745,7 +723,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                         Icon(
                                           Icons.connected_tv,
                                           size: 50,
-                                          color: base.isConnected == true
+                                          color: baseSelected.isConnected == true
                                               ? Colors.lightGreenAccent
                                               : Colors.grey ,
                                         ),
@@ -770,6 +748,5 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
             ),
           );
         });
-
   }
 }

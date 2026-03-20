@@ -12,6 +12,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -30,9 +31,7 @@ final mqtt_Service = MqttService();
 // keytool -keystore C:\Users\mradyn\.android\debug.keystore -list
 // PW android
 
-//---------------------------------------------------
-// Constants Images
-//---------------------------------------------------
+//-- Constants Images ----------------------------------------------------------
 const String IMAGE_WHEEL = "assets/distanceWheel.jpg";
 const String IMAGE_VEHICLE = "assets/red_pickup2.png";
 const String IMAGE_MOBILE_MACHINE = "'assets/tractor.jpg'";
@@ -51,9 +50,7 @@ const String ICON_REPORT = 'assets/report.png';
 const String ICON_LIMITLESS_LOGO = 'assets/limitless_logo.png';
 const String ICON_LIMITLESS_WORD = 'assets/limitlessIotWord.png';
 
-//---------------------------------------------------
-// Constants Colors
-//---------------------------------------------------
+//-- Constants Colors ----------------------------------------------------------
 const COLOR_ICE_BLUE = Color.fromARGB(202, 139, 229, 245);
 const COLOR_BLUE = Color.fromARGB(255, 4, 145, 246);
 const COLOR_DARK_BLUE = Color.fromARGB(255, 1, 57, 86);
@@ -81,9 +78,7 @@ final String fireUserName = 'user1';
 final String fireUserRecyclebin = '${fireUserName}_recycle/';
 const String DB_TABLE_USERS = 'UserTable';
 
-//---------------------------------------------------
-// Firebase Settings
-//---------------------------------------------------
+//-- Firebase Settings ---------------------------------------------------------
 const CollectionUsers = 'users';
 const CollectionGeoFences = 'geofences';
 const CollectionTrackingSessions = 'tracking_sessions';
@@ -92,6 +87,7 @@ const CollectionMonitors = 'monitors';
 const CollectionMonitorData = 'iotdata';
 const CollectionServers = 'servers';
 const CollectionClients = 'clients';
+const CollectionOperators = 'operators';
 
 const FieldsSettings = 'settings';
 const FieldsUserData = 'userdata';
@@ -109,12 +105,20 @@ const SettingServerData = 'serverData';
 const double SettingMonDefaultTicksPerM = 20; // Default value when new Monitor is created
 
 // Monitor Types
-const List<String> SettingMonitorTypeList = [
+const List<String> settingMonitorTypeList = [
   MonTypeVehicle,
   MonTypeMobileMachineMon,
   MonTypeStationaryMachineMon,
   MonTypeWheel,
 ];
+const List<String> settingOperatorTypeList = [
+  opTypeOperator,
+  opTypeSupervisor
+];
+
+// Operator Types
+const String opTypeOperator = "Operator";
+const String opTypeSupervisor = "Supervisor";
 
 // Monitor Types
 const String MonTypeVehicle = "Vehicle";
@@ -155,8 +159,6 @@ const FIRE_MON_BT_MAC = 'bluetoothMAC';
 const FIRE_MON_IMAGE = 'picture';
 const FIRE_MON_TYPE = 'type';
 const FIRE_MON_ID = 'monitorId';
-//const FIRE_MON_DOC_ID = 'monDocId';
-//const FIRE_MON_USER_DOC_ID = 'userDocId';
 const FIRE_MON_TICKS_PER_M = 'ticksPerM';
 const FIRE_MON_TIMESTAMP = 'timestamp';
 const FIRE_MON_LAST_LOG_TIMESTAMP = 'lastLogTimestamp';
@@ -168,7 +170,6 @@ const FIRE_TRACK_START_TIME = 'start_time';
 const FIRE_TRACK_END_TIME = 'end_time';
 const FIRE_TRACK_ACTIVE = 'is_active';
 const FIRE_TRACK_VEH_DOC_ID = 'vehicle_id';
-
 
 // Clients Settings
 const SettingClientIpAdr = 'IPAdress';
@@ -204,12 +205,35 @@ const MQTT_JSON_IOT_NAME = "iotName";
 const MQTT_JSON_MON_DOC_ID = "monDocId";
 const MQTT_JSON_USER_DOC_ID = "userDocId";
 
-
 //---------------------------------------------------
 // Bluetooth
 //---------------------------------------------------
 const BT_SERVICE_UUID = 'f3a1c2d0-6b4e-4e9a-9f3e-8d2f1c9b7a1e';
 const BT_CHAR_UUID = 'c7b2e3f4-1a5d-4c3b-8e2f-9a6b1d8c2f3a';
+Future<List<BluetoothDevice>> getBluetoothDevices() async {
+  try {
+    final statuses = await [
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+      Permission.bluetoothAdvertise, // only if you advertise
+    ].request();
+
+    // Check Permission
+    final granted = statuses.values.every((s) => s.isGranted);
+    if (!granted) {
+      MyGlobalSnackBar.show('Bluetooth Permission: Not Granted');
+      return [];
+    }
+
+    List<BluetoothDevice> devices = await FlutterBluePlus.bondedDevices;
+    devices.sort((a, b) => (a.platformName ?? '').compareTo(b.platformName ?? ''));
+    return devices;
+
+  } catch (e) {
+    MyGlobalSnackBar.show('Bluetooth Error: $e');
+    return [];
+  }
+}
 
 //---------------------------------------------------
 // Methods
@@ -1231,6 +1255,78 @@ class MyTextTileWithEditDelete extends StatelessWidget {
     );
   }
 }
+class MyOperatorTile extends StatelessWidget {
+  final OperatorData operator;
+  final VoidCallback? onTapDelete;
+  final VoidCallback? onTapTile;
+
+  const MyOperatorTile({
+    super.key,
+    required this.operator,
+    this.onTapDelete,
+    this.onTapTile,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        if(onTapTile != null) {
+          onTapTile!();
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: APP_BAR_COLOR,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              GestureDetector(
+                onTap:  () => onTapTile!(),
+                child: CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Colors.white,
+                  child: CircleAvatar(
+                    backgroundImage: (operator.photoURL.isEmpty ?? true)
+                        ? AssetImage(IMAGE_PROFILE)
+                        : NetworkImage(operator.photoURL) as ImageProvider,
+                    radius: 50,
+                  ),
+                ),
+              ),
+
+              SizedBox(width: 8),
+
+              // Operator name
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    MyText(text: '${operator.name} ${operator.surname}'),
+                    MyText(text: 'Tag: ${operator.tagId}', fontsize: 14,color: Colors.grey),
+                  ],
+                ),
+              ),
+
+              IconButton(
+                icon: Icon(Icons.delete_forever),
+                iconSize: 30,
+                color: Colors.redAccent,
+                onPressed:  () => onTapDelete!(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class MyCircleIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
@@ -1682,11 +1778,13 @@ class ClientIdManager {
 class MyDropdown extends StatelessWidget {
   final ValueChanged<String?>? onChange;
   final String value;
+  final List<String> lstDropdownValues;
 
   const MyDropdown({
     super.key,
     required this.onChange,
-    required this.value
+    required this.value,
+    required this.lstDropdownValues
   });
 
   @override
@@ -1713,7 +1811,7 @@ class MyDropdown extends StatelessWidget {
           fontSize: 15,
         ),
       ),
-      items: SettingMonitorTypeList.map((type) {
+      items: lstDropdownValues.map((type) {
         return DropdownMenuItem(
           value: type,
           child: Padding(
@@ -1729,15 +1827,6 @@ class MyDropdown extends StatelessWidget {
         );
       }).toList(),
       onChanged: onChange,
-      // onChanged: (value) {
-      //   final vehicleDoc = lstMonitorData[_tabController!.index];
-      //   final docId = vehicleDoc.id;
-      //
-      //   setState(() {
-      //     mapMonitorData[docId]?[SettingMonitorType] = value;
-      //     _saveCurrentMonitor();
-      //   });
-      //},
     );
   }
 }
@@ -1746,7 +1835,7 @@ class MyBottomNavItem extends BottomNavigationBarItem {
     required IconData icon,
     required String label,
     Color color = Colors.white,
-    double size = 35,
+    double size = 30,
   }) : super(
     icon: Icon(
       icon,
@@ -1798,7 +1887,6 @@ class UserData{
   String email = "";
   String errorMsg = "";
   String photoURL = "";
-  //bool isLoggedIn = false;
   bool hasError = false;
   bool emailValidated = false;
 
@@ -2477,7 +2565,7 @@ class BaseStationData {
   String image;
 
   // Local-only (NOT saved)
-  bool isLoading;
+  //bool isLoading;
   bool isConnected;
   String docId;
 
@@ -2491,7 +2579,7 @@ class BaseStationData {
     this.image = "",
 
     // Local
-    this.isLoading = false,
+    //this.isLoading = false,
     this.isConnected = false,
     this.docId = ""
   });
@@ -2523,11 +2611,11 @@ class BaseStationData {
   }
 }
 class BaseStationService extends ChangeNotifier {
-  final List<BaseStationData> _base = [];
+  final List<BaseStationData> _lstBase = [];
   BaseStationData? _selected;
   bool isLoading = true;
 
-  List<BaseStationData> get lstBaseStations => List.unmodifiable(_base);
+  List<BaseStationData> get lstBaseStations => List.unmodifiable(_lstBase);
   BaseStationData? get selected => _selected;
 
   Future<void> load() async {
@@ -2559,24 +2647,87 @@ class BaseStationService extends ChangeNotifier {
   }
 
   void setBaseStations(List<BaseStationData> list) {
-    _base
+    _lstBase
       ..clear()
       ..addAll(list);
     notifyListeners();
   }
-  void addBaseStations(BaseStationData newBase) {
-    _base.add(newBase);
-    notifyListeners();
+  Future<String> addNew() async {
+    try{
+      String? uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return "";
+
+      final ref = FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(uid)
+          .collection(CollectionServers);
+
+      final base = BaseStationData(
+        baseName: 'New Base',
+      );
+
+      final doc = await ref.add(base.toMap());
+      await load();
+
+      //_base.add(newBase);
+      notifyListeners();
+      return doc.id;
+    }
+    catch(e){
+      MyGlobalSnackBar.show('Cloud Error $e');
+      return "";
+    }
   }
-  void removeBaseStations(String id) {
-    _base.removeWhere((m) => m.docId == id);
-    if (_selected?.docId == id) _selected = null;
-    notifyListeners();
+  Future<void> save(BaseStationData base) async{
+    try{
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final ref = FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(uid)
+          .collection(CollectionServers);
+
+      await ref.doc(base.docId).set(
+        base.toMap(),
+        SetOptions(merge: true),              // UPDATE
+      );
+
+      await load();
+      MyGlobalSnackBar.show('Saved');
+    }
+    catch (e){
+      MyGlobalSnackBar.show('Cloud Error: $e');
+    }
   }
-  void selectMonitor(String id) {
-    _selected = _base.firstWhere((m) => m.docId == id);
-    notifyListeners();
+  Future<void> delete(BaseStationData base) async{
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+
+      // 1️⃣ Delete from Firestore
+      await FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(user?.uid)
+          .collection(CollectionServers)
+          .doc(base.docId)
+          .delete();
+
+      await load();
+
+    } catch (e) {
+      MyGlobalSnackBar.show('Delete Failed: $e');
+    }
   }
+
+  // void removeBaseStations(String id) {
+  //   _base.removeWhere((m) => m.docId == id);
+  //   if (_selected?.docId == id) _selected = null;
+  //   notifyListeners();
+  // }
+  // void selectMonitor(String id) {
+  //   _selected = _base.firstWhere((m) => m.docId == id);
+  //   notifyListeners();
+  // }
   void setConnectedByIp(String ip, bool value) {
     final base = lstBaseStations.firstWhereOrNull((b) => b.ipAddress == ip);
     if (base == null) return;
@@ -2585,8 +2736,187 @@ class BaseStationService extends ChangeNotifier {
     notifyListeners();
   }
   void setIpAddress(BaseStationData base, String value) {
-    base.ipAddress = value;
+     base.ipAddress = value;
+     notifyListeners();
+  }
+}
+
+class OperatorData{
+  String name = "";
+  String surname = "";
+  String accessLevel = "";
+  String tagId = "";
+  String photoURL = "";
+
+  // Local-only (NOT saved)
+  String docId;
+
+  OperatorData({
+    this.name = "",
+    this.surname = "",
+    this.accessLevel = "",
+    this.tagId = "",
+    this.photoURL = "",
+
+    // Local
+    this.docId = ""
+  });
+
+  factory OperatorData.fromMap(Map<String, dynamic> map, String docId){
+    return OperatorData(
+      docId: docId,
+      name: map['name'] ?? "",
+      surname: map['surname'] ?? "",
+      accessLevel: map['accessLevel'] ?? "",
+      tagId: map['tagId'] ?? "",
+      photoURL: map['photoURL'] ?? "",
+    );
+  }
+  Map<String, dynamic> toMap(){
+    return{
+      'docId': docId,
+      'name': name,
+      'surname': surname,
+      'accessLevel': accessLevel,
+      'tagId': tagId,
+      'photoURL': photoURL,
+    };
+  }
+  OperatorData copyWith({
+    String? docId,
+    String? name,
+    String? surname,
+    String? accessLevel,
+    String? tagID,
+    String? photoURL,
+  }){
+    return OperatorData(
+      docId: docId ?? this.docId,
+      name: name ?? this.name,
+      surname: surname ?? this.surname,
+      accessLevel: accessLevel ?? this.accessLevel,
+      tagId: tagId ?? this.tagId,
+      photoURL: photoURL ?? this.photoURL,
+    );
+  }
+}
+class OperatorService extends ChangeNotifier {
+  final List<OperatorData> _lstOps = [];
+  OperatorData? _opData;
+
+  OperatorData? get operatorData => _opData;
+  List<OperatorData> get lstOperators => List.unmodifiable(_lstOps);
+
+  bool isLoading = false;
+  bool firebaseError = false;
+
+  void setOperators(List<OperatorData> list) {
+    _lstOps
+      ..clear()
+      ..addAll(list);
     notifyListeners();
+  }
+  Future<void> load() async {
+    isLoading = true;
+
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection(CollectionUsers)
+        .doc(uid)
+        .collection(CollectionOperators)
+        .get();
+
+    final list = snapshot.docs
+        .map((doc) => OperatorData.fromMap(doc.data(), doc.id))
+        .toList();
+
+    try {
+      if (lstOperators.length != list.length) {
+        setOperators(list);
+      }
+    }
+    catch (e) {
+      MyGlobalSnackBar.show("Cloud Error: $e");
+      print(e);
+    }
+    finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+  Future<String> addNew() async {
+    try{
+      String? uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return "";
+
+      final ref = FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(uid)
+          .collection(CollectionOperators);
+
+      final operator = OperatorData(
+        name: 'New',
+        surname: 'Operator',
+        tagId: 'none'
+      );
+
+      final doc = await ref.add(operator.toMap());
+      await load();
+
+      notifyListeners();
+      return doc.id;
+    }
+    catch(e){
+      MyGlobalSnackBar.show('Cloud Error $e');
+      firebaseError = true;
+      return "";
+    }
+    finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+  Future<void> save(OperatorData operator) async{
+    try{
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final ref = FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(uid)
+          .collection(CollectionOperators);
+
+      await ref.doc(operator.docId).set(
+        operator.toMap(),
+        SetOptions(merge: true),              // UPDATE
+      );
+
+      await load();
+      MyGlobalSnackBar.show('Saved');
+    }
+    catch (e){
+      MyGlobalSnackBar.show('Cloud Error: $e');
+    }
+  }
+  Future<void> delete(OperatorData operator) async{
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+
+      // 1️⃣ Delete from Firestore
+      await FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(user?.uid)
+          .collection(CollectionOperators)
+          .doc(operator.docId)
+          .delete();
+
+      await load();
+
+    } catch (e) {
+      MyGlobalSnackBar.show('Delete Failed: $e');
+    }
   }
 }
 
