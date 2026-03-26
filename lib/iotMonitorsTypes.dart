@@ -276,18 +276,18 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
     if (!mounted) return;
     _controllerDistance.text = value.toStringAsFixed(2);
   }
-  void updateTicks(double value) {
-    if (!mounted) return;
-    _controllerTicks.text = value.toStringAsFixed(2);
-  }
-  void updateID(String value) {
-    if (!mounted) return;
-    _controllerId.text = value;
-  }
-  void updateName(String value) {
-    if (!mounted) return;
-    _controllerName.text = value;
-  }
+  //void updateTicks(double value) {
+  //   if (!mounted) return;
+  //   _controllerTicks.text = value.toStringAsFixed(2);
+  // }
+  // void updateID(String value) {
+  //   if (!mounted) return;
+  //   _controllerId.text = value;
+  // }
+  // void updateName(String value) {
+  //   if (!mounted) return;
+  //   _controllerName.text = value;
+  // }
 
   @override
   Widget build(BuildContext context) {

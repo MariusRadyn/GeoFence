@@ -112,13 +112,13 @@ const List<String> settingMonitorTypeList = [
   MonTypeWheel,
 ];
 const List<String> settingOperatorTypeList = [
-  opTypeOperator,
-  opTypeSupervisor
+  opAccessOperator,
+  opAccessSupervisor
 ];
 
 // Operator Types
-const String opTypeOperator = "Operator";
-const String opTypeSupervisor = "Supervisor";
+const String opAccessOperator = "Operator";
+const String opAccessSupervisor = "Supervisor";
 
 // Monitor Types
 const String MonTypeVehicle = "Vehicle";
@@ -187,7 +187,11 @@ const MQTT_CMD_FOUND_MONITOR = "#FOUND_MONITOR";
 const MQTT_CMD_CONNECT_MONITOR = "#CONNECT_MONITOR";
 const MQTT_CMD_DISCONNECT_MONITOR = "#DISCONNECT_MONITOR";
 const MQTT_CMD_ACK = "#ACK";
+const MQTT_CMD_PING = "#PING";
 const MQTT_CMD_MONITOR_DATA = "#MONITOR_DATA";
+const MQTT_CMD_TAG_REQ = "#TAG_REQ";
+const MQTT_CMD_TAG_DATA = "#TAG_DATA";
+const MQTT_CMD_TAG_ACK = "#TAG_ACK";
 
 // MQTT Payload
 const MQTT_JSON_FROM_DEVICE_ID = "from";
@@ -196,6 +200,7 @@ const MQTT_JSON_TOPIC = "topic";
 const MQTT_JSON_PAYLOAD = "payload";
 const MQTT_JSON_CMD = "cmd";
 const MQTT_JSON_WHEEL_DISTANCE = "wheel_distance";
+const MQTT_JSON_TAG_DATA = "tag_data";
 
 // JSON Settings
 const MQTT_JSON_MON_ID = "monId";
@@ -1778,12 +1783,14 @@ class ClientIdManager {
 class MyDropdown extends StatelessWidget {
   final ValueChanged<String?>? onChange;
   final String value;
+  final String label;
   final List<String> lstDropdownValues;
 
   const MyDropdown({
     super.key,
     required this.onChange,
     required this.value,
+    required this.label,
     required this.lstDropdownValues
   });
 
@@ -1792,7 +1799,7 @@ class MyDropdown extends StatelessWidget {
     return DropdownButtonFormField<String>(
       dropdownColor: APP_BAR_COLOR,
       decoration: InputDecoration(
-        labelText: "Monitor Type",
+        labelText: label,
         labelStyle: TextStyle(color: Colors.grey, fontSize: 22),
         enabledBorder: OutlineInputBorder(
             borderSide: BorderSide(color: Colors.blue)
@@ -1857,7 +1864,7 @@ Future<bool> _isWifiConnected(String ip, int port) async {
 }
 Future<bool> _mqttConnect(String ip) async {
   if (!await _isWifiConnected(ip, 1883)) {
-    print("Wifi Fail");
+    MyGlobalSnackBar.show("No Wifi Connection");
     return false;
   }
 
@@ -1865,7 +1872,7 @@ Future<bool> _mqttConnect(String ip) async {
   await mqtt_Service.init();
 
   if (!await mqtt_Service.connect()) {
-    MyGlobalSnackBar.show("MQTT Connection FAILED");
+    MyGlobalSnackBar.show("MQTT Failed");
     return false;
   }
 
@@ -2143,9 +2150,7 @@ class SettingsService extends ChangeNotifier {
   bool monitorWheelReset = false;
   bool monitorWheelSignal = false;
   String? lastConnectionError = "";
-
   final _db = FirebaseFirestore.instance;
-
 
   Future<void> load() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -2218,7 +2223,6 @@ class SettingsService extends ChangeNotifier {
       GlobalMsg.show('updateSettingFields:', '$e');
     }
   }
-
   void notify() => notifyListeners();
 
   Future<bool> mqttConnect(String ip) async {
@@ -2802,13 +2806,20 @@ class OperatorData{
 }
 class OperatorService extends ChangeNotifier {
   final List<OperatorData> _lstOps = [];
-  OperatorData? _opData;
+  //OperatorData? _opData;
 
-  OperatorData? get operatorData => _opData;
+  //OperatorData? get operatorData => _opData;
   List<OperatorData> get lstOperators => List.unmodifiable(_lstOps);
 
   bool isLoading = false;
   bool firebaseError = false;
+
+  final newOperator = OperatorData(
+      name: 'New',
+      surname: 'Operator',
+      tagId: 'none',
+      accessLevel: opAccessOperator
+  );
 
   void setOperators(List<OperatorData> list) {
     _lstOps
@@ -2856,13 +2867,7 @@ class OperatorService extends ChangeNotifier {
           .doc(uid)
           .collection(CollectionOperators);
 
-      final operator = OperatorData(
-        name: 'New',
-        surname: 'Operator',
-        tagId: 'none'
-      );
-
-      final doc = await ref.add(operator.toMap());
+      final doc = await ref.add(newOperator.toMap());
       await load();
 
       notifyListeners();
@@ -2888,10 +2893,26 @@ class OperatorService extends ChangeNotifier {
           .doc(uid)
           .collection(CollectionOperators);
 
-      await ref.doc(operator.docId).set(
-        operator.toMap(),
-        SetOptions(merge: true),              // UPDATE
-      );
+      if(operator.docId.isNotEmpty){
+
+        // Update
+        await ref.doc(operator.docId).set(
+          operator.toMap(),
+          SetOptions(merge: true),
+        );
+      }
+      else{
+
+        // Add New
+        final docref = ref.doc();
+        operator.docId = docref.id;
+
+        await docref.set(
+          operator.toMap(),
+          SetOptions(merge: true),
+        );
+      }
+
 
       await load();
       MyGlobalSnackBar.show('Saved');

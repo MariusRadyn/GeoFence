@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import 'gpsServices.dart';
 import 'homePage.dart';
 
-
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
@@ -53,7 +52,6 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

@@ -152,6 +152,10 @@ class MqttService {
       _dispatchMessage(topic, payload);
     });
   }
+  void stopMessageListener()
+  {
+    _updatesSubscription?.cancel();
+  }
   void _dispatchMessage(String topic, String message) {
     if (_topicCallbacks.containsKey(topic)) {
       for (final cb in _topicCallbacks[topic]!) {
@@ -207,26 +211,25 @@ class MqttService {
     });
   }
   void subscribe(String topic){
-    //final topic = "$MQTT_TOPIC_RESPONSE/$_clientId";
     final _topic = "$topic/$myDeviceId";
     client.subscribe(_topic, MqttQos.atLeastOnce);
     print("Subscribing: $_topic");
   }
   Future<void> disconnect() async {
-    // 1. Cancel the updates listener
+    // Cancel the updates listener
     await _updatesSubscription?.cancel();
     _updatesSubscription = null;
 
-    // 2. Clear topic callbacks
+    // Clear topic callbacks
     _topicCallbacks.clear();
     _subscribedTopics.clear();
 
-    // 3. Optional: unsubscribe from all topics
+    // Optional: unsubscribe from all topics
     for (final topic in _subscribedTopics) {
       client.unsubscribe(topic);
     }
 
-    // 4. Disconnect the client
+    // Disconnect the client
     _reconnectTimer?.cancel();
     client.disconnect();
   }

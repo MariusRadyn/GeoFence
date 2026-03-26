@@ -210,27 +210,6 @@ class _profilePageState extends State<profilePage> {
       ),
     );
   }
-  void xlogin(UserDataService? user) async {
-    FirebaseAuthService auth = FirebaseAuthService();
-
-    try {
-      //User? user = await _auth.fireAuthSignIn(context, _emailControl.text, _pwControl.text);
-
-      if (user != null && user.isLoggedIn) {
-        print('User logged in');
-
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => HomePage(),
-            ));
-      } else {
-        myMessageBox(context, user!.userdata!.errorMsg);
-      }
-    } catch (e) {
-      print('Error: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

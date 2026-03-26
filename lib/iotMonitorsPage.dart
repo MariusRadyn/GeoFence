@@ -42,16 +42,22 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     BluetoothDevice.fromId("00:11:22:33:44:55"),
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
+  late final SettingsService _settingService;
+  late final BaseStationService _baseService;
 
   @override
   void initState() {
     super.initState();
 
-    _getBluetoothDevices();
-    _setupMqttListener();
-
-    if(!mounted) return;
     _tabKeys = [];
+    _settingService = context.read<SettingsService>();
+    _baseService = context.read<BaseStationService>();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _setupMqttListener();
+      _getBluetoothDevices();
+    });
   }
 
   @override
@@ -63,9 +69,9 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
   void dispose() {
 
     if (_baseListener != null) {
-      final baseService = context.read<BaseStationService>();
-      baseService.removeListener(_baseListener!);
+      _baseService.removeListener(_baseListener!);
       _baseListener = null;
+      mqtt_Service.stopMessageListener();
     }
 
     _tabController?.dispose();
@@ -73,9 +79,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
   }
 
   Future<void> _getBluetoothDevices() async {
-    setState(() async {
       lstPairedDevices = await getBluetoothDevices();
-    });
   }
   void _saveMonitor(MonitorSettings monitor) async {
     if (_tabController == null) return;
@@ -418,47 +422,39 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
   // MQTT
   void _setupMqttListener() {
-    // Use WidgetsBinding to safely access context after first frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+    _baseListener = () async {
+      if (_baseService.isLoading) {
+        print("MQTT listener WAIT - baseService busy Loading");
+        return;
+      }
 
-      final _settingService = context.read<SettingsService>();
-      final _baseService = context.read<BaseStationService>();
+      if( !_listenerStarted){
+        final ip = _settingService.fireSettings?.connectedDeviceIp;
+        if (ip == null || ip.isEmpty) return;
 
-      _baseListener = () async {
-        if (_baseService.isLoading) {
-          print("MQTT listener WAIT - baseService busy Loading");
-          return;
-        }
+        if(!mqtt_Service.isConnected){
+          final ok = await _settingService.mqttConnect(ip);
+          if (ok) {
+            _baseService.setConnectedByIp(ip, true);
 
-        if( !_listenerStarted){
-          final ip = _settingService.fireSettings?.connectedDeviceIp;
-          if (ip == null || ip.isEmpty) return;
-
-          if(!mqtt_Service.isConnected){
-            final ok = await _settingService.mqttConnect(ip);
-            if (ok) {
-              _baseService.setConnectedByIp(ip, true);
-
-              if (!_listenerStarted && mqtt_Service.isConnected) {
-                _listenerStarted = true;
-                mqtt_Service.setupMessageListener();
-                mqtt_Service.onMessage( MQTT_TOPIC_TO_ANDROID, _onMqttMessage);
-                print("MQTT Listener Started");
-              }
-              else {
-                print("MQTT listener - already Started");
-              }
+            if (!_listenerStarted && mqtt_Service.isConnected) {
+              _listenerStarted = true;
+              mqtt_Service.setupMessageListener();
+              mqtt_Service.onMessage( MQTT_TOPIC_TO_ANDROID, _onMqttMessage);
+              print("MQTT Listener Started");
             }
-            else{
-              return;
+            else {
+              print("MQTT listener - already Started");
             }
           }
+          else{
+            return;
+          }
         }
-      };
+      }
+    };
 
-      _baseService.addListener(_baseListener!);
-    });
+    _baseService.addListener(_baseListener!);
   }
   Future<bool> _scanMonitor(String ip)async{
     final settingsService = context.read<SettingsService>();
@@ -841,7 +837,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
           ),
 
           body: monitorService.lstMonitors.isEmpty
-            ?  MyCenterMsg('No Base Monitors')
+            ?  MyCenterMsg('No iOT Monitors')
               :Container(
             color: APP_BACKGROUND_COLOR,
             child: TabBarView(
@@ -886,6 +882,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                 borderRadius: BorderRadius.circular(8),
                                 child: Stack(
                                   children: [
+
                                     // Vehicle Picture
                                     Center(
                                       child: Container(
@@ -997,6 +994,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                               padding:
                               const EdgeInsets.fromLTRB(10, 0, 10, 20),
                               child: MyDropdown(
+                                label: 'Monitor Type',
                                 value: _monitor.monitorType!,
                                 lstDropdownValues: settingMonitorTypeList,
                                 onChange: (value) {

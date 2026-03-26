@@ -120,15 +120,15 @@ class _OperatorsPageState extends State<OperatorsPage> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => OperatorEditPage(
-                      operatorData: OperatorData(name: 'New Operator')
+                      operatorData: context.read<OperatorService>().newOperator,
                   ),
                 ),
               );
             },
             child: Icon(Icons.add),
           ),
-          body: (operatorService.lstOperators.isEmpty)
-            ? MyCenterMsg('No Operators')
+          body: (operatorService.isLoading) ? MyProgressCircle():
+            (operatorService.lstOperators.isEmpty) ? MyCenterMsg('No Operators')
             : Column(
             children: [
               SizedBox(height: 10),
@@ -144,6 +144,7 @@ class _OperatorsPageState extends State<OperatorsPage> {
                             child: MyOperatorTile(
                               operator: operator,
                               onTapTile: (){
+                                _addNew();
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(

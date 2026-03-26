@@ -246,10 +246,8 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   }
 
   Future<void> _getBluetoothDevices() async {
-    setState(() async {
       lstPairedDevices = await getBluetoothDevices();
 
-      // Debug - Set Manual List
       if(Debug){
         lstPairedDevices = [
           BluetoothDevice(
@@ -260,7 +258,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
           ),
         ];
       }
-    });
   }
   void _showBluetoothDevicesPopup(BaseStationData base) {
     showDialog(
