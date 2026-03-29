@@ -1,17 +1,25 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 
 class EditProfilePicPage extends StatefulWidget {
-  final String? image;
-  final String? currentImagePath;
+  String? image;
+  final String docId;
+  final String profileType;
 
-  const EditProfilePicPage({
+  EditProfilePicPage({
+    required this.docId,
+    required this.profileType,
     this.image,
-    this.currentImagePath,
     super.key
   });
 
@@ -20,10 +28,8 @@ class EditProfilePicPage extends StatefulWidget {
 }
 
 class _EditProfilePicPageState extends State<EditProfilePicPage> {
-  final ImagePicker picker = ImagePicker();
   XFile? selectedImage;
   Uint8List? selectedImageBytes;
-
 
   @override
   void initState() {
@@ -33,50 +39,34 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
     super.initState();
   }
 
-  @override
-  /// This triggers when the user presses the app bar back button.
-  Future<bool> _onWillPop() async {
-    Navigator.pop(context, selectedImage);
-    return false; // prevents default pop, since we already popped manually
-  }
-
-  Future<void> selectImage({ImageSource? source}) async {
-    if (source == null) return;
+  Future<File?> _selectImage({ImageSource? source}) async {
+    if (source == null) return null;
     final ImagePicker imagePicker = ImagePicker();
 
     try {
-      final XFile? pick = await picker.pickImage(
+      final XFile? pick = await imagePicker.pickImage(
         source: source,
         imageQuality: 85,
       );
 
-      if (pick == null) return;
+      if (pick == null) return null;
+      final bytes = await pick.readAsBytes();
 
-      // Check if the path points to a real file first
-      final file = File(pick.path);
-      final exists = await file.exists();
+      setState(() {
+        selectedImageBytes = bytes;
+      });
 
-      if (!exists) {
-        // Fallback: read bytes (works for Google Photos, virtual files, etc.)
-        final bytes = await pick.readAsBytes();
-        setState(() {
-          // Keep both, so UI can render either way
-          selectedImage = pick;           // still keep the reference
-          selectedImageBytes = bytes;     // Uint8List? in your State
-        });
-      } else {
-        setState(() {
-          selectedImage = pick;
-          selectedImageBytes = null; // Not needed, we have a real file
-        });
-      }
+      final dir = await getTemporaryDirectory();
+      final filePath = path.join(dir.path, 'image.png');
+      final file = File(filePath);
+      await file.writeAsBytes(bytes, flush: true);
+      return file;
+
     } catch (e, st) {
       MyGlobalSnackBar.show('Image failed: $e\n$st');
     }
-
+    return null;
   }
-
-
   Widget _imagePreview() {
     // 1 — New image selected as bytes
     if (selectedImageBytes != null) {
@@ -98,43 +88,46 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
 
     // 3 — Default asset
     return Image.asset(
-      widget.currentImagePath ?? IMAGE_PROFILE,
+      widget.image ?? IMAGE_PROFILE,
       width: double.infinity,
       fit: BoxFit.fitWidth,
     );
   }
+  Future<String> _fireUploadImage({
+    required File image,
+    required String docId,
+  }) async {
+    final String name ='Image_${DateTime.now().millisecondsSinceEpoch}.png';
 
+    final storageRef = FirebaseStorage.instance
+        .ref()
+        .child(widget.profileType)
+        .child(docId)
+        .child(name);
 
-  Future<void> uploadToFirebase(XFile pick) async {
-    // final ref = FirebaseStorage.instance
-    //     .ref()
-    //     .child('profile_pics/${user.uid}.jpg');
-    //
-    // try {
-    //   // Prefer bytes
-    //   final data = await pick.readAsBytes();
-    //   final metadata = SettableMetadata(contentType: 'image/jpeg');
-    //   await ref.putData(data, metadata);
-    //
-    //   final url = await ref.getDownloadURL();
-    //   await FirebaseFirestore.instance
-    //       .collection('users')
-    //       .doc(user.uid)
-    //       .update({'photoUrl': url});
-    // } catch (e) {
-    //   // Fallback to file if needed
-    //   final file = File(pick.path);
-    //   if (await file.exists()) {
-    //     await ref.putFile(file);
-    //     final url = await ref.getDownloadURL();
-    //     await FirebaseFirestore.instance
-    //         .collection('users')
-    //         .doc(user.uid)
-    //         .update({'photoUrl': url});
-    //   } else {
-    //     rethrow;
-    //   }
-    // }
+    final metadata = SettableMetadata(
+      contentType: 'image/png',
+    );
+
+    await storageRef.putFile(image, metadata);
+
+    // ✅ Get download URL
+    final downloadUrl = await storageRef.getDownloadURL();
+    return downloadUrl;
+  }
+
+  Uint8List createThumbnail(Uint8List originalBytes) {
+    final image = img.decodeImage(originalBytes)!;
+
+    // Resize to max 200px (keeps aspect ratio)
+    final thumbnail = img.copyResize(
+      image,
+      width: 200,
+    );
+
+    return Uint8List.fromList(
+      img.encodeJpg(thumbnail, quality: 80),
+    );
   }
 
   @override
@@ -144,11 +137,20 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
         backgroundColor: APP_BAR_COLOR,
         foregroundColor: Colors.white,
         title: MyAppbarTitle('Profile Picture'),
+        leading: IconButton(
+            onPressed: (){
+              Navigator.pop(context, widget.image);
+            },
+            icon: const Icon(Icons.arrow_back),
+        )
+
       ),
       backgroundColor: APP_BACKGROUND_COLOR,
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+
+          // Camera
           FloatingActionButton(
             heroTag: "heroCamera",
               backgroundColor: COLOR_ORANGE,
@@ -168,13 +170,18 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
 
           SizedBox(height: 10),
 
+          // Select Image
           FloatingActionButton(
             heroTag: "heroSelectImage",
             backgroundColor: COLOR_ORANGE,
             foregroundColor: Colors.white,
-            onPressed: (){
-              selectImage(source:  ImageSource.gallery);
+            onPressed: () async {
+              File? file = await _selectImage(source:  ImageSource.gallery);
+              if(file!=null){
+                widget.image = await _fireUploadImage(image: file, docId: widget.docId);
+              }
             },
+
             child: Icon(Icons.image),
           ),
         ],
@@ -182,7 +189,14 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
-          child: _imagePreview(),
+          child:
+          Image(
+            image: widget.image == null
+                ? AssetImage(IMAGE_PROFILE) as ImageProvider
+                : CachedNetworkImageProvider(widget.image!),
+            fit: BoxFit.contain, // ✅ shows entire image
+          ),
+
         ),
       ),
     );

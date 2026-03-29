@@ -39,6 +39,8 @@ dependencies:
   google_maps_flutter: ^2.10.1
   geolocator: ^13.0.2
   geocoding: ^3.0.0
+  cached_network_image: ^3.3.1
+  flutter_cache_manager: ^3.3.1
   firebase_core: ^3.12.1
   firebase_auth: ^5.5.1
   cloud_firestore: ^5.6.12
@@ -60,6 +62,7 @@ dependencies:
   collection: ^1.19.0
   shared_preferences: ^2.5.3
   flutter_launcher_icons: ^0.13.1
+  image: ^4.1.7
 
   #lan_scanner: ^4.0.0
   #network_info_plus: ^6.0.0

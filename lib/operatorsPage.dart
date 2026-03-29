@@ -3,6 +3,7 @@ import 'package:geofence/operatorEditPage.dart';
 import 'package:geofence/utils.dart';
 import 'package:http/http.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class OperatorsPage extends StatefulWidget {
   const OperatorsPage({super.key});
@@ -12,7 +13,6 @@ class OperatorsPage extends StatefulWidget {
 }
 
 class _OperatorsPageState extends State<OperatorsPage> {
-  int _selectedIndex = 0;
   OperatorData? selectedOperator;
 
   @override
@@ -34,6 +34,38 @@ class _OperatorsPageState extends State<OperatorsPage> {
   void dispose() {
     super.dispose();
   }
+
+
+  Widget getAvatar(String photoUrl, {double size = 48}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size / 2),
+      child: CachedNetworkImage(
+        imageUrl: photoUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          width: size,
+          height: size,
+          color: const Color(0xFFE0E0E0),
+        ),
+        errorWidget: (context, url, error) => Container(
+          width: size,
+          height: size,
+          color: const Color(0xFFEEEEEE),
+          child: const Icon(Icons.person_outline),
+        ),
+        // Optional: cache key override if you add versioning manually
+      ),
+    );
+  }
+  String buildPhotoUrlWithVersion(String photoUrl, int? version) {
+    if (photoUrl.isEmpty) return photoUrl;
+    if (version == null) return photoUrl;
+    final separator = photoUrl.contains('?') ? '&' : '?';
+    return '$photoUrl${separator}v=$version';
+  }
+
 
   void _save(OperatorData operator) async {
 
@@ -116,6 +148,7 @@ class _OperatorsPageState extends State<OperatorsPage> {
             backgroundColor: COLOR_ORANGE,
             foregroundColor: Colors.white,
             onPressed: (){
+              _addNew();
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -143,9 +176,8 @@ class _OperatorsPageState extends State<OperatorsPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                             child: MyOperatorTile(
                               operator: operator,
-                              onTapTile: (){
-                                _addNew();
-                                Navigator.push(
+                              onTapTile: () async{
+                                final image = await Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                       builder: (context) => OperatorEditPage(
@@ -153,6 +185,9 @@ class _OperatorsPageState extends State<OperatorsPage> {
                                       ),
                                   ),
                                 );
+                                if(image != null){
+
+                                }
                               },
                               onTapDelete: (){
                                 _deleteOperatorDialog(operator);

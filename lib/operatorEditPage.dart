@@ -199,7 +199,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
 
   @override
   Widget build(BuildContext context) {
-    final hasPhoto = (widget.operatorData?.photoURL.isNotEmpty ?? false);
+    final hasPhoto = (widget.operatorData?.imageURL.isNotEmpty ?? false);
 
     return  Scaffold(
       backgroundColor: APP_BACKGROUND_COLOR,
@@ -222,16 +222,19 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                   // Profile Pic
                   GestureDetector(
                     onTap: () async {
-                      final XFile? newImage = await Navigator.push(
+                      final String? imageURL = await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => EditProfilePicPage(
-                            image: widget.operatorData!.photoURL,
+                            docId: widget.operatorData!.docId,
+                            image: widget.operatorData!.imageURL,
+                            profileType: profileTypeOperator,
                           ),
                         ),
                       );
-                      if(newImage != null){
-                        widget.operatorData!.photoURL = newImage.path;
+                      if(imageURL != null){
+                        widget.operatorData!.imageURL = imageURL;
+                        context.read<OperatorService>().save(widget.operatorData!);
                       }
                     },
                     child: CircleAvatar(
@@ -239,7 +242,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                       backgroundColor: Colors.white,
                       child: CircleAvatar(
                         backgroundImage: hasPhoto
-                            ? NetworkImage(widget.operatorData!.photoURL) as ImageProvider
+                            ? NetworkImage(widget.operatorData!.imageURL) as ImageProvider
                             : AssetImage(IMAGE_PROFILE),
                         radius: 50,
                       ),

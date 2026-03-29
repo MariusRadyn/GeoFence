@@ -230,7 +230,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
         }
       }
 
-      // Delete old image From Firebase
+      // Delete old image From Android
       final directory = await getApplicationDocumentsDirectory();
       String filename = getFileNameFromUrl(oldUrl);
       final localPath = '${directory.path}/$filename';

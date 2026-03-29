@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
@@ -12,6 +13,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -115,6 +117,11 @@ const List<String> settingOperatorTypeList = [
   opAccessOperator,
   opAccessSupervisor
 ];
+
+// Profile Types
+const String profileTypeOperator = "operator";
+const String profileTypeUser = "user";
+
 
 // Operator Types
 const String opAccessOperator = "Operator";
@@ -1296,10 +1303,12 @@ class MyOperatorTile extends StatelessWidget {
                   radius: 30,
                   backgroundColor: Colors.white,
                   child: CircleAvatar(
-                    backgroundImage: (operator.photoURL.isEmpty ?? true)
-                        ? AssetImage(IMAGE_PROFILE)
-                        : NetworkImage(operator.photoURL) as ImageProvider,
-                    radius: 50,
+                    radius: 28,
+                    backgroundImage: operator.imageURL.isEmpty
+                        ? AssetImage(IMAGE_PROFILE) as ImageProvider
+                        : CachedNetworkImageProvider(
+                      operator.imageURL,
+                    ),
                   ),
                 ),
               ),
@@ -1864,7 +1873,7 @@ Future<bool> _isWifiConnected(String ip, int port) async {
 }
 Future<bool> _mqttConnect(String ip) async {
   if (!await _isWifiConnected(ip, 1883)) {
-    MyGlobalSnackBar.show("No Wifi Connection");
+    //MyGlobalSnackBar.show("No Wifi Connection");
     return false;
   }
 
@@ -2750,7 +2759,8 @@ class OperatorData{
   String surname = "";
   String accessLevel = "";
   String tagId = "";
-  String photoURL = "";
+  String imageURL = "";
+  String thumbURL = "";
 
   // Local-only (NOT saved)
   String docId;
@@ -2760,7 +2770,8 @@ class OperatorData{
     this.surname = "",
     this.accessLevel = "",
     this.tagId = "",
-    this.photoURL = "",
+    this.imageURL = "",
+    this.thumbURL = "",
 
     // Local
     this.docId = ""
@@ -2773,7 +2784,8 @@ class OperatorData{
       surname: map['surname'] ?? "",
       accessLevel: map['accessLevel'] ?? "",
       tagId: map['tagId'] ?? "",
-      photoURL: map['photoURL'] ?? "",
+      imageURL: map['photoURL'] ?? "",
+      thumbURL: map['thumbURL'] ?? "",
     );
   }
   Map<String, dynamic> toMap(){
@@ -2783,7 +2795,8 @@ class OperatorData{
       'surname': surname,
       'accessLevel': accessLevel,
       'tagId': tagId,
-      'photoURL': photoURL,
+      'photoURL': imageURL,
+      'thumbURL': thumbURL,
     };
   }
   OperatorData copyWith({
@@ -2800,7 +2813,7 @@ class OperatorData{
       surname: surname ?? this.surname,
       accessLevel: accessLevel ?? this.accessLevel,
       tagId: tagId ?? this.tagId,
-      photoURL: photoURL ?? this.photoURL,
+      imageURL: photoURL ?? this.imageURL,
     );
   }
 }
