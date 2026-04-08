@@ -632,10 +632,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                     final bluetoothName = baseSelected.bluetoothName;
 
                                     if(bluetoothName == ""){
-                                      myMessageBox(
-                                          context,
-                                          "No Identification Selected"
-                                      );
+                                      MyGlobalMessage.show("Warning", "No Identification Selected");
                                       return;
                                     }
 
@@ -679,7 +676,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                         final ip = baseSelected.ipAddress ;
 
                                         if(ip == ""){
-                                          myMessageBox(context, "No IP Address");
+                                          MyGlobalMessage.show("Warning", "No IP Address");
                                           return;
                                         }
 
@@ -700,7 +697,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                           } else {
 
                                             // Failed
-                                            myMessageBox(context, "Wifi Connection FAILED");
+                                            MyGlobalMessage.show("Warning", "Wifi connection FAILED");
                                             setState(() {
                                               baseSelected.isConnected = false;
                                             });

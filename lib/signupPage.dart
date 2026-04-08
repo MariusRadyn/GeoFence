@@ -125,15 +125,15 @@ class _signupPageState extends State<signupPage> {
     String email = _emailController.text;
     String password = _pwController.text;
 
-    User? user = await _auth.fireAuthCreateUserWithEmail(context, email, password);
+    AuthResult? result = await _auth.fireAuthCreateUserWithEmail(context, email, password);
 
-    if (user != null) {
-      userData?.userID = user.uid;
+    if (result.user != null) {
+      userData?.userID = result.user!.uid;
       userData?.displayName = username;
 
       printMsg('User created successfully');
 
-      fireDbCreateUser(user);
+      fireDbCreateUser(result.user!);
 
       Navigator.push(
           context,

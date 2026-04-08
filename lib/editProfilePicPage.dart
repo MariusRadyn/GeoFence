@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:geofence/firebase.dart';
 import 'package:geofence/utils.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
@@ -12,14 +13,16 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 class EditProfilePicPage extends StatefulWidget {
-  String? image;
+  String? imageURL;
+  String? imageFilename;
   final String docId;
   final String profileType;
 
   EditProfilePicPage({
     required this.docId,
     required this.profileType,
-    this.image,
+    this.imageURL,
+    this.imageFilename,
     super.key
   });
 
@@ -28,13 +31,14 @@ class EditProfilePicPage extends StatefulWidget {
 }
 
 class _EditProfilePicPageState extends State<EditProfilePicPage> {
-  XFile? selectedImage;
-  Uint8List? selectedImageBytes;
+  String? oldImgFilename;
+  bool isLoading = false;
+  ProfilePicData profilePicData = ProfilePicData(update: false);
 
   @override
   void initState() {
-    if(widget.image != null){
-      selectedImage = XFile(widget.image!);
+    if(widget.imageFilename != null){
+      oldImgFilename = widget.imageFilename!;
     }
     super.initState();
   }
@@ -46,58 +50,44 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
     try {
       final XFile? pick = await imagePicker.pickImage(
         source: source,
-        imageQuality: 85,
+        imageQuality: 20,
       );
 
       if (pick == null) return null;
-      final bytes = await pick.readAsBytes();
+      final thumb = await pick.readAsBytes();
 
       setState(() {
-        selectedImageBytes = bytes;
+
       });
 
       final dir = await getTemporaryDirectory();
-      final filePath = path.join(dir.path, 'image.png');
+      final filePath = path.join(dir.path, 'image.jpg');
       final file = File(filePath);
-      await file.writeAsBytes(bytes, flush: true);
+      await file.writeAsBytes(thumb, flush: true);
       return file;
 
     } catch (e, st) {
-      MyGlobalSnackBar.show('Image failed: $e\n$st');
+      MyGlobalSnackBar.show('Image Error: $e\n$st');
     }
     return null;
   }
-  Widget _imagePreview() {
-    // 1 — New image selected as bytes
-    if (selectedImageBytes != null) {
-      return Image.memory(
-        selectedImageBytes!,
-        width: double.infinity,
-        fit: BoxFit.fitWidth,
-      );
+  Future<void> _fireDeleteImage({required String filename,required String docId}) async {
+    try{
+      String path = "${widget.profileType}/$docId/$filename";
+      await fireStoreDeleteFile(path);
     }
-
-    // 2 — New image selected as file
-    if (selectedImage != null && selectedImage!.path.isNotEmpty) {
-      return Image.file(
-        File(selectedImage!.path),
-        width: double.infinity,
-        fit: BoxFit.fitWidth,
-      );
+    catch (e, st) {
+      MyGlobalSnackBar.show('Image Error: $e\n$st');
     }
-
-    // 3 — Default asset
-    return Image.asset(
-      widget.image ?? IMAGE_PROFILE,
-      width: double.infinity,
-      fit: BoxFit.fitWidth,
-    );
   }
-  Future<String> _fireUploadImage({
-    required File image,
-    required String docId,
-  }) async {
-    final String name ='Image_${DateTime.now().millisecondsSinceEpoch}.png';
+  Future<String> _fireUploadImage({required File image,required String docId}) async {
+    setState(() {
+      isLoading = true;
+    });
+
+    final String name ='Image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    profilePicData.imageFilename = name;
+    profilePicData.update = true;
 
     final storageRef = FirebaseStorage.instance
         .ref()
@@ -106,16 +96,19 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
         .child(name);
 
     final metadata = SettableMetadata(
-      contentType: 'image/png',
+      contentType: 'image/jpg',
     );
 
     await storageRef.putFile(image, metadata);
 
     // ✅ Get download URL
     final downloadUrl = await storageRef.getDownloadURL();
+
+    setState(() {
+      isLoading = false;
+    });
     return downloadUrl;
   }
-
   Uint8List createThumbnail(Uint8List originalBytes) {
     final image = img.decodeImage(originalBytes)!;
 
@@ -129,6 +122,18 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
       img.encodeJpg(thumbnail, quality: 80),
     );
   }
+  Future<void> _updateImage(File file) async {
+      if(oldImgFilename!= null && oldImgFilename!.isNotEmpty) {
+        await _fireDeleteImage(filename: oldImgFilename!, docId: widget.docId);
+      }
+      final imgURL = await _fireUploadImage(image: file, docId: widget.docId);
+
+      setState(()  {
+        widget.imageURL = imgURL;
+        oldImgFilename = profilePicData.imageFilename;
+        profilePicData.imageURL = imgURL;
+      });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -138,8 +143,8 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
         foregroundColor: Colors.white,
         title: MyAppbarTitle('Profile Picture'),
         leading: IconButton(
-            onPressed: (){
-              Navigator.pop(context, widget.image);
+            onPressed: () {
+              Navigator.pop<ProfilePicData>(context, profilePicData);
             },
             icon: const Icon(Icons.arrow_back),
         )
@@ -155,17 +160,14 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
             heroTag: "heroCamera",
               backgroundColor: COLOR_ORANGE,
               foregroundColor: Colors.white,
-              onPressed: (){
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (context) => OperatorEditPage(
-                //       operatorData: context.read<OperatorService>().newOperator,
-                //     ),
-                //   ),
-                //);
-              },
-              child: Icon(Icons.camera_alt_outlined),
+            onPressed: () async {
+              File? file = await _selectImage(source:  ImageSource.camera);
+              if(file!=null){
+               await _updateImage(file);
+              }
+            },
+
+            child: Icon(Icons.camera_alt_outlined),
           ),
 
           SizedBox(height: 10),
@@ -178,7 +180,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
             onPressed: () async {
               File? file = await _selectImage(source:  ImageSource.gallery);
               if(file!=null){
-                widget.image = await _fireUploadImage(image: file, docId: widget.docId);
+                await _updateImage(file);
               }
             },
 
@@ -186,14 +188,14 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
           ),
         ],
       ),
-      body: Center(
+      body: isLoading ?  MyProgressCircle(): Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child:
           Image(
-            image: widget.image == null
-                ? AssetImage(IMAGE_PROFILE) as ImageProvider
-                : CachedNetworkImageProvider(widget.image!),
+            image: widget.imageURL != null && widget.imageURL!.isNotEmpty
+                ? CachedNetworkImageProvider(widget.imageURL!) as ImageProvider
+                : AssetImage(IMAGE_PROFILE) as ImageProvider,
             fit: BoxFit.contain, // ✅ shows entire image
           ),
 

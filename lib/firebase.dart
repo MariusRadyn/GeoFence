@@ -239,7 +239,7 @@ Future<void> fireDbCreateUser(User user) async {
 class FirebaseAuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  Future<User?> fireAuthCreateUserWithEmail(BuildContext context, String email, String password) async {
+  Future<AuthResult> fireAuthCreateUserWithEmail(BuildContext context, String email, String password) async {
     try {
       // Create User
       UserCredential credential = await _auth.createUserWithEmailAndPassword(
@@ -253,43 +253,20 @@ class FirebaseAuthService {
         await user.sendEmailVerification();
       }
 
-      return credential.user;
+      return AuthResult(user: credential.user); credential.user;
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(exception: e as Exception, code: e.code);
     } catch (e) {
-      if (e is FirebaseAuthException) {
-        MyAlertDialog(context, "Login Error", e.toString());
-      }else{
-        MyAlertDialog(context, "Login Error", e.toString());
-      }
-
-      print("Firebase Auth Error: $e");
-      return null;
+      return AuthResult(exception: e as Exception);
     }
   }
-  Future<User?> fireAuthSignInWithEmail(BuildContext context, String email, String password) async {
-    try {
-      UserCredential credential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      return credential.user;
-    }
-    catch (e) {
-      if (e is FirebaseAuthException) {
-        MyAlertDialog(context, "Login Error", e.toString());
-      }else{
-        MyAlertDialog(context, "Login Error", e.toString());
-      }
-
-      print("Firebase Auth Error: $e");
-      return null;
-    }
-  }
-  Future<void> fireAuthSignOut() async {
+  Future<AuthResult> fireAuthSignOut() async {
     try {
       await _auth.signOut();
+      return AuthResult(user: null);
     } catch (e) {
-      print("Firebase Auth Error: $e");
+      debugPrint("Firebase Error: ${e}");
+      return AuthResult(exception: e as Exception);
     }
   }
   Future<bool> fireAuthResetPassword(BuildContext context, String email) async {
@@ -297,8 +274,7 @@ class FirebaseAuthService {
       await _auth.sendPasswordResetEmail(email: email);
       return true;
     } on FirebaseAuthException catch (e) {
-      print("Firebase Auth Error: ${e.code}");
-      MyAlertDialog(context, "Reset Password Error", e.code);
+      debugPrint("Firebase Error: ${e.code}");
       return false;
     }
   }
@@ -316,7 +292,7 @@ class FirebaseAuthService {
       _auth.currentUser!.updateDisplayName(username);
     } catch (e) {
       printMsg("Firebase update username Error: $e");
-      GlobalMsg.show("Error","Firebase update username: $e");
+      MyGlobalMessage.show("Error","Firebase update username: $e");
     }
   }
   void updatePhotoURL(String url) {
@@ -324,37 +300,78 @@ class FirebaseAuthService {
       _auth.currentUser!.updatePhotoURL(url);
     } catch (e) {
       printMsg("Firebase update URL Error: $e");
-      GlobalMsg.show("Error","Firebase update URL: $e");
+      MyGlobalMessage.show("Error","Firebase update URL: $e");
     }
   }
 
-
-  Future<UserCredential> signInWithGoogle() async {
-    if (kIsWeb) {
-      // Web-specific authentication using popup
-      GoogleAuthProvider googleProvider = GoogleAuthProvider();
-      googleProvider.addScope('https://www.googleapis.com/auth/contacts.readonly');
-      googleProvider.setCustomParameters({'login_hint': 'user@example.com'});
-
-      return await FirebaseAuth.instance.signInWithPopup(googleProvider);
-    } else {
-      // Mobile authentication (Android & iOS)
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) {
-        throw Exception("Google sign-in aborted");
-      }
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+  Future<AuthResult> fireAuthSignInWithEmail(BuildContext context, String email, String password) async {
+    try {
+      UserCredential credential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
+      return AuthResult(user: credential.user);
+    }
+    on FirebaseAuthException catch (e) {
+      return AuthResult(exception: e as Exception, code: e.code);
+    } catch (e) {
+      return AuthResult(exception: e as Exception);
+    }
+  }
+  Future<AuthResult> signInWithGoogle() async {
+    try{
+      if (kIsWeb) {
+        // Web-specific authentication using popup
+        GoogleAuthProvider googleProvider = GoogleAuthProvider();
+        googleProvider.addScope('https://www.googleapis.com/auth/contacts.readonly');
+        googleProvider.setCustomParameters({'login_hint': 'user@example.com'});
+        UserCredential credential = await FirebaseAuth.instance.signInWithPopup(googleProvider);
+        return AuthResult(user: credential.user);
+      } else {
+        // Mobile authentication (Android & iOS)
+        final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+        if (googleUser == null) {
+          throw Exception("Google sign-in aborted");
+        }
 
-      return await FirebaseAuth.instance.signInWithCredential(credential);
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+        final AuthCredential credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        final UserCredential credential2 = await FirebaseAuth.instance.signInWithCredential(credential);
+        return AuthResult(user: credential2.user);
+      }
+    }
+    on FirebaseAuthException catch (e) {
+      return AuthResult(exception: e as Exception, code: e.code);
+    } catch (e) {
+      return AuthResult(exception: e as Exception);
     }
   }
 }
+
+// ----------------------------------------------------------------------------
+// Class
+// ----------------------------------------------------------------------------
+  class AuthResult {
+  final User? user;
+  final Exception? exception;
+  final String? code;
+
+
+  AuthResult({
+    this.user,
+    this.exception,
+    this.code,
+
+  });
+
+  bool get isSuccess => user != null  && exception == null;
+}
+
 
 
 

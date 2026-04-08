@@ -65,13 +65,6 @@ class _OperatorsPageState extends State<OperatorsPage> {
     final separator = photoUrl.contains('?') ? '&' : '?';
     return '$photoUrl${separator}v=$version';
   }
-
-
-  void _save(OperatorData operator) async {
-
-    OperatorService operatorService = context.read<OperatorService>();
-    await operatorService.save(operator);
-  }
   void _addNew() async {
     if (!mounted) return;
 
@@ -118,6 +111,7 @@ class _OperatorsPageState extends State<OperatorsPage> {
 
                   onPressed: () async {
                     _delete(operator);
+
                     Navigator.pop(context);
                   }
               ),
@@ -129,9 +123,17 @@ class _OperatorsPageState extends State<OperatorsPage> {
   void _delete(OperatorData operator) async {
     if (!mounted) return;
 
-    OperatorService operatorService = context.read<OperatorService>();
-    final docId = await operatorService.delete(operator);
+    try{
+      OperatorService operatorService = context.read<OperatorService>();
+      await operatorService.delete(operator);
+
+    }
+    catch (e, st) {
+      MyGlobalSnackBar.show('Image Error: $e\n$st');
+    }
+
   }
+
 
   @override
   Widget build(BuildContext context) {

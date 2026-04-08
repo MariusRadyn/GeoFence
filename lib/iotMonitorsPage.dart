@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -16,6 +17,8 @@ import 'package:geofence/utils.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+
+import 'editProfilePicPage.dart';
 
 class IotMonitorsPage extends StatefulWidget {
   const IotMonitorsPage({super.key});
@@ -191,89 +194,89 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             .get()
     );
   }
-  Future<void> _pickAndUploadImage({ImageSource? source}) async {
-    if (source == null) return;
-    final monitorService = context.read<MonitorSettingsService>();
-
-    try {
-      if (_tabController == null) return;
-      final monitor = monitorService.lstMonitors[_tabController!.index];
-
-      final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-      if (uid.isEmpty) return;
-
-      // Pick File
-      final XFile? picked = await _imagePicker.pickImage(
-        source: source,
-        imageQuality: 85,
-      );
-      if (picked == null) return;
-
-      final String path =
-          '$CollectionUsers/$uid/$CollectionMonitors/${monitor.monDocId}_${DateTime.now().millisecondsSinceEpoch}.png';
-      final Reference ref = FirebaseStorage.instance.ref().child(path);
-      final File file = File(picked.path);
-
-      // Show loading indicator
-      setState(() {
-        _isUploading = true;
-        _uploadProgress = 0.0;
-      });
-
-      // Delete old image From Firebase
-      final oldUrl = monitor.image;
-      if (oldUrl.toString().isNotEmpty) {
-        try {
-          await FirebaseStorage.instance.refFromURL(oldUrl).delete();
-        } catch (e) {
-          // Ignore if file doesn't exist
-        }
-      }
-
-      // Delete old image From Android
-      final directory = await getApplicationDocumentsDirectory();
-      String filename = getFileNameFromUrl(oldUrl);
-      final localPath = '${directory.path}/$filename';
-      final localFile = File(localPath);
-      if (await localFile.exists()) {
-        localFile.delete();
-      }
-
-      // Upload with progress listener
-      final uploadTask =
-          ref.putFile(file, SettableMetadata(contentType: 'image/png'));
-      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        final progress = snapshot.bytesTransferred / snapshot.totalBytes;
-        setState(() => _uploadProgress = progress);
-      });
-
-      // Wait until upload completes
-      await uploadTask;
-      final String downloadUrl = await ref.getDownloadURL();
-
-      // Update Firestore with the new image URL
-      await FirebaseFirestore.instance
-          .collection(CollectionUsers)
-          .doc(uid)
-          .collection(CollectionMonitors)
-          .doc(monitor.monDocId)
-          .update({FIRE_MON_IMAGE: downloadUrl});
-
-      await monitorService.load();
-
-      MyGlobalSnackBar.show('Image uploaded successfully!');
-    } on FirebaseException catch (e) {
-      MyGlobalSnackBar.show('Firebase error: ${e.message}');
-    } catch (e) {
-      MyGlobalSnackBar.show('Image upload failed: $e');
-    } finally {
-      // Hide loading indicator
-      setState(() {
-        _isUploading = false;
-        _uploadProgress = 0.0;
-      });
-    }
-  }
+  // Future<void> _pickAndUploadImage({ImageSource? source}) async {
+  //   if (source == null) return;
+  //   final monitorService = context.read<MonitorSettingsService>();
+  //
+  //   try {
+  //     if (_tabController == null) return;
+  //     final monitor = monitorService.lstMonitors[_tabController!.index];
+  //
+  //     final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+  //     if (uid.isEmpty) return;
+  //
+  //     // Pick File
+  //     final XFile? picked = await _imagePicker.pickImage(
+  //       source: source,
+  //       imageQuality: 85,
+  //     );
+  //     if (picked == null) return;
+  //
+  //     final String path =
+  //         '$CollectionUsers/$uid/$CollectionMonitors/${monitor.monDocId}_${DateTime.now().millisecondsSinceEpoch}.png';
+  //     final Reference ref = FirebaseStorage.instance.ref().child(path);
+  //     final File file = File(picked.path);
+  //
+  //     // Show loading indicator
+  //     setState(() {
+  //       _isUploading = true;
+  //       _uploadProgress = 0.0;
+  //     });
+  //
+  //     // Delete old image From Firebase
+  //     final oldUrl = monitor.imageURL;
+  //     if (oldUrl.toString().isNotEmpty) {
+  //       try {
+  //         await FirebaseStorage.instance.refFromURL(oldUrl).delete();
+  //       } catch (e) {
+  //         // Ignore if file doesn't exist
+  //       }
+  //     }
+  //
+  //     // Delete old image From Android
+  //     final directory = await getApplicationDocumentsDirectory();
+  //     String filename = getFileNameFromUrl(oldUrl);
+  //     final localPath = '${directory.path}/$filename';
+  //     final localFile = File(localPath);
+  //     if (await localFile.exists()) {
+  //       localFile.delete();
+  //     }
+  //
+  //     // Upload with progress listener
+  //     final uploadTask =
+  //         ref.putFile(file, SettableMetadata(contentType: 'image/png'));
+  //     uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+  //       final progress = snapshot.bytesTransferred / snapshot.totalBytes;
+  //       setState(() => _uploadProgress = progress);
+  //     });
+  //
+  //     // Wait until upload completes
+  //     await uploadTask;
+  //     final String downloadUrl = await ref.getDownloadURL();
+  //
+  //     // Update Firestore with the new image URL
+  //     await FirebaseFirestore.instance
+  //         .collection(CollectionUsers)
+  //         .doc(uid)
+  //         .collection(CollectionMonitors)
+  //         .doc(monitor.monDocId)
+  //         .update({FIRE_MON_IMAGE: downloadUrl});
+  //
+  //     await monitorService.load();
+  //
+  //     MyGlobalSnackBar.show('Image uploaded successfully!');
+  //   } on FirebaseException catch (e) {
+  //     MyGlobalSnackBar.show('Firebase error: ${e.message}');
+  //   } catch (e) {
+  //     MyGlobalSnackBar.show('Image upload failed: $e');
+  //   } finally {
+  //     // Hide loading indicator
+  //     setState(() {
+  //       _isUploading = false;
+  //       _uploadProgress = 0.0;
+  //     });
+  //   }
+  // }
   Future<File?> saveNetworkImageLocally( BuildContext context, String vehicleId, String downloadUrl) async {
     try {
       final networkImage = NetworkImage(downloadUrl);
@@ -327,28 +330,27 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       return '';
     }
   }
-  Future<ImageProvider<Object>> _getMonitorImageProvider( BuildContext context, String vehicleId, MonitorSettings? monitor) async {
-    if (_isUploading) return AssetImage(IMAGE_NO_IMAGE);
-    String downloadUrl = monitor?.image ?? '';
-    String monType = monitor?.monitorType ?? '';
+  ImageProvider<Object> _getMonitorImage(MonitorSettings monitor) {
+    //if (_isUploading) return AssetImage(IMAGE_NO_IMAGE);
+    //String? downloadUrl = monitor?.imageURL ?? '';
+    //String monType = monitor?.monitorType ?? '';
 
-    final directory = await getApplicationDocumentsDirectory();
-    String filename = getFileNameFromUrl(downloadUrl);
-    final localPath = '${directory.path}/$filename';
-    final localFile = File(localPath);
-    try {
+    // final directory = await getApplicationDocumentsDirectory();
+    // String filename = getFileNameFromUrl(downloadUrl);
+    // final localPath = '${directory.path}/$filename';
+    // final localFile = File(localPath);
+    //try {
 
-      // Try local image first
-      if (await localFile.exists()) {
-        //MyAlertDialog(context, "Load from Path", localPath);
-        return FileImage(localFile);
-      }
+      // // Try local image first
+      // if (await localFile.exists()) {
+      //   //MyAlertDialog(context, "Load from Path", localPath);
+      //   return FileImage(localFile);
+      // }
 
       // If no local file, download from Firebase
-      if (downloadUrl == null || downloadUrl.isEmpty) {
-
+      if (monitor.imageURL == null || monitor.imageURL!.isEmpty ) {
         // Finally - Load Default
-        switch (monType) {
+        switch (monitor.monitorType) {
           case MonTypeVehicle:
             return AssetImage(IMAGE_VEHICLE);
 
@@ -365,14 +367,17 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             return AssetImage(IMAGE_NO_IMAGE);
         }
       }
-      // Load from FireStore
-      await saveNetworkImageLocally(context, vehicleId, downloadUrl);
-      return NetworkImage(downloadUrl);
+      else {
+        return AssetImage(IMAGE_NO_IMAGE);
+      }
 
-    } catch (e) {
-      debugPrint('Download error: $e');
-      return AssetImage(IMAGE_NO_IMAGE);
-    }
+      // Load from FireStore
+      //await saveNetworkImageLocally(context, vehicleId, downloadUrl);
+      //return NetworkImage(downloadUrl);
+
+    // } catch (e) {
+    //   return AssetImage(IMAGE_NO_IMAGE);
+    // }
   }
   void _updateTabs(int length) {
     if (length == 0) return;
@@ -461,7 +466,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     final monitorService = context.read<MonitorSettingsService>();
 
     if(settingsService.isBaseStationConnected == false){
-      MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
+      MyGlobalMessage.show("Connection", "Please connect to a Base Station first");
       return false;
     }
 
@@ -477,7 +482,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
   Future<bool> _connectIot(String ip, MonitorSettings monitor)async{
     final settingService = context.read<SettingsService>();
     if(settingService.isBaseStationConnected == false){
-      MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
+      MyGlobalMessage.show("Connection", "Please connect to a Base Station first");
       return false;
     }
 
@@ -494,7 +499,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
   Future<bool> _disconnectIot(MonitorSettings monitor)async{
     final settingService = context.read<SettingsService>();
     if(settingService.isBaseStationConnected == false){
-      MyAlertDialog(context, "Connection", "Please connect to a Base Station first");
+      MyGlobalMessage.show("Connection", "Please connect to a Base Station first");
       return false;
     }
 
@@ -545,7 +550,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       } if(monitorOld != null && monitorOld.monitorId == fromId){
 
         // Nothing changed
-        MyAlertDialog(context, "Device Found", fromId);
+        MyGlobalMessage.show("Device found", fromId);
       } else {
 
         // New Monitor
@@ -553,7 +558,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
           monitor.monitorId = fromId;
         });
         _saveMonitor(monitor);
-        MyAlertDialog(context, "Device Found", fromId);
+        MyGlobalMessage.show("Device Found", fromId);
       }
 
       final payload =  {
@@ -697,10 +702,10 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             // Scan Monitor ID
             onTapScan: (){
               if(settingService.fireSettings!.connectedDeviceIp.isEmpty){
-                MyAlertDialog(context, "Base Station", "No IP Address found. \nGoto Base Station page then click 'Request IP Adr'");
+                MyGlobalMessage.show("Base Station", "No IP address found. \nGoto Base Station page then click 'Request IP Adr'");
               }
               else if(settingService.isBaseStationConnected == false){
-                MyAlertDialog(context, "Base Station", "You are not connected to a Base Station.\nGoto Base Station page then click 'Request IP Adr'\nThen click 'Connect'");
+                MyGlobalMessage.show("Base Station", "You are not connected to a Base Station.\nGoto Base Station page then click 'Request IP Adr'\nThen click 'Connect'");
                 return false;
               }
               else{
@@ -713,11 +718,11 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             // Connect Monitor
             onTapConnect: (){
               if(settingService.fireSettings!.connectedDeviceIp.isEmpty){
-                MyAlertDialog(context, "Connection", "No IP Address found. Select Base Station, then connect");
+                MyGlobalMessage.show("Connection", "No IP Address found. Select Base Station, then connect");
               }
               else{
                 if(monitor.monitorId.isEmpty){
-                  MyAlertDialog(context, "Monitor ID", "No monitor ID found. Please press scan button");
+                  MyGlobalMessage.show("Monitor Not Found", "No monitor ID found. Please press scan button");
                 }else {
                   if(monitor.isConnectedToIot){
                     monitor.isConnectedToIot = false;
@@ -843,23 +848,23 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             child: TabBarView(
               controller: _tabController,
               children: List.generate(monitorService.lstMonitors.length, (index){
-                final _docId = monitorService.lstMonitors[index].monDocId;
-                final _monitor = monitorService.lstMonitors[index];
+                //final _docId = monitorService.lstMonitors[index].monDocId;
+                final monitor = monitorService.lstMonitors[index];
 
-                return FutureBuilder<ImageProvider<Object>>(
-                    future: _getMonitorImageProvider(context, _docId, _monitor),
-                    builder: (context, imgSnapshot) {
-
-                      if (imgSnapshot.connectionState == ConnectionState.waiting) {
-                        return MyProgressCircle();
-                      }
-
-                      if (imgSnapshot.hasError) {
-                        return const Center(child: Icon(Icons.error));
-                      }
-
-                      final ImageProvider<Object> imageProvider =
-                          imgSnapshot.data ?? const AssetImage(IMAGE_NO_IMAGE);
+                // return FutureBuilder<ImageProvider<Object>>(
+                //     future: _getMonitorImageProvider(context, _docId, monitor),
+                //     builder: (context, imgSnapshot) {
+                //
+                //       if (imgSnapshot.connectionState == ConnectionState.waiting) {
+                //         return MyProgressCircle();
+                //       }
+                //
+                //       if (imgSnapshot.hasError) {
+                //         return const Center(child: Icon(Icons.error));
+                //       }
+                //
+                //       final ImageProvider<Object> imageProvider =
+                           //imgSnapshot.data ?? const AssetImage(IMAGE_NO_IMAGE);
 
                       return ListView(
                         controller: _scrollControllers[index],
@@ -883,7 +888,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                 child: Stack(
                                   children: [
 
-                                    // Vehicle Picture
+                                    // iOT Monitor Picture
                                     Center(
                                       child: Container(
                                         padding: const EdgeInsets.all(4), // border thickness
@@ -892,79 +897,39 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                           Colors.blue, // border color
                                           shape: BoxShape.circle,
                                         ),
-                                        child: _isUploading
-
-                                        // Uploading
-                                            ? CircleAvatar(
-                                          radius: 70,
-                                          backgroundColor:
-                                          Colors.grey.shade200,
-                                          child: Center(
-                                            child: Text('Uploading... ${(100 * _uploadProgress).toStringAsFixed(0)}%'),
+                                        child:GestureDetector(
+                                          onTap: () async {
+                                            final (ProfilePicData? profilePic) = await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => EditProfilePicPage(
+                                                  docId: monitor.monDocId,
+                                                  imageURL: monitor.imageURL,
+                                                  imageFilename: monitor.imageFilename,
+                                                  profileType: profileTypeOperator,
+                                                ),
+                                              ),
+                                            );
+                                            if(profilePic?.imageURL != null && profilePic!.update){
+                                              setState(() {
+                                                monitor.imageURL = profilePic.imageURL;
+                                                monitor.imageFilename = profilePic.imageFilename;
+                                              });
+                                              context.read<MonitorSettingsService>().save(monitor);
+                                            }
+                                          },
+                                          child: CircleAvatar(
+                                            radius: 55,
+                                            backgroundColor: Colors.white,
+                                            child: CircleAvatar(
+                                              backgroundImage:  monitor.imageURL != null &&  monitor.imageURL!.isNotEmpty
+                                                  ? CachedNetworkImageProvider(monitor.imageURL!) as ImageProvider
+                                                  : _getMonitorImage(monitor),
+                                              radius: 50,
+                                            ),
                                           ),
-                                        )
-
-                                        // Load Picture
-                                            : CircleAvatar(
-                                          radius: 70,
-                                          backgroundColor:   Colors.grey.shade200,
-                                          backgroundImage:   imageProvider,
                                         ),
-                                      ),
-                                    ),
-
-                                    // Floating circular buttons on top-right
-                                    Positioned(
-                                      top: 1,
-                                      bottom: 1,
-                                      right: 8,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                        CrossAxisAlignment.end,
-                                        children: [
-
-                                          // Load Image
-                                          MyCircleIconButton(
-                                            icon: Icons.photo_camera,
-                                            onPressed: () =>
-                                                _pickAndUploadImage(
-                                                    source:
-                                                    ImageSource.camera),
-                                          ),
-
-                                          const SizedBox(height: 5),
-
-                                          // Take Photo
-                                          MyCircleIconButton(
-                                            icon: Icons.photo_library,
-                                            onPressed: () =>
-                                                _pickAndUploadImage(
-                                                    source: ImageSource.gallery),
-                                          ),
-
-                                          const SizedBox(height: 5),
-
-                                          // Delete Pic
-                                          MyCircleIconButton(
-                                            icon: Icons.delete,
-                                            onPressed: () => {
-                                              if(_monitor.image != '' ){
-                                                MyQuestionAlertBox(
-                                                    context: context,
-                                                    header: "Delete",
-                                                    message: 'Delete Current Picture?',
-                                                    onPress:(){
-                                                      setState(() {
-                                                        _monitor.image = '';
-                                                        _saveMonitor(_monitor);
-                                                      });
-                                                    }
-                                                )
-                                              }
-                                            },
-                                          ),
-                                        ],
-                                      ),
+                                      )
                                     ),
                                   ],
                                 ),
@@ -995,12 +960,12 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                               const EdgeInsets.fromLTRB(10, 0, 10, 20),
                               child: MyDropdown(
                                 label: 'Monitor Type',
-                                value: _monitor.monitorType!,
+                                value: monitor.monitorType!,
                                 lstDropdownValues: settingMonitorTypeList,
                                 onChange: (value) {
                                   setState(() {
-                                    _monitor.monitorType = value;
-                                    _saveMonitor(_monitor);
+                                    monitor.monitorType = value;
+                                    _saveMonitor(monitor);
                                   });
                                 },
                               )
@@ -1009,11 +974,11 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                           //--------------------------------------------------------------
                           // Monitor Types
                           //--------------------------------------------------------------
-                          if(_tabKeys.isNotEmpty) _buildBody(_monitor,_tabKeys[index])
+                          if(_tabKeys.isNotEmpty) _buildBody(monitor,_tabKeys[index])
                         ],
                       );
-                    });
-              },
+
+                },
               ).toList(),
             ),
           ),

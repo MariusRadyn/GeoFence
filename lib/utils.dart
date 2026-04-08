@@ -163,7 +163,8 @@ const FIRE_MON_FUEL_CONSUMPTION = 'fuelConsumption';
 const FIRE_MON_REGISTRATION = 'registrationNumber';
 const FIRE_MON_BT_NAME = 'bluetoothDeviceName';
 const FIRE_MON_BT_MAC = 'bluetoothMAC';
-const FIRE_MON_IMAGE = 'picture';
+const FIRE_MON_IMAGE = 'imageURL';
+const FIRE_MON_IMAGE_FILENAME = 'imageFilename';
 const FIRE_MON_TYPE = 'type';
 const FIRE_MON_ID = 'monitorId';
 const FIRE_MON_TICKS_PER_M = 'ticksPerM';
@@ -217,9 +218,7 @@ const MQTT_JSON_IOT_NAME = "iotName";
 const MQTT_JSON_MON_DOC_ID = "monDocId";
 const MQTT_JSON_USER_DOC_ID = "userDocId";
 
-//---------------------------------------------------
-// Bluetooth
-//---------------------------------------------------
+//--Bluetooth-------------------------------------------------------------------
 const BT_SERVICE_UUID = 'f3a1c2d0-6b4e-4e9a-9f3e-8d2f1c9b7a1e';
 const BT_CHAR_UUID = 'c7b2e3f4-1a5d-4c3b-8e2f-9a6b1d8c2f3a';
 Future<List<BluetoothDevice>> getBluetoothDevices() async {
@@ -247,9 +246,7 @@ Future<List<BluetoothDevice>> getBluetoothDevices() async {
   }
 }
 
-//---------------------------------------------------
-// Methods
-//---------------------------------------------------
+//--Methods---------------------------------------------------------------------
 void printMsg(String msg) {
   if (isDebug) print(msg);
 }
@@ -312,101 +309,7 @@ Position latLngToPosition(LatLng latLng) {
     isMocked: false,
   );
 }
-void myMessageBox (BuildContext context, String message) {
-  showDialog(
-    context: context,
-    barrierDismissible: false, // Prevents accidental closing
-    builder: (context) => _myMessageBox(message: message ),
-  );
-}
-class _myMessageBox extends StatelessWidget {
-  final String message;
-  final String header;
-  final String image;
-  final Color borderColor;
 
-  _myMessageBox({
-    required this.message,
-    this.header = '',
-    this.image = ICON_WARNING,
-    this.borderColor = Colors.blueAccent,
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      elevation: 20,
-      shadowColor: Colors.black87,
-      backgroundColor: APP_TILE_COLOR,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
-        side: BorderSide(
-          color: borderColor, // Border color
-          width: 2, // Border width
-        ),
-      ),
-      child: SizedBox(
-        width: 250,
-        height: 220, // Increased height for close button
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Close Button (Top-Right)
-            Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                icon: const Icon(
-                    Icons.close,
-                    color: Colors.grey
-                ),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-
-            // Heading with Image
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Image.asset(image, height: 30, width: 30),
-                SizedBox(width: 8),
-                MyText(
-                  text:  header,
-                  fontsize: 18,
-                  color: Colors.white,
-                ),
-              ],
-            ),
-            SizedBox(height: 10),
-
-            // Message
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 10),
-              child: MyText(
-                text:  message,
-                color: Colors.grey,
-                fontsize: 14,
-              ),
-            ),
-            SizedBox(height: 20),
-
-            // OK Button
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close dialog
-              },
-              child: const MyText(
-                text: "OK",
-                fontsize: 20,
-                color: Colors.blueAccent,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 class MyDialogWidget extends StatelessWidget {
   final String message;
   final String header;
@@ -515,14 +418,15 @@ class Grabber extends StatelessWidget {
   }
 }
 
-//---------------------------------------------------
-// Dialog
-//---------------------------------------------------
-void MyAlertDialog(BuildContext context, String header, String message){
-  // Show popup with file path
-  showDialog(
+//--Global Messages ------------------------------------------------------------
+class MyGlobalMessage {
+  static void show(String header, String message) {
+    final context = navigatorKey.currentState?.overlay?.context;
+    if (context == null) return;
+
+    showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
           side: const BorderSide(
@@ -532,39 +436,44 @@ void MyAlertDialog(BuildContext context, String header, String message){
         ),
         backgroundColor: APP_TILE_COLOR,
         shadowColor: Colors.black,
-
-        // Header
-        title: Text(header,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-          ),
+        title: MyText(
+            text: header,
+            color: Colors.white
         ),
-
-        // Message
-        content: Text(message,
-          style: TextStyle(
-              color: Colors.grey,
-            fontSize: 14
-          ),
+        content: MyText(
+          text: message,
+          color: Colors.grey,
+          fontsize: 18,
         ),
         actions: [
-         TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const MyText(
-              text: 'OK',
-              color: Colors.blueAccent,
-              fontsize: 20
-            ),
-         ),
+          MyTextButton(
+              text: "OK",
+              onPressed: () async {
+                Navigator.pop(context);
+              }
+          ),
         ],
       ),
-  );
+    );
+  }
+}
+class MyGlobalSnackBar {
+  static void show(String message) {
+    final context = navigatorKey.currentState?.overlay?.context;
+    if (context == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: MyText(
+            text: message
+        ),
+        backgroundColor: Colors.blueGrey,
+      ),
+    );
+  }
 }
 
-//---------------------------------------------------
-// Class
-//---------------------------------------------------
+//--Class-----------------------------------------------------------------------
 class Point {
   final double x, y;
   Point(this.x, this.y);
@@ -605,6 +514,8 @@ class MyTextFormField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final TextInputType? inputType;
   final double? width;
+  final double? labelFontSize;
+  final double? valueFontSize;
   final Color? backgroundColor;
   final Color? foregroundColor;
 
@@ -625,6 +536,8 @@ class MyTextFormField extends StatefulWidget {
     this.backgroundColor = Colors.white,
     this.foregroundColor = Colors.black,
     this.isReadOnly = false,
+    this.labelFontSize = 18,
+    this.valueFontSize = 14
   });
 
   @override
@@ -653,11 +566,14 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
       height: 55,
       child: TextFormField(
         style: TextStyle(
-          fontSize: 15,
+          fontSize: widget.valueFontSize,
           color: widget.foregroundColor,
           fontFamily: 'Poppins',
         ),
 
+        autocorrect: false,
+        smartDashesType: SmartDashesType.disabled,
+        smartQuotesType: SmartQuotesType.disabled,
         readOnly: widget.isReadOnly,
         controller: widget.controller,
         keyboardType: widget.inputType,
@@ -687,14 +603,14 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
           hintText: widget.hintText,
           hintStyle: TextStyle(
             color: Colors.grey,
-            fontSize: 16,
+            fontSize: widget.valueFontSize,
             fontFamily: 'Poppins',
           ),
 
           labelText: widget.labelText,
           labelStyle: TextStyle(
             color: Colors.grey,
-            fontSize: 20,
+            fontSize: widget.labelFontSize,
             fontFamily: 'Poppins',
           ),
 
@@ -750,7 +666,7 @@ class MyCustomTileWithPic extends StatelessWidget {
                 MaterialPageRoute(builder: (context) => widget),
               );
             }else{
-              myMessageBox(context, "User not Logged In");
+              MyGlobalMessage.show("Warning", "User not Logged In");
             }
           },
           child: Container(
@@ -1304,11 +1220,9 @@ class MyOperatorTile extends StatelessWidget {
                   backgroundColor: Colors.white,
                   child: CircleAvatar(
                     radius: 28,
-                    backgroundImage: operator.imageURL.isEmpty
-                        ? AssetImage(IMAGE_PROFILE) as ImageProvider
-                        : CachedNetworkImageProvider(
-                      operator.imageURL,
-                    ),
+                    backgroundImage: operator.imageURL != null &&  operator.imageURL!.isNotEmpty
+                        ? CachedNetworkImageProvider(operator.imageURL!)
+                        : AssetImage(IMAGE_PROFILE) as ImageProvider,
                   ),
                 ),
               ),
@@ -1340,7 +1254,6 @@ class MyOperatorTile extends StatelessWidget {
     );
   }
 }
-
 class MyCircleIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
@@ -1657,64 +1570,6 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
     );
   }
 }
-class GlobalMsg {
-  static void show(String header, String message) {
-    final context = navigatorKey.currentState?.overlay?.context;
-    if (context == null) return;
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: const BorderSide(
-            color: Colors.blue, // Border color
-            width: 2, // Border width
-          ),
-        ),
-        backgroundColor: APP_TILE_COLOR,
-        shadowColor: Colors.black,
-        title: MyText(
-            text: header,
-            color: Colors.white
-        ),
-        content: MyText(
-          text: message,
-          color: Colors.grey,
-          fontsize: 18,
-        ),
-        actions: [
-          TextButton(
-              child: const MyText(
-                text: 'OK',
-                color:  Colors.white,
-                fontsize: 20,
-              ),
-
-              onPressed: () async {
-                Navigator.pop(context);
-              }
-          ),
-        ],
-      ),
-    );
-  }
-}
-class MyGlobalSnackBar {
-  static void show(String message) {
-    final context = navigatorKey.currentState?.overlay?.context;
-    if (context == null) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: MyText(
-            text: message
-        ),
-        backgroundColor: Colors.blueGrey,
-      ),
-    );
-  }
-}
 Future<T?> MyQuestionAlertBox<T> ({
   required BuildContext context,
   required String header,
@@ -1893,16 +1748,14 @@ Future<void> _mqttDisconnect()async{
   MyGlobalSnackBar.show("Disconnected");
 }
 
-//---------------------------------------------------
-// Services
-//---------------------------------------------------
+//--Services--------------------------------------------------------------------
 class UserData{
   String displayName = "";
   String surname = "";
   String userID = "";
-  String email = "";
-  String errorMsg = "";
-  String photoURL = "";
+  String? email;
+  String? imageURL;
+  String? imageFilename;
   bool hasError = false;
   bool emailValidated = false;
 
@@ -1911,9 +1764,8 @@ class UserData{
     this.surname = "",
     this.userID = "",
     this.email = "",
-    this.errorMsg = "",
-    this.photoURL = "",
-    //this.isLoggedIn = false,
+    this.imageURL,
+    this.imageFilename,
     this.emailValidated = false,
   });
 
@@ -1922,8 +1774,8 @@ class UserData{
       displayName: map['displayName'] ?? "",
       surname: map['surname'] ?? "",
       email: map['email'] ?? "",
-      photoURL: map['photoURL'] ?? "",
-      //isLoggedIn: map['isLoggedIn'] ?? false,
+      imageURL: map['photoURL'] ?? "",
+      imageFilename: map['imageFilename'] ?? "",
       emailValidated: map['emailValidated'] ?? false,
     );
   }
@@ -1932,8 +1784,8 @@ class UserData{
       'displayName': displayName,
       'surname': surname,
       'email': email,
-      'photoURL': photoURL,
-      //'isLoggedIn': isLoggedIn,
+      'photoURL': imageURL,
+      'imageFilename': imageFilename,
       'emailValidated': emailValidated
     };
   }
@@ -1941,16 +1793,16 @@ class UserData{
     String? displayName,
     String? surname,
     String? email,
-    String? photoURL,
-    //bool? isLoggedIn,
+    String? imageURL,
+    String? imageFilename,
     bool? emailValidated,
   }){
     return UserData(
       displayName: displayName ?? this.displayName,
       surname: surname ?? this.surname,
       email: email ?? this.email,
-      photoURL: photoURL ?? this.photoURL,
-      //isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+      imageURL: imageURL ?? this.imageURL,
+      imageFilename: imageFilename ?? this.imageFilename,
       emailValidated: emailValidated ?? this.emailValidated,
     );
   }
@@ -1966,9 +1818,7 @@ class UserDataService extends ChangeNotifier {
   bool isLoading = false;
   bool isLoggedIn = false;
   bool firebaseError = false;
-
-  final _auth = FirebaseAuth.instance;
-  final _db = FirebaseFirestore.instance;
+  String errorMsg = "";
 
   UserDataService() {
     FirebaseAuth.instance.authStateChanges().listen(_onAuthChanged);
@@ -1989,11 +1839,13 @@ class UserDataService extends ChangeNotifier {
 
   Future<void> load() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
+    final firestore = FirebaseFirestore.instance;
 
     if (uid == null) {
       firebaseError = true;
       isLoading = false;
       isLoggedIn = false;
+      errorMsg = "User ID not found";
       return;
     }
 
@@ -2001,7 +1853,7 @@ class UserDataService extends ChangeNotifier {
     firebaseError = false;
     notifyListeners();
 
-    final doc = await _db
+    final doc = await firestore
         .collection(CollectionUsers)
         .doc(uid)
         .get();
@@ -2021,9 +1873,10 @@ class UserDataService extends ChangeNotifier {
   }
   Future<void> create(UserData newUserData, {required String uid}) async {
     _userdata = newUserData;
+    final firestore = FirebaseFirestore.instance;
 
     try {
-      await _db.collection(CollectionUsers).doc(uid).set({
+      await firestore.collection(CollectionUsers).doc(uid).set({
         FieldsUserData: newUserData.toMap(),
       }, SetOptions(merge: true));
 
@@ -2032,9 +1885,44 @@ class UserDataService extends ChangeNotifier {
       print("Failed to save user data: $e");
     }
   }
+  Future<void> save(UserData user) async{
+    try{
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
 
+      final doc = FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(uid);
+
+      if(user.userID.isNotEmpty){
+
+        // Update
+        await doc.set(
+          {
+            FieldsUserData: user.toMap(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+      else{
+
+        // Add New
+        user.userID = doc.id;
+        await doc.set(
+          user.toMap(),
+          SetOptions(merge: true),
+        );
+      }
+      await load();
+      MyGlobalSnackBar.show('Saved');
+    }
+    catch (e){
+      MyGlobalSnackBar.show('Cloud Error: $e');
+    }
+  }
   Future<void> updateFields(Map<String, dynamic> updates) async {
     try {
+      final firestore = FirebaseFirestore.instance;
       final current = _userdata;
       if (current == null) return;
 
@@ -2043,7 +1931,8 @@ class UserDataService extends ChangeNotifier {
         surname: updates['surname'] ?? current.surname,
         email: updates['email'] ?? current.email,
         emailValidated: updates['emailValidated'] ?? current.emailValidated,
-        //isLoggedIn: updates['isLoggedIn'] ?? current.isLoggedIn,
+        imageFilename: updates['imageFilename'] ?? current.imageFilename,
+        imageURL: updates['photoURL'] ?? current.imageURL,
       );
 
       _userdata = updated;
@@ -2059,21 +1948,26 @@ class UserDataService extends ChangeNotifier {
         }
       });
 
-      await _db.collection(CollectionUsers).doc(uid).update(nestedUpdates);
+      await firestore
+          .collection(CollectionUsers)
+          .doc(uid)
+          .update(nestedUpdates);
 
       notifyListeners();
     } catch (e) {
-      GlobalMsg.show('update Userdata Fields:', '$e');
+      MyGlobalMessage.show('update Userdata Fields:', '$e');
     }
   }
   Future<void> logout() async{
     try{
-      await _auth.signOut();
+      final auth = FirebaseAuth.instance;
+
+      await auth.signOut();
       await updateFields({'isLoggedIn': false});
 
       notifyListeners();
     }catch (e){
-      GlobalMsg.show('Logout:', '$e');
+      MyGlobalMessage.show('Logout:', '$e');
     }
   }
   void printHash() {
@@ -2229,7 +2123,7 @@ class SettingsService extends ChangeNotifier {
       notifyListeners();
 
     } catch (e) {
-      GlobalMsg.show('updateSettingFields:', '$e');
+      MyGlobalMessage.show('updateSettingFields:', '$e');
     }
   }
   void notify() => notifyListeners();
@@ -2322,9 +2216,10 @@ class MonitorSettings {
   String reg;
   double fuelConsumption;
   double rebateValue;
-  String bluetoothDeviceName;
-  String bluetoothMac;
-  String image;
+  String? bluetoothDeviceName;
+  String? bluetoothMac;
+  String? imageURL;
+  String? imageFilename;
   double ticksPerM;
 
   // Local-only (NOT saved)
@@ -2344,9 +2239,10 @@ class MonitorSettings {
     this.reg = "none",
     this.fuelConsumption = 10,
     this.rebateValue = 10,
-    this.bluetoothDeviceName = "",
-    this.bluetoothMac = "",
-    this.image = "",
+    this.bluetoothDeviceName,
+    this.bluetoothMac,
+    this.imageURL,
+    this.imageFilename,
     this.ticksPerM = 20,
 
     // Local
@@ -2369,11 +2265,11 @@ class MonitorSettings {
       monitorName: map[FIRE_MON_NAME] ?? 'New Item',
       reg: map[FIRE_MON_REGISTRATION] ?? 'None',
       fuelConsumption: (map[FIRE_MON_FUEL_CONSUMPTION] as num?)?.toDouble() ?? 0.0,
-      //rebateValue: map[SettingRebateValue] ?? 0,
       bluetoothDeviceName: map[FIRE_MON_BT_NAME] ?? '',
       bluetoothMac: map[FIRE_MON_BT_MAC] ?? '',
       ticksPerM: (map[FIRE_MON_TICKS_PER_M] as num?)?.toDouble() ?? SettingMonDefaultTicksPerM,
-      image: map[FIRE_MON_IMAGE] ?? '',
+      imageURL: map[FIRE_MON_IMAGE] ?? '',
+      imageFilename: map[FIRE_MON_IMAGE_FILENAME] ?? '',
     );
   }
 
@@ -2389,7 +2285,8 @@ class MonitorSettings {
       FIRE_MON_BT_NAME: bluetoothDeviceName,
       FIRE_MON_BT_MAC: bluetoothMac,
       FIRE_MON_TICKS_PER_M: ticksPerM,
-      FIRE_MON_IMAGE: image
+      FIRE_MON_IMAGE: imageURL,
+      FIRE_MON_IMAGE_FILENAME: imageFilename
     };
   }
 }
@@ -2397,9 +2294,7 @@ class MonitorSettingsService extends ChangeNotifier {
   final List<MonitorSettings> _monitors = [];
   MonitorSettings? _selected;
   bool isLoading = true;
-
   List<MonitorSettings> get lstMonitors => List.unmodifiable(_monitors);
-  //MonitorSettings? get selected => _selected;
 
   Future<void> load() async {
     isLoading = true;
@@ -2425,8 +2320,44 @@ class MonitorSettingsService extends ChangeNotifier {
       notifyListeners();   // ✅ NOTIFY HERE
     }
   }
+  Future<void> save(MonitorSettings monitor) async{
+    try{
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
 
-  void notify() => notifyListeners();
+      final ref = FirebaseFirestore.instance
+          .collection(CollectionUsers)
+          .doc(uid)
+          .collection(CollectionMonitors);
+
+      if(monitor.monDocId.isNotEmpty){
+
+        // Update
+        await ref.doc(monitor.monDocId).set(
+          monitor.toMap(),
+          SetOptions(merge: true),
+        );
+      }
+      else{
+
+        // Add New
+        final docref = ref.doc();
+        monitor.monDocId = docref.id;
+
+        await docref.set(
+          monitor.toMap(),
+          SetOptions(merge: true),
+        );
+      }
+      await load();
+      MyGlobalSnackBar.show('Saved');
+    }
+    catch (e){
+      MyGlobalSnackBar.show('Cloud Error: $e');
+    }
+  }
+
+  //void notify() => notifyListeners();
   void setMonitors(List<MonitorSettings> list) {
     _monitors
       ..clear()
@@ -2758,9 +2689,10 @@ class OperatorData{
   String name = "";
   String surname = "";
   String accessLevel = "";
-  String tagId = "";
-  String imageURL = "";
-  String thumbURL = "";
+  String? tagId;
+  String? imageURL;
+  String? imageFilename;
+  String? thumbURL;
 
   // Local-only (NOT saved)
   String docId;
@@ -2769,9 +2701,10 @@ class OperatorData{
     this.name = "",
     this.surname = "",
     this.accessLevel = "",
-    this.tagId = "",
-    this.imageURL = "",
-    this.thumbURL = "",
+    this.tagId,
+    this.imageURL,
+    this.imageFilename,
+    this.thumbURL,
 
     // Local
     this.docId = ""
@@ -2785,6 +2718,7 @@ class OperatorData{
       accessLevel: map['accessLevel'] ?? "",
       tagId: map['tagId'] ?? "",
       imageURL: map['photoURL'] ?? "",
+      imageFilename: map['photoFilename'] ?? "",
       thumbURL: map['thumbURL'] ?? "",
     );
   }
@@ -2796,32 +2730,32 @@ class OperatorData{
       'accessLevel': accessLevel,
       'tagId': tagId,
       'photoURL': imageURL,
+      'photoFilename': imageFilename,
       'thumbURL': thumbURL,
     };
   }
   OperatorData copyWith({
-    String? docId,
+    String? docID,
     String? name,
     String? surname,
     String? accessLevel,
     String? tagID,
     String? photoURL,
+    String? photoFilename,
   }){
     return OperatorData(
-      docId: docId ?? this.docId,
+      docId: docID ?? docId,
       name: name ?? this.name,
       surname: surname ?? this.surname,
       accessLevel: accessLevel ?? this.accessLevel,
-      tagId: tagId ?? this.tagId,
-      imageURL: photoURL ?? this.imageURL,
+      tagId: tagID ?? tagId,
+      imageURL: photoURL ?? imageURL,
+      imageFilename: photoFilename ?? imageFilename,
     );
   }
 }
 class OperatorService extends ChangeNotifier {
   final List<OperatorData> _lstOps = [];
-  //OperatorData? _opData;
-
-  //OperatorData? get operatorData => _opData;
   List<OperatorData> get lstOperators => List.unmodifiable(_lstOps);
 
   bool isLoading = false;
@@ -2948,15 +2882,38 @@ class OperatorService extends ChangeNotifier {
 
       await load();
 
+      String path = "$profileTypeOperator/${operator.docId}/${operator.imageFilename}";
+      await fireStoreDeleteFile(path);
+
     } catch (e) {
       MyGlobalSnackBar.show('Delete Failed: $e');
     }
   }
 }
 
-//---------------------------------------------------
-// Widgets
-//---------------------------------------------------
+class ProfilePicData{
+  String? imageURL;
+  String? imageFilename;
+  bool update;
+
+  ProfilePicData({
+    this.imageURL,
+    this.imageFilename,
+    this.update = false,
+  });
+}
+
+//--Widgets --------------------------------------------------------------------
+Widget MyTextButton({double fontSize = 20, VoidCallback? onPressed, required String text}){
+  return TextButton(
+      onPressed: onPressed,
+    child: MyText(
+      text: text,
+      color:  Colors.lightBlueAccent,
+      fontsize: fontSize,
+    ),
+  );
+}
 Widget ShowWelcomeMsg(BuildContext context) {
   UserDataService user = context.read<UserDataService>();
 
@@ -3079,9 +3036,7 @@ Widget MyCenterMsg(String msg){
   );
 }
 
-//---------------------------------------------------
-// Styles
-//---------------------------------------------------
+//--Styles----------------------------------------------------------------------
 ButtonStyle MyButtonStyle(Color backgroundColor) {
   return TextButton.styleFrom(
     minimumSize: ui.Size(100, 30),

@@ -23,7 +23,7 @@
 
     <application
         android:label="Limitless"
-        android:name="${applicationName}"
+        android:name="com.trinity.limitless.MainApplication"
         android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true">
 

@@ -140,6 +140,8 @@ class MqttService {
     print("MQTT TX: $payload");
   }
   void setupMessageListener() {
+    if(client.updates == null) return;
+
     _updatesSubscription = client.updates!.listen((List<MqttReceivedMessage<MqttMessage>> messages) {
       final recMsg = messages.first;
       final topic = recMsg.topic;

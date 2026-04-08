@@ -1,7 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
+import 'editProfilePicPage.dart';
 import 'firebase.dart';
 import 'homePage.dart';
 
@@ -71,30 +73,23 @@ class _profilePageState extends State<profilePage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       // No Button
-                      TextButton(
+                      MyTextButton(
                         onPressed: () {
                           Navigator.of(context).pop();
                         },
-                        style: MyButtonStyle(COLOR_ORANGE),
-                        child: const MyText(
-                          text:  "No",
-                        ),
+                        text:  "No",
                       ),
 
                       const SizedBox(width: 20),
 
                       // OK Button
-                      TextButton(
+                      MyTextButton(
                         onPressed: () async {
                           await FirebaseAuth.instance.signOut();
                           if (!context.mounted) return;
                           Navigator.pop(context);
                         },
-
-                        style: MyButtonStyle(COLOR_ORANGE),
-                        child: const MyText(
-                          text: 'Yes',
-                        ),
+                        text: 'Yes',
                       ),
                     ],
                   ),
@@ -110,7 +105,7 @@ class _profilePageState extends State<profilePage> {
   }
 
   Widget buildLoginHeader(UserDataService user) {
-    _emailController.text = user.userdata!.email;
+    _emailController.text = user.userdata!.email ?? "";
     _displaynameControl.text = user.userdata!.displayName;
 
     return SafeArea(
@@ -153,16 +148,33 @@ class _profilePageState extends State<profilePage> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   GestureDetector(
-                    onTap: () {
-                      // Navigation logic could go here
+                    onTap: () async {
+                      final (ProfilePicData? profilePic) = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EditProfilePicPage(
+                            docId: user.userdata!.userID,
+                            imageURL: user.userdata!.imageURL,
+                            imageFilename: user.userdata!.imageFilename,
+                            profileType: profileTypeUser,
+                          ),
+                        ),
+                      );
+                      if(profilePic?.imageURL != null && profilePic!.update){
+                        setState(() {
+                          user.userdata!.imageURL = profilePic.imageURL;
+                          user.userdata!.imageFilename = profilePic.imageFilename;
+                        });
+                        context.read<UserDataService>().save(user.userdata!);
+                      }
                     },
                     child: CircleAvatar(
                       radius: 55,
                       backgroundColor: Colors.white,
                       child: CircleAvatar(
-                        backgroundImage: (user.userdata?.photoURL.isEmpty ?? true)
-                            ? AssetImage(IMAGE_PROFILE)
-                            : NetworkImage(user.userdata!.photoURL) as ImageProvider,
+                        backgroundImage:  user.userdata?.imageURL != null &&  user.userdata!.imageURL!.isNotEmpty
+                            ? CachedNetworkImageProvider(user.userdata!.imageURL!) as ImageProvider
+                            : AssetImage(IMAGE_PROFILE),
                         radius: 50,
                       ),
                     ),

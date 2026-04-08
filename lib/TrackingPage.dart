@@ -61,8 +61,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       if (!mounted) return;
 
       if (_vehicles.isEmpty && !_isLoading_Vehicles) {
-        MyAlertDialog(
-          context,
+        MyGlobalMessage.show(
           "Vehicle Not Found",
           "No Vehicles Found.\nPlease set one in 'IOT Monitors'",
         );

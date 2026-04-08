@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/editProfilePicPage.dart';
 import 'package:geofence/utils.dart';
@@ -20,7 +21,6 @@ class OperatorEditPage extends StatefulWidget {
 }
 
 class _OperatorEditPageState extends State<OperatorEditPage> {
-  int _selectedIndex = 0;
   TextEditingController? controllerName;
   TextEditingController? controllerSurname;
   TextEditingController? controllerTag;
@@ -77,7 +77,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
 
       if (!mounted || _dialogShown) return;
       _dialogShown = true; // set before showing to avoid races
-      MyAlertDialog(context, "Comms Timeout", "No Reply From Base Station");
+      MyGlobalMessage.show("Timeout", "No Reply From Base Station");
     });
   }
 
@@ -153,7 +153,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     final settings = context.read<SettingsService>();
 
     if(base.lstBaseStations.isEmpty){
-      MyAlertDialog(context,
+      MyGlobalMessage.show(
           'Base Stations',
           'No Base Stations found. Please set one in Base Stations page'
       );
@@ -162,7 +162,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
 
     final ip = settings.fireSettings?.connectedDeviceIp;
     if (ip == null || ip.isEmpty) {
-      MyAlertDialog(context,
+      MyGlobalMessage.show(
           'Base Stations',
           'No Base Station connection found. Please connect to one in Base Stations page'
       );
@@ -172,7 +172,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     if(!settings.isBaseStationConnected) {
       if(!await settings.mqttConnect(ip)){
         if(mounted){
-          MyAlertDialog(context,
+          MyGlobalMessage.show(
               'Base Stations',
               'Could not connect to Base Station. Please check that the Base Station is powered up and running'
           );
@@ -187,7 +187,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     // This only tells the Base to pass on any tags received from any IOTs
     mqtt_Service.tx("",MQTT_CMD_TAG_REQ,{}, MQTT_TOPIC_FROM_ANDROID );
     if(mounted) {
-      MyAlertDialog(context,
+      MyGlobalMessage.show(
           "Read Tag",
           'Present a Tag On Any IOT Device That is in WiFi Range');
     }
@@ -199,8 +199,6 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
 
   @override
   Widget build(BuildContext context) {
-    final hasPhoto = (widget.operatorData?.imageURL.isNotEmpty ?? false);
-
     return  Scaffold(
       backgroundColor: APP_BACKGROUND_COLOR,
       appBar: AppBar(
@@ -222,18 +220,22 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                   // Profile Pic
                   GestureDetector(
                     onTap: () async {
-                      final String? imageURL = await Navigator.push(
+                      final (ProfilePicData? profilePic) = await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => EditProfilePicPage(
                             docId: widget.operatorData!.docId,
-                            image: widget.operatorData!.imageURL,
+                            imageURL: widget.operatorData!.imageURL,
+                            imageFilename: widget.operatorData!.imageFilename,
                             profileType: profileTypeOperator,
                           ),
                         ),
                       );
-                      if(imageURL != null){
-                        widget.operatorData!.imageURL = imageURL;
+                      if(profilePic?.imageURL != null && profilePic!.update){
+                        setState(() {
+                          widget.operatorData!.imageURL = profilePic.imageURL;
+                          widget.operatorData!.imageFilename = profilePic.imageFilename;
+                        });
                         context.read<OperatorService>().save(widget.operatorData!);
                       }
                     },
@@ -241,8 +243,8 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                       radius: 55,
                       backgroundColor: Colors.white,
                       child: CircleAvatar(
-                        backgroundImage: hasPhoto
-                            ? NetworkImage(widget.operatorData!.imageURL) as ImageProvider
+                        backgroundImage:  widget.operatorData?.imageURL != null &&  widget.operatorData!.imageURL!.isNotEmpty
+                            ? CachedNetworkImageProvider(widget.operatorData!.imageURL!) as ImageProvider
                             : AssetImage(IMAGE_PROFILE),
                         radius: 50,
                       ),

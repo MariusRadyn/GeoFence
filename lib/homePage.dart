@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/IotDataPage.dart';
+import 'package:geofence/firebase.dart';
 import 'package:geofence/operatorsPage.dart';
 import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/baseStationPage.dart';
@@ -27,6 +28,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   late Animation<double> _animation;
   final double drawerWidth = 250;
   Timer? _loadingTimer;
+  bool isLoggingIn = false;
 
   final Color colorMenuIcons = Colors.blue;
   final Color colorMenuText = Colors.blueGrey;
@@ -178,44 +180,29 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         children: [
 
                           // Cancel Button
-                          TextButton(
+                          MyTextButton(
+                            text: 'Cancel',
                             onPressed: () {
                               Navigator.of(context).pop();
                             },
-                            style: MyButtonStyle(COLOR_ORANGE),
-                            child: const Text(
-                              "Cancel",
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.normal),
-                              textAlign: TextAlign.right,
-                            ),
                           ),
 
                           SizedBox(width: 10),
 
                           // OK Button
-                          TextButton(
+                          MyTextButton(
+                            text:'OK',
                             onPressed: () async {
                               final user = await signUp(context);
 
                               if (user != null) {
-                                Navigator.of(context).pop(); // close current dialog FIRST
-                                await _sendValidateEmail();
-                                _showEmailVerificationDialog(context);
+                                if(mounted){
+                                  Navigator.of(context).pop(); // close current dialog FIRST
+                                  await _sendValidateEmail();
+                                  _showEmailVerificationDialog(context);
+                                }
                               }
                             },
-                            style: MyButtonStyle(COLOR_ORANGE),
-                            child: const Text(
-                              "OK",
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.normal
-                              ),
-                              textAlign: TextAlign.right,
-                            ),
                           ),
                         ],
                       ),
@@ -227,35 +214,36 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
   Future<User?> signUp(BuildContext context) async {
     UserDataService userService = context.read<UserDataService>();
+    AuthResult result = AuthResult();
 
     if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
-      myMessageBox(context, 'Please enter both email and password.');
+      MyGlobalMessage.show("Warning", 'Please enter email and password.');
       return null;
     }
     if (!_emailController.text.contains('@')) {
-      myMessageBox(context, 'Please enter a valid email address.');
+      MyGlobalMessage.show("Warning", 'Please enter valid email address.');
       return null;
     }
     if (_userController.text.isEmpty) {
-      myMessageBox(context,'Please enter Username.');
+      MyGlobalMessage.show("Warning", 'Please enter username.');
       return null;
     }
     if (_pwController.text != _pwController2.text) {
-      myMessageBox(context, 'Passwords don''t match.');
+      MyGlobalMessage.show("Warning", 'Passwords dont match.');
       return null;
     }
 
     try {
-      User? user = await firebaseAuthService.fireAuthCreateUserWithEmail(
+      result = await firebaseAuthService.fireAuthCreateUserWithEmail(
           context,
           _emailController.text,
           _pwController.text
       );
 
-      if (user != null) {
+      if (result.isSuccess && result.user != null) {
         final doc = await FirebaseFirestore.instance
             .collection(CollectionUsers)
-            .doc(user.uid)
+            .doc(result.user!.uid)
             .get();
 
         // Create user ONLY if it does not exist
@@ -264,21 +252,21 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               UserData(
                 displayName: _userController.text ?? "",
                 email: _emailController.text ?? "",
-                emailValidated: user.emailVerified ?? false,
+                emailValidated: result.user!.emailVerified ?? false,
               ),
-              uid: user.uid
+              uid: result.user!.uid
           );
 
           print('User Created');
         }
 
-        return user;
+        return result.user;
 
       } else {
         userService.logout();
       }
     } catch (e) {
-      print('Error: $e');
+      MyGlobalMessage.show("Error", result.exception.toString());
     }
     return null;
   }
@@ -301,47 +289,50 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
   Future<bool> loginWithEmail(BuildContext context) async {
     UserDataService userService = context.read<UserDataService>();
+    userService.errorMsg = "";
+    userService.firebaseError = false;
 
     if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
-      myMessageBox(context, 'Please enter both email and password.');
+      MyGlobalMessage.show("Login", 'Please enter email and password.');
       return false;
     }
     if (!_emailController.text.contains('@')) {
-      myMessageBox(context, 'Please enter a valid email address.');
+      MyGlobalMessage.show("Login", 'Please enter a valid email address.');
       return false;
     }
 
     try {
-      User? user = await firebaseAuthService.fireAuthSignInWithEmail(
+      setState(() {
+        isLoggingIn = true;
+      });
+
+      AuthResult result = await firebaseAuthService.fireAuthSignInWithEmail(
         context,
         _emailController.text,
         _pwController.text,
       );
 
-      // Logged In
-      if (user != null) {
-        // userService.create(
-        //     UserData(
-        //       displayName: user.displayName ?? "",
-        //       email: _emailController.text,
-        //       emailValidated: user.emailVerified ?? false,
-        //       isLoggedIn: true,
-        //       photoURL: user.photoURL ?? ""
-        //     ),
-        //   uid: user.uid
-        // );
+      setState(() {
+        isLoggingIn = false;
+      });
 
+      // Logged In
+      if (result.isSuccess) {
         if(userService.userdata != null){
           userService.isLoggedIn = true;
         }
-        printMsg('User logged in');
-
       } else {
         // Logged ERROR
         if(userService.userdata != null){
           userService.isLoggedIn = false;
         }
-        GlobalMsg.show("Login Error: ", userService.userdata!.errorMsg);
+
+        if(result.code != null){
+          MyGlobalMessage.show("Error", result.code!);
+        } else {
+          MyGlobalMessage.show("Error", result.exception.toString());
+        }
+          return false;
       }
     } catch (e) {
       printMsg('Error: $e');
@@ -351,59 +342,72 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
   Future<bool> loginWithGoogle(BuildContext context) async {
     UserDataService userService = context.read<UserDataService>();
-
+    userService.errorMsg = "";
+    userService.firebaseError = false;
     try {
-      UserCredential? userCred = await firebaseAuthService.signInWithGoogle();
+      setState(() {isLoggingIn = true; });
+      AuthResult result = await firebaseAuthService.signInWithGoogle();
+      setState(() {isLoggingIn = false;});
 
-      final doc = await FirebaseFirestore.instance
-          .collection(CollectionUsers)
-          .doc(userCred.user!.uid)
-          .get();
+      if(result.isSuccess){
+        final doc = await FirebaseFirestore.instance
+            .collection(CollectionUsers)
+            .doc(result.user!.uid)
+            .get();
 
-      // Create user ONLY if it does not exist
-      if (!doc.exists) {
-        if (userCred.user != null && userCred.user!.emailVerified) {
-          userService.create(
-              UserData(
-                displayName:  userCred.user?.displayName ?? "",
-                email: userCred.user?.email ?? "",
-                emailValidated: true,
-                photoURL: userCred.user?.photoURL ?? "",
-                //isLoggedIn: true,
-              ),
-              uid: userCred.user!.uid
-          );
 
-          printMsg('User logged in with Google');
+        // Create user ONLY if it does not exist
+        if (!doc.exists) {
+          if (result.user != null) {
+            userService.create(
+                UserData(
+                  displayName:  result.user?.displayName ?? "",
+                  email: result.user?.email ?? "",
+                  emailValidated: true,
+                  imageURL: result.user?.photoURL ?? "",
+                ),
+                uid: result.user!.uid
+            );
 
-        } else {
-          if(!userCred.user!.emailVerified){
-            GlobalMsg.show("Error", "Email address not verified");
-            return false;
-          }
-          else {
-            GlobalMsg.show("Error", "Firebase User Credential == Null");
-            return false;
+            printMsg('User logged in with Google');
+
+          } else {
+            if(!result.user!.emailVerified){
+              MyGlobalMessage.show("Error", "Email address not verified");
+              return false;
+            }
+            else {
+
+              MyGlobalMessage.show("Error", "Firebase User Credential == Null");
+              return false;
+            }
           }
         }
       }
+      else{
+        if(result.code != null){
+          MyGlobalMessage.show("Error", result.code!);
+        } else {
+          MyGlobalMessage.show("Error", result.exception.toString());
+        }
+      }
+
     } catch (e) {
       printMsg('Sign in With Google Error: $e');
-      myMessageBox(context, 'Google Sign in Error: $e');
+      MyGlobalMessage.show("Error", '$e');
       return false;
     }
-
     return true;
   }
   Future<bool> resetPasswordWithEmail(BuildContext context) async {
     UserDataService userService = context.read<UserDataService>();
 
     if (_emailController.text.isEmpty) {
-      myMessageBox(context, 'Please enter email address.');
+      MyGlobalMessage.show("Warning", 'Please enter email address.');
       return false;
     }
     if (!_emailController.text.contains('@')) {
-      myMessageBox(context, 'Please enter a valid email address.');
+      MyGlobalMessage.show("Warning", 'Please enter a valid email address.');
       return false;
     }
 
@@ -415,15 +419,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         printMsg('Password Reset');
         return true;
       }
-      else return false;
+      else {
+        MyGlobalMessage.show("Error", 'Failed to reset password');
+        return false;
+      }
 
     } catch (e) {
-      printMsg('Reset Password: $e');
+      MyGlobalMessage.show("Error", '$e');
       return false;
     }
   }
-
-  Future<void> showLoginScreen (BuildContext context) async{
+  Future<void> _loginScreen (BuildContext context) async{
     await showDialog<void>(
       context: context,
       builder: (BuildContext context) {
@@ -464,10 +470,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: MyTextFormField(
+                            inputType: TextInputType.emailAddress,
                             backgroundColor: APP_BACKGROUND_COLOR,
                             foregroundColor: Colors.white,
                             controller: _emailController,
-                            hintText: "Email Address",
+                            hintText: "Enter Email Address",
+                            labelText: "Email Address",
+                            valueFontSize: 12,
+
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -479,8 +489,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             foregroundColor: Colors.white,
                             backgroundColor: APP_BACKGROUND_COLOR,
                             controller: _pwController,
-                            hintText: "Password",
+                            hintText: "Enter Password",
+                            labelText: "Password",
                             isPasswordField: true,
+                            valueFontSize: 12,
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -500,7 +512,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             GestureDetector(
                               onTap: () async {
                                 if(await resetPasswordWithEmail(context)){
-                                  MyAlertDialog(context, "Password Reset", "Please check your email and follow the instructions");
+                                  MyGlobalMessage.show("Check email", "Please check your email and follow the instructions");
                                 }
                                 //Navigator.of(context).pop();
                               },
@@ -511,40 +523,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             ),
                           ],
                         ),
-                        const SizedBox(height: 20),
 
-                        // Buttons Cancel / OK
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-
-                            // Cancel Button
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                              },
-                              style: MyButtonStyle(COLOR_ORANGE),
-                              child: const MyText(
-                                text:  "Cancel",
-                              ),
-                            ),
-
-                            const SizedBox(width: 10),
-
-                            // OK Button
-                            TextButton(
-                              onPressed: () async {
-                                await loginWithEmail(context);
-                                Navigator.of(context).pop();
-                              },
-                              style: MyButtonStyle(COLOR_ORANGE),
-                              child: const MyText(
-                                text: 'OK',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 10),
 
                         // Register
                         Row(
@@ -581,8 +561,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             _buildSocialLoginButton(
                               context: context,
                               onPressed: () async {
-                                await loginWithGoogle(context);
                                 Navigator.of(context).pop();
+                                await loginWithGoogle(context);
                               },
                               iconPath: ICON_GOOGLE,
                             ),
@@ -602,6 +582,38 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         ),
 
                         SizedBox(height: 20),
+
+                        // Buttons Cancel / OK
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+
+                            // Cancel Button
+                            MyTextButton(
+                              text: 'Cancel',
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                            ),
+
+                            const SizedBox(width: 10),
+
+                            // OK Button
+                            MyTextButton(
+                              text: 'OK',
+                              onPressed: () async {
+                                bool loggedIn = await loginWithEmail(context);
+                                if(loggedIn){
+                                  if(mounted){
+                                    Navigator.of(context).pop();
+                                  }
+                                }
+                              },
+                            )
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+
                       ],
                     ),
                   ),
@@ -633,7 +645,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     try {
       await user.sendEmailVerification();   // 🔥 Forces server check
     } catch (e) {
-      MyAlertDialog(context, "Verify Email Error", e.toString());
+      MyGlobalMessage.show("Error", e.toString());
     }
   }
   void _showEmailVerificationDialog(BuildContext context) {
@@ -677,20 +689,22 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           backgroundColor: APP_TILE_COLOR,
           shadowColor: Colors.black,
           actions: [
-            TextButton(
+            MyTextButton(
+              text: "Resend Email",
               onPressed: () async {
                 await _sendValidateEmail();
               },
-              child: const MyText(text:  "Resend Email"),
             ),
-            TextButton(
+            MyTextButton(
+              text: "Cancel",
               onPressed: () async {
                 timer?.cancel();
                 await FirebaseAuth.instance.signOut();
-                Navigator.of(context).pop();
+                if(mounted){
+                  Navigator.of(context).pop();
+                }
               },
-              child: const MyText(text: "Cancel"),
-            ),
+            )
           ],
         );
       },
@@ -711,24 +725,26 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-
     return
       StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          
+
           return Consumer2<SettingsService, UserDataService>(
               builder: (context, settings, user,__){
 
-                final isLoading = settings.isLoading || user.isLoading || snapshot.connectionState == ConnectionState.waiting;
+                final isLoading = settings.isLoading || user.isLoading || snapshot.connectionState == ConnectionState.waiting || isLoggingIn;
                 final userLoggedIn = snapshot.hasData && user.userdata != null;
+
+                String image = "";
+                if(user.userdata!=null){
+                  image = user.userdata!.imageURL ?? "";
+                }
 
                 ImageProvider profileImage;
 
-                if (!isLoading &&
-                    userLoggedIn &&
-                    user.userdata?.photoURL.isNotEmpty == true) {
-                  profileImage = NetworkImage(user.userdata!.photoURL);
+                if (!isLoading && userLoggedIn && image.isNotEmpty == true) {
+                  profileImage = NetworkImage(image);
                 } else {
                   profileImage = AssetImage(IMAGE_PROFILE);
                 }
@@ -787,10 +803,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               onTap: () async {
                                 if (!isLoading && userLoggedIn) {
                                   if (user.userdata?.emailValidated != true) {
-                                    MyAlertDialog(
-                                      context,
+                                    MyGlobalMessage.show(
                                       "Verify Email",
-                                      "Please open your email.\nClick on verify link",
+                                      "Please open your email.\nClick on the verify link",
                                     );
                                     return;
                                   }
@@ -805,7 +820,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                 }
 
                                 if (!isLoading && !userLoggedIn) {
-                                 await showLoginScreen(context);
+                                 await _loginScreen(context);
                                  await user.load();
                                 };
                               },
