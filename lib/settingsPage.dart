@@ -137,7 +137,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
       final snapshot =  await  FirebaseFirestore.instance
           .collection(CollectionUsers)
           .doc(uid)
-          .collection(CollectionServers)
+          .collection(CollectionBaseStations)
           .get();
 
       setState(() {
@@ -179,7 +179,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
       await FirebaseFirestore.instance
           .collection(CollectionUsers)
           .doc(user?.uid)
-          .collection(CollectionServers)
+          .collection(CollectionBaseStations)
           .doc(docId)
           .delete();
 

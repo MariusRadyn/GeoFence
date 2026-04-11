@@ -82,12 +82,12 @@ const String DB_TABLE_USERS = 'UserTable';
 
 //-- Firebase Settings ---------------------------------------------------------
 const CollectionUsers = 'users';
-const CollectionGeoFences = 'geofences';
-const CollectionTrackingSessions = 'tracking_sessions';
+const CollectionGeoFences = 'geoFences';
+const CollectionTrackingSessions = 'trackingSessions';
 const CollectionLocations = 'locations';
 const CollectionMonitors = 'monitors';
-const CollectionMonitorData = 'iotdata';
-const CollectionServers = 'servers';
+const CollectionMonitorData = 'iotData';
+const CollectionBaseStations = 'baseStations';
 const CollectionClients = 'clients';
 const CollectionOperators = 'operators';
 
@@ -153,7 +153,7 @@ const DebugMonitorWheelSignal = 'debugWheelSignal';
 const FIRE_BASE_NAME = 'name';
 const FIRE_BASE_DESC = 'description';
 const FIRE_BASE_IP = 'ipAdr';
-const FIRE_BASE_BT_NAME = 'bluetoothDeviceName';
+const FIRE_BASE_ID = 'baseId';
 const FIRE_BASE_BT_MAC = 'bluetoothMAC';
 const FIRE_BASE_IMAGE = 'image';
 
@@ -190,13 +190,13 @@ const MQTT_TOPIC_FROM_ANDROID = "mqtt/from/android";
 const MQTT_TOPIC_WILL = "mqtt/will";
 
 // MQTT Commands
-const MQTT_CMD_REQ_MONITOR = "#REQ_MONITOR";
+const MQTT_CMD_DISCOVER = "#REQ_MONITOR";
 const MQTT_CMD_FOUND_MONITOR = "#FOUND_MONITOR";
 const MQTT_CMD_CONNECT_MONITOR = "#CONNECT_MONITOR";
 const MQTT_CMD_DISCONNECT_MONITOR = "#DISCONNECT_MONITOR";
 const MQTT_CMD_ACK = "#ACK";
 const MQTT_CMD_PING = "#PING";
-const MQTT_CMD_MONITOR_DATA = "#MONITOR_DATA";
+const MQTT_CMD_LIVE_MONITOR_DATA = "#MONITOR_DATA";
 const MQTT_CMD_TAG_REQ = "#TAG_REQ";
 const MQTT_CMD_TAG_DATA = "#TAG_DATA";
 const MQTT_CMD_TAG_ACK = "#TAG_ACK";
@@ -511,7 +511,7 @@ class MyTextFormField extends StatefulWidget {
   final FormFieldSetter<String>? onSaved;
   final FormFieldValidator<String>? validator;
   final ValueChanged<String>? onFieldSubmitted;
-  final ValueChanged<String>? onChanged;
+  final FocusNode? focusNode;
   final TextInputType? inputType;
   final double? width;
   final double? labelFontSize;
@@ -531,7 +531,7 @@ class MyTextFormField extends StatefulWidget {
     this.validator,
     this.width,
     this.onFieldSubmitted,
-    this.onChanged,
+    this.focusNode,
     this.inputType,
     this.backgroundColor = Colors.white,
     this.foregroundColor = Colors.black,
@@ -581,7 +581,7 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
         key: widget.key,
         obscureText: widget.isPasswordField == true ? _obscureText : false,
         onSaved: widget.onSaved,
-        onChanged: widget.onChanged,
+        focusNode: widget.focusNode,
         validator: widget.validator,
         onFieldSubmitted: widget.onFieldSubmitted,
         decoration: InputDecoration(
@@ -2473,7 +2473,6 @@ class MonitorDataService extends ChangeNotifier {
     required this.lstMonitorData
   });
 
-
   Future<MonitorDataService> fromSnapshot( DocumentSnapshot monitorSnapshot) async {
     isLoading = true;
     final map = monitorSnapshot.data() as Map<String, dynamic>;
@@ -2536,7 +2535,7 @@ class BaseStationData {
       baseName: map[FIRE_BASE_NAME] ?? 'none',
       baseDesc: map[FIRE_BASE_DESC] ?? 'none',
       ipAddress: map[FIRE_BASE_IP] ?? 'New Item',
-      bluetoothName: map[FIRE_BASE_BT_NAME] ?? 'None',
+      bluetoothName: map[FIRE_BASE_ID] ?? 'None',
       bluetoothMac: map[FIRE_MON_BT_MAC] ?? '',
       image: map[FIRE_BASE_IMAGE] ?? '',
     );
@@ -2548,7 +2547,7 @@ class BaseStationData {
       FIRE_BASE_NAME : baseName,
       FIRE_BASE_DESC : baseDesc,
       FIRE_BASE_IP : ipAddress,
-      FIRE_BASE_BT_NAME : bluetoothName,
+      FIRE_BASE_ID : bluetoothName,
       FIRE_BASE_BT_MAC : bluetoothMac,
       FIRE_BASE_IMAGE: image
     };
@@ -2571,7 +2570,7 @@ class BaseStationService extends ChangeNotifier {
     final snapshot = await FirebaseFirestore.instance
         .collection(CollectionUsers)
         .doc(uid)
-        .collection(CollectionServers)
+        .collection(CollectionBaseStations)
         .get();
 
     final list = snapshot.docs
@@ -2604,7 +2603,7 @@ class BaseStationService extends ChangeNotifier {
       final ref = FirebaseFirestore.instance
           .collection(CollectionUsers)
           .doc(uid)
-          .collection(CollectionServers);
+          .collection(CollectionBaseStations);
 
       final base = BaseStationData(
         baseName: 'New Base',
@@ -2630,7 +2629,7 @@ class BaseStationService extends ChangeNotifier {
       final ref = FirebaseFirestore.instance
           .collection(CollectionUsers)
           .doc(uid)
-          .collection(CollectionServers);
+          .collection(CollectionBaseStations);
 
       await ref.doc(base.docId).set(
         base.toMap(),
@@ -2652,7 +2651,7 @@ class BaseStationService extends ChangeNotifier {
       await FirebaseFirestore.instance
           .collection(CollectionUsers)
           .doc(user?.uid)
-          .collection(CollectionServers)
+          .collection(CollectionBaseStations)
           .doc(base.docId)
           .delete();
 

@@ -45,16 +45,12 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     BluetoothDevice.fromId("00:11:22:33:44:55"),
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
-  late final SettingsService _settingService;
-  late final BaseStationService _baseService;
 
   @override
   void initState() {
     super.initState();
 
     _tabKeys = [];
-    _settingService = context.read<SettingsService>();
-    _baseService = context.read<BaseStationService>();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -70,9 +66,8 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
   @override
   void dispose() {
-
     if (_baseListener != null) {
-      _baseService.removeListener(_baseListener!);
+      context.read<BaseStationService>().removeListener(_baseListener!);
       _baseListener = null;
       mqtt_Service.stopMessageListener();
     }
@@ -81,31 +76,17 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     super.dispose();
   }
 
+
   Future<void> _getBluetoothDevices() async {
       lstPairedDevices = await getBluetoothDevices();
   }
   void _saveMonitor(MonitorSettings monitor) async {
     if (_tabController == null) return;
-
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
     final monitorService = context.read<MonitorSettingsService>();
-
-    final ref = FirebaseFirestore.instance
-        .collection(CollectionUsers)
-        .doc(uid)
-        .collection(CollectionMonitors);
-
-      await ref.doc(monitor.monDocId).set(
-        monitor.toMap(),
-        SetOptions(merge: true),              // UPDATE
-      );
-
+    monitorService.save(monitor);
     await monitorService.load();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Saved')));
+    MyGlobalSnackBar.show('Saved');
   }
   void _addMonitor() async {
     if (!mounted) return;
@@ -181,203 +162,28 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       );
     }
   }
-  Future<DocumentSnapshot<Map<String, dynamic>>> _getDocFuture(MonitorSettings monitor) {
-    String? uid = FirebaseAuth.instance.currentUser?.uid;
-
-    return _docFutures.putIfAbsent(
-        monitor.monDocId,
-            () => FirebaseFirestore.instance
-            .collection(CollectionUsers)
-            .doc(uid)
-            .collection(CollectionMonitors)
-            .doc(monitor.monDocId)
-            .get()
-    );
-  }
-  // Future<void> _pickAndUploadImage({ImageSource? source}) async {
-  //   if (source == null) return;
-  //   final monitorService = context.read<MonitorSettingsService>();
-  //
-  //   try {
-  //     if (_tabController == null) return;
-  //     final monitor = monitorService.lstMonitors[_tabController!.index];
-  //
-  //     final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-  //     if (uid.isEmpty) return;
-  //
-  //     // Pick File
-  //     final XFile? picked = await _imagePicker.pickImage(
-  //       source: source,
-  //       imageQuality: 85,
-  //     );
-  //     if (picked == null) return;
-  //
-  //     final String path =
-  //         '$CollectionUsers/$uid/$CollectionMonitors/${monitor.monDocId}_${DateTime.now().millisecondsSinceEpoch}.png';
-  //     final Reference ref = FirebaseStorage.instance.ref().child(path);
-  //     final File file = File(picked.path);
-  //
-  //     // Show loading indicator
-  //     setState(() {
-  //       _isUploading = true;
-  //       _uploadProgress = 0.0;
-  //     });
-  //
-  //     // Delete old image From Firebase
-  //     final oldUrl = monitor.imageURL;
-  //     if (oldUrl.toString().isNotEmpty) {
-  //       try {
-  //         await FirebaseStorage.instance.refFromURL(oldUrl).delete();
-  //       } catch (e) {
-  //         // Ignore if file doesn't exist
-  //       }
-  //     }
-  //
-  //     // Delete old image From Android
-  //     final directory = await getApplicationDocumentsDirectory();
-  //     String filename = getFileNameFromUrl(oldUrl);
-  //     final localPath = '${directory.path}/$filename';
-  //     final localFile = File(localPath);
-  //     if (await localFile.exists()) {
-  //       localFile.delete();
-  //     }
-  //
-  //     // Upload with progress listener
-  //     final uploadTask =
-  //         ref.putFile(file, SettableMetadata(contentType: 'image/png'));
-  //     uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-  //       final progress = snapshot.bytesTransferred / snapshot.totalBytes;
-  //       setState(() => _uploadProgress = progress);
-  //     });
-  //
-  //     // Wait until upload completes
-  //     await uploadTask;
-  //     final String downloadUrl = await ref.getDownloadURL();
-  //
-  //     // Update Firestore with the new image URL
-  //     await FirebaseFirestore.instance
-  //         .collection(CollectionUsers)
-  //         .doc(uid)
-  //         .collection(CollectionMonitors)
-  //         .doc(monitor.monDocId)
-  //         .update({FIRE_MON_IMAGE: downloadUrl});
-  //
-  //     await monitorService.load();
-  //
-  //     MyGlobalSnackBar.show('Image uploaded successfully!');
-  //   } on FirebaseException catch (e) {
-  //     MyGlobalSnackBar.show('Firebase error: ${e.message}');
-  //   } catch (e) {
-  //     MyGlobalSnackBar.show('Image upload failed: $e');
-  //   } finally {
-  //     // Hide loading indicator
-  //     setState(() {
-  //       _isUploading = false;
-  //       _uploadProgress = 0.0;
-  //     });
-  //   }
-  // }
-  Future<File?> saveNetworkImageLocally( BuildContext context, String vehicleId, String downloadUrl) async {
-    try {
-      final networkImage = NetworkImage(downloadUrl);
-
-      // Load the image
-      final completer = Completer<ui.Image>();
-      networkImage.resolve(const ImageConfiguration()).addListener(
-        ImageStreamListener((ImageInfo info, bool _) {
-          completer.complete(info.image);
-        }),
-      );
-      final ui.Image image = await completer.future;
-
-      // Convert to bytes
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return null;
-
-      final bytes = byteData.buffer.asUint8List();
-
-      // Save to local file
-      final directory = await getApplicationDocumentsDirectory();
-      String filename = getFileNameFromUrl(downloadUrl);
-      final file = File('${directory.path}/$filename');
-      await file.writeAsBytes(bytes);
-
-      //MyAlertDialog(context, "Save to Path", '${directory.path}/$vehicleId.png');
-
-      return file;
-    } catch (e) {
-      debugPrint('Error saving network image: $e');
-      return null;
-    }
-  }
-  String getFileNameFromUrl(String? downloadUrl) {
-    try {
-      if (downloadUrl == null) return "";
-
-      final uri = Uri.parse(downloadUrl);
-      final segments = uri.pathSegments;
-
-      // The last segment is the file name URL-encoded
-      final encodedFileName = segments.last;
-      final fileName =
-          Uri.decodeFull(encodedFileName); // decode %2F and other chars
-      int i = fileName.lastIndexOf('/');
-      String s = fileName.substring(i + 1, fileName.length);
-
-      return s;
-    } catch (e) {
-      debugPrint('Error extracting file name: $e');
-      return '';
-    }
-  }
   ImageProvider<Object> _getMonitorImage(MonitorSettings monitor) {
-    //if (_isUploading) return AssetImage(IMAGE_NO_IMAGE);
-    //String? downloadUrl = monitor?.imageURL ?? '';
-    //String monType = monitor?.monitorType ?? '';
+    if (monitor.imageURL == null || monitor.imageURL!.isEmpty ) {
+      switch (monitor.monitorType) {
+        case MonTypeVehicle:
+          return AssetImage(IMAGE_VEHICLE);
 
-    // final directory = await getApplicationDocumentsDirectory();
-    // String filename = getFileNameFromUrl(downloadUrl);
-    // final localPath = '${directory.path}/$filename';
-    // final localFile = File(localPath);
-    //try {
+        case MonTypeWheel:
+          return AssetImage(IMAGE_WHEEL);
 
-      // // Try local image first
-      // if (await localFile.exists()) {
-      //   //MyAlertDialog(context, "Load from Path", localPath);
-      //   return FileImage(localFile);
-      // }
+        case MonTypeMobileMachineMon:
+          return AssetImage(IMAGE_MOBILE_MACHINE);
 
-      // If no local file, download from Firebase
-      if (monitor.imageURL == null || monitor.imageURL!.isEmpty ) {
-        // Finally - Load Default
-        switch (monitor.monitorType) {
-          case MonTypeVehicle:
-            return AssetImage(IMAGE_VEHICLE);
+        case MonTypeStationaryMachineMon:
+          return AssetImage(IMAGE_STATIONARY_MACHINE);
 
-          case MonTypeWheel:
-            return AssetImage(IMAGE_WHEEL);
-
-          case MonTypeMobileMachineMon:
-            return AssetImage(IMAGE_MOBILE_MACHINE);
-
-          case MonTypeStationaryMachineMon:
-            return AssetImage(IMAGE_STATIONARY_MACHINE);
-
-          default:
-            return AssetImage(IMAGE_NO_IMAGE);
-        }
+        default:
+          return AssetImage(IMAGE_NO_IMAGE);
       }
-      else {
-        return AssetImage(IMAGE_NO_IMAGE);
-      }
-
-      // Load from FireStore
-      //await saveNetworkImageLocally(context, vehicleId, downloadUrl);
-      //return NetworkImage(downloadUrl);
-
-    // } catch (e) {
-    //   return AssetImage(IMAGE_NO_IMAGE);
-    // }
+    }
+    else {
+      return AssetImage(IMAGE_NO_IMAGE);
+    }
   }
   void _updateTabs(int length) {
     if (length == 0) return;
@@ -427,29 +233,32 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
   // MQTT
   void _setupMqttListener() {
+
     _baseListener = () async {
-      if (_baseService.isLoading) {
-        print("MQTT listener WAIT - baseService busy Loading");
+      if (context.read<BaseStationService>().isLoading) {
+        printMsg("MQTT listener WAIT - baseService busy Loading");
         return;
       }
 
       if( !_listenerStarted){
-        final ip = _settingService.fireSettings?.connectedDeviceIp;
+        final ip = context.read<SettingsService>().fireSettings?.connectedDeviceIp;
         if (ip == null || ip.isEmpty) return;
 
         if(!mqtt_Service.isConnected){
-          final ok = await _settingService.mqttConnect(ip);
+          final ok = await context.read<SettingsService>().mqttConnect(ip);
+          if(!mounted) return;
+
           if (ok) {
-            _baseService.setConnectedByIp(ip, true);
+            context.read<BaseStationService>().setConnectedByIp(ip, true);
 
             if (!_listenerStarted && mqtt_Service.isConnected) {
               _listenerStarted = true;
               mqtt_Service.setupMessageListener();
               mqtt_Service.onMessage( MQTT_TOPIC_TO_ANDROID, _onMqttMessage);
-              print("MQTT Listener Started");
+              printMsg("MQTT Listener Started");
             }
             else {
-              print("MQTT listener - already Started");
+              printMsg("MQTT listener - already Started");
             }
           }
           else{
@@ -459,7 +268,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       }
     };
 
-    _baseService.addListener(_baseListener!);
+    context.read<BaseStationService>().addListener(_baseListener!);
   }
   Future<bool> _scanMonitor(String ip)async{
     final settingsService = context.read<SettingsService>();
@@ -475,7 +284,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     };
 
     if(mqtt_Service.isConnected){
-      mqtt_Service.tx("", MQTT_CMD_REQ_MONITOR, payload, MQTT_TOPIC_FROM_ANDROID);
+      mqtt_Service.tx("", MQTT_CMD_DISCOVER, payload, MQTT_TOPIC_FROM_ANDROID);
     }
     return true;
   }
@@ -518,7 +327,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     final monitorService = context.read<MonitorSettingsService>();
 
     // Pair - Set Device ID
-    if (cmd == MQTT_CMD_REQ_MONITOR) {
+    if (cmd == MQTT_CMD_DISCOVER) {
       scanBusy = false;
       final monitor = monitorService.lstMonitors[_tabController!.index];
 
@@ -593,7 +402,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
 
     // IOT Monitor Data
-    if(cmd == MQTT_CMD_MONITOR_DATA){
+    if(cmd == MQTT_CMD_LIVE_MONITOR_DATA){
       final monitor = monitorService.lstMonitors[_tabController!.index];
       final payload = jsonData[MQTT_JSON_PAYLOAD];
       final value = payload[MQTT_JSON_WHEEL_DISTANCE];

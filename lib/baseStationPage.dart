@@ -24,11 +24,16 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   bool isLoading = true;
   TabController? _tabController;
   int _selectedIndex = 0;
+  late  BaseStationData baseSelected;
 
   final Map<String, TextEditingController> _controllersName = {};
   final Map<String, TextEditingController> _controllersDesc = {};
   final Map<String, TextEditingController> _controllersBluetooth = {};
   final Map<String, TextEditingController> _controllersIpAddress = {};
+  late TextEditingController _controllerName;
+  late TextEditingController _controllerDesc;
+  late TextEditingController _controllerBluetooth;
+  late TextEditingController _controllerIpAddress;
 
   final FlutterTts _flutterTts = FlutterTts();
   String? bluetoothValue;
@@ -46,11 +51,24 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
 
+  late FocusNode _focusNodeName;
+  late FocusNode _focusNodeDesc;
+  late FocusNode _focusNodeIP;
+
   @override
   void initState() {
     super.initState();
     _getBluetoothDevices();
     _initTts();
+
+    _focusNodeName = FocusNode();
+    _focusNodeDesc = FocusNode();
+    _focusNodeIP = FocusNode();
+
+    // 2. Add listeners to trigger save on focus loss
+    _focusNodeName.addListener(() => _handleFocusChange(_focusNodeName, 'name'));
+    _focusNodeDesc.addListener(() => _handleFocusChange(_focusNodeDesc, 'desc'));
+    _focusNodeIP.addListener(() => _handleFocusChange(_focusNodeIP, 'ip'));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -70,6 +88,10 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     for(final c in _controllersIpAddress.values){c.dispose();}
     for(final c in _controllersBluetooth.values){c.dispose();}
 
+    _focusNodeName.dispose();
+    _focusNodeDesc.dispose();
+    _focusNodeIP.dispose();
+
     _flutterTts.stop();
     _tabController?.dispose();
 
@@ -77,6 +99,17 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     super.dispose();
   }
 
+  void _handleFocusChange(FocusNode node, String field) {
+    if (!node.hasFocus) {
+      setState(() {
+        if (field == 'name') baseSelected.baseName = _controllerName.text;
+        if (field == 'desc') baseSelected.baseDesc = _controllerDesc.text;
+        if (field == 'ip') baseSelected.ipAddress = _controllerIpAddress.text;
+
+        _saveBase(baseSelected);
+      });
+    }
+  }
   Future<void> updateSettingFields(Map<String, dynamic> updates) async {
     SettingsService settingsService = context.read<SettingsService>();
     await settingsService.updateFireSettingsFields(updates);
@@ -491,12 +524,12 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                   child: TabBarView(
                     controller: _tabController,
                     children:  List.generate(baseService.lstBaseStations.length, (index){ //_baseService.lstBaseStations.map((base)  {
-                      final baseSelected = baseService.lstBaseStations[index];
+                      baseSelected = baseService.lstBaseStations[index];
 
-                      final _controllerName = _getControllerName(baseSelected);
-                      final _controllerDesc = _getControllerDesc(baseSelected);
-                      final _controllerIPAddress = _getControllerIpAdr(baseSelected);
-                      final _controllerBluetooth = _getControllerBluetooth(baseSelected);
+                      _controllerName = _getControllerName(baseSelected);
+                      _controllerDesc = _getControllerDesc(baseSelected);
+                      _controllerIpAddress = _getControllerIpAdr(baseSelected);
+                      _controllerBluetooth = _getControllerBluetooth(baseSelected);
 
                       if(selectedDevice != null){
                         _controllerBluetooth.text = selectedDevice?.platformName ?? '';
@@ -525,13 +558,13 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
                                 child: MyTextFormField(
+                                  focusNode: _focusNodeName,
                                   isReadOnly: false,
                                   backgroundColor: APP_BACKGROUND_COLOR,
                                   foregroundColor: Colors.white,
                                   controller: _controllerName,
                                   hintText: "Base Station Name",
                                   labelText: "Name",
-                                  onChanged: (value) {},
                                   onFieldSubmitted: (value){
                                     setState(() {
                                       baseSelected.baseName = value;
@@ -545,18 +578,16 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
                                 child: MyTextFormField(
+                                  focusNode: _focusNodeDesc,
                                   backgroundColor: APP_BACKGROUND_COLOR,
                                   foregroundColor: Colors.white,
                                   controller: _controllerDesc,
                                   hintText: "Enter value here",
                                   labelText: "Description",
-                                  onChanged: (value) {
-
-                                  },
                                   onFieldSubmitted: (value){
                                     setState(() {
                                       baseSelected.baseDesc = value;
-                                      baseService.setIpAddress(baseSelected, value);
+                                      //baseService.setIpAddress(baseSelected, value);
                                       _saveBase(baseSelected);
                                     });
                                   },
@@ -576,7 +607,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                         controller: _controllerBluetooth,
                                         hintText: "Bluetooth Identification",
                                         labelText: "Identification",
-                                        onChanged: (value) {},
+
                                         onFieldSubmitted: (value){
 
                                         },
@@ -606,13 +637,14 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
                                 child: MyTextFormField(
+                                  focusNode: _focusNodeIP,
                                   isReadOnly: false,
                                   backgroundColor: APP_BACKGROUND_COLOR,
                                   foregroundColor: Colors.white,
-                                  controller: _controllerIPAddress,
+                                  controller: _controllerIpAddress,
                                   hintText: "none",
                                   labelText: "IP Address",
-                                  onChanged: (value) {},
+
                                   onFieldSubmitted: (value){},
                                 ),
                               ),

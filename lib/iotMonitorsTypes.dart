@@ -238,6 +238,9 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   late final TextEditingController _controllerId;
   late final TextEditingController _controllerTicks;
   late final TextEditingController _controllerDistance;
+  late FocusNode _focusNodeName;
+  late FocusNode _focusNodeID;
+  late FocusNode _focusNodeTicks;
 
   @override
   void initState() {
@@ -246,6 +249,15 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
      _controllerName = TextEditingController(text: widget.monitorData.monitorName);
      _controllerTicks = TextEditingController(text: widget.monitorData.ticksPerM.toString());
      _controllerDistance = TextEditingController(text: widget.monitorData.wheelDistance.toString());
+
+    _focusNodeName = FocusNode();
+    _focusNodeID = FocusNode();
+    _focusNodeTicks = FocusNode();
+
+    // 2. Add listeners to trigger save on focus loss
+    _focusNodeName.addListener(() => _handleFocusChange(_focusNodeName, 'name'));
+    _focusNodeID.addListener(() => _handleFocusChange(_focusNodeID, 'id'));
+    _focusNodeTicks.addListener(() => _handleFocusChange(_focusNodeTicks, 'ticks'));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
     });
@@ -268,26 +280,30 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
     _controllerDistance.dispose();
     _controllerName.dispose();
     _controllerTicks.dispose();
+
+    _focusNodeName.dispose();
+    _focusNodeID.dispose();
+    _focusNodeTicks.dispose();
+
     super.dispose();
   }
 
+  void _handleFocusChange(FocusNode node, String field) {
+    if (!node.hasFocus) {
+      setState(() {
+        if (field == 'name') widget.monitorData.monitorName = _controllerName.text;
+        if (field == 'id') widget.monitorData.monitorId = _controllerId.text;
+        if (field == 'ticks') widget.monitorData.ticksPerM = double.parse(_controllerTicks.text);
+
+        context.read<MonitorSettingsService>().save(widget.monitorData);
+      });
+    }
+  }
   // Public methods for parent to update text Controllers
   void updateDistance(double value) {
     if (!mounted) return;
     _controllerDistance.text = value.toStringAsFixed(2);
   }
-  //void updateTicks(double value) {
-  //   if (!mounted) return;
-  //   _controllerTicks.text = value.toStringAsFixed(2);
-  // }
-  // void updateID(String value) {
-  //   if (!mounted) return;
-  //   _controllerId.text = value;
-  // }
-  // void updateName(String value) {
-  //   if (!mounted) return;
-  //   _controllerName.text = value;
-  // }
 
   @override
   Widget build(BuildContext context) {
@@ -299,10 +315,11 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 15),
           child: MyTextFormField(
+            focusNode: _focusNodeName,
             backgroundColor: APP_BACKGROUND_COLOR,
             foregroundColor: Colors.white,
             controller: _controllerName,
-            hintText: "Enter value here",
+            hintText: "none",
             labelText: "Wheel Name",
             onFieldSubmitted: widget.onChangedName,
           ),
@@ -317,10 +334,11 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 child: MyTextFormField(
+                  focusNode: _focusNodeID,
                   backgroundColor: APP_BACKGROUND_COLOR,
                   foregroundColor: Colors.white,
                   controller: _controllerId,
-                  hintText: "Select Monitor",
+                  hintText: "none",
                   labelText: "Monitor ID",
                   onFieldSubmitted: widget.onChangedMonId,
                 ),
@@ -341,7 +359,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                             : Colors.grey ,
                       ),
                       SizedBox(width: 10),
-                      Text("Scan",
+                      Text("Pair",
                         style: TextStyle(
                             color: settingService.isBaseStationConnected
                               ? Colors.white
@@ -361,10 +379,11 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 15),
           child: MyTextFormField(
+            focusNode: _focusNodeTicks,
             backgroundColor: APP_BACKGROUND_COLOR,
             foregroundColor: Colors.white,
             controller: _controllerTicks,
-            hintText: "Enter value here",
+            hintText: "none",
             labelText: "Ticks per Meter",
             onFieldSubmitted: widget.onChangedTicksPerM,
           ),
