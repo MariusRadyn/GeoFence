@@ -45,21 +45,21 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyADykx581l-LZkYgZP1OB7uryD3Pq9U7ow',
-    appId: '1:974321856114:web:a2c85995e56169ad531ceb',
-    messagingSenderId: '974321856114',
-    projectId: 'limitless-iot',
-    authDomain: 'limitless-iot.firebaseapp.com',
-    storageBucket: 'limitless-iot.firebasestorage.app',
-    measurementId: 'G-MBCPLLRD6N',
+    apiKey: 'AIzaSyBQf5sZS9Ve66qubyDbGs0PcJ6awp3VM0U',
+    appId: '1:850789059915:web:d1dc9e730a9b1e8d76ecce',
+    messagingSenderId: '850789059915',
+    projectId: 'limitless-iot-17e8f',
+    authDomain: 'limitless-iot-17e8f.firebaseapp.com',
+    storageBucket: 'limitless-iot-17e8f.firebasestorage.app',
+    measurementId: 'G-C80CFCL8DH',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDh3cuszLYtdp2GxYIscJOUj8-bFkqEzSA',
-    appId: '1:974321856114:android:bee3f2311d6702e1531ceb',
-    messagingSenderId: '974321856114',
-    projectId: 'limitless-iot',
-    storageBucket: 'limitless-iot.firebasestorage.app',
+    apiKey: 'AIzaSyA_yKE7Dik3G4bk3jGbBgACYY8urkiq27o',
+    appId: '1:850789059915:android:ea4c5eeea7c27ca276ecce',
+    messagingSenderId: '850789059915',
+    projectId: 'limitless-iot-17e8f',
+    storageBucket: 'limitless-iot-17e8f.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(

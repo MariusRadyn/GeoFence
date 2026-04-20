@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/IotDataPage.dart';
+import 'package:geofence/MqttService.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geofence/operatorsPage.dart';
 import 'package:geofence/TrackingPage.dart';
@@ -24,11 +25,12 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
+  final mqttService = MqttService();
   late AnimationController _controller;
   late Animation<double> _animation;
   final double drawerWidth = 250;
   Timer? _loadingTimer;
-  bool isLoggingIn = false;
+  bool busyLoggingIn = false;
 
   final Color colorMenuIcons = Colors.blue;
   final Color colorMenuText = Colors.blueGrey;
@@ -41,7 +43,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    mqtt_Service.init();
     _validateUser();
     _controller = AnimationController(
       vsync: this,
@@ -57,6 +58,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         curve: Curves.easeInOut,
       ),
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      // final ip = context.read<SettingsService>().fireSettings?.connectedDeviceIp;
+      // if (ip != null) {
+      //   final mqtt = MqttService();
+      //   mqtt.init(
+      //     ipAdr: ip,
+      //     autoReconnect: true,
+      //   );
+      //   mqttService.ensureConnectedAndListening(ip);
+      // }
+    });
   }
 
   @override
@@ -82,9 +97,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _controller.forward();
     }
   }
-  void showSignUpScreen (BuildContext context){
+  void _signUpScreen (){
     double width = MediaQuery.of(context).size.width * 0.8;
     double height = MediaQuery.of(context).size.height * 0.6;
+
+    _emailController.text = "";
+    _pwController.text = "";
+    _pwController2.text = "";
+    _userController.text = "";
 
     showDialog<void>(
       context: context,
@@ -193,7 +213,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           MyTextButton(
                             text:'OK',
                             onPressed: () async {
-                              final user = await signUp(context);
+                              final user = await _signUp();
 
                               if (user != null) {
                                 if(mounted){
@@ -212,24 +232,24 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       },
     );
   }
-  Future<User?> signUp(BuildContext context) async {
+  Future<User?> _signUp() async {
     UserDataService userService = context.read<UserDataService>();
     AuthResult result = AuthResult();
 
     if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
-      MyGlobalMessage.show("Warning", 'Please enter email and password.');
+      MyGlobalMessage.show("Info", 'Please enter email and password.', MyMessageType.info);
       return null;
     }
     if (!_emailController.text.contains('@')) {
-      MyGlobalMessage.show("Warning", 'Please enter valid email address.');
+      MyGlobalMessage.show("Info", 'Please enter valid email address.', MyMessageType.info);
       return null;
     }
     if (_userController.text.isEmpty) {
-      MyGlobalMessage.show("Warning", 'Please enter username.');
+      MyGlobalMessage.show("Info", 'Please enter username.', MyMessageType.info);
       return null;
     }
     if (_pwController.text != _pwController2.text) {
-      MyGlobalMessage.show("Warning", 'Passwords dont match.');
+      MyGlobalMessage.show("Info", 'Passwords dont match.', MyMessageType.info);
       return null;
     }
 
@@ -263,10 +283,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         return result.user;
 
       } else {
+        if(result.code != null){
+          MyGlobalMessage.show("Login", result.code!, MyMessageType.warning);
+        } else {
+          MyGlobalMessage.show("Login", result.exception.toString(), MyMessageType.warning);
+        }
+
         userService.logout();
       }
     } catch (e) {
-      MyGlobalMessage.show("Error", result.exception.toString());
+      MyGlobalMessage.show("Error", result.exception.toString(), MyMessageType.error);
     }
     return null;
   }
@@ -287,23 +313,23 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ),
     );
   }
-  Future<bool> loginWithEmail(BuildContext context) async {
+  Future<bool> _loginWithEmail() async {
     UserDataService userService = context.read<UserDataService>();
     userService.errorMsg = "";
     userService.firebaseError = false;
 
     if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
-      MyGlobalMessage.show("Login", 'Please enter email and password.');
+      MyGlobalMessage.show("Login", 'Please enter email and password.', MyMessageType.info);
       return false;
     }
     if (!_emailController.text.contains('@')) {
-      MyGlobalMessage.show("Login", 'Please enter a valid email address.');
+      MyGlobalMessage.show("Login", 'Please enter a valid email address.', MyMessageType.info);
       return false;
     }
 
     try {
       setState(() {
-        isLoggingIn = true;
+        busyLoggingIn = true;
       });
 
       AuthResult result = await firebaseAuthService.fireAuthSignInWithEmail(
@@ -312,42 +338,48 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         _pwController.text,
       );
 
+      await userService.load();
+
       setState(() {
-        isLoggingIn = false;
+        busyLoggingIn = false;
       });
 
       // Logged In
       if (result.isSuccess) {
         if(userService.userdata != null){
-          userService.isLoggedIn = true;
+          userService.isUserLoggedIn = true;
         }
       } else {
         // Logged ERROR
         if(userService.userdata != null){
-          userService.isLoggedIn = false;
+          userService.isUserLoggedIn = false;
         }
 
         if(result.code != null){
-          MyGlobalMessage.show("Error", result.code!);
+          MyGlobalMessage.show("Login", result.code!, MyMessageType.warning);
         } else {
-          MyGlobalMessage.show("Error", result.exception.toString());
+          MyGlobalMessage.show("Login", result.exception.toString(), MyMessageType.warning);
         }
           return false;
       }
     } catch (e) {
-      printMsg('Error: $e');
+      MyGlobalMessage.show("Error(LoginWithEmail):", '$e', MyMessageType.debug);
       return false;
     }
     return true;
   }
-  Future<bool> loginWithGoogle(BuildContext context) async {
+  Future<bool> _loginWithGoogle(BuildContext context) async {
     UserDataService userService = context.read<UserDataService>();
     userService.errorMsg = "";
     userService.firebaseError = false;
+
     try {
-      setState(() {isLoggingIn = true; });
+      setState(() {
+        busyLoggingIn = true;
+      });
+
       AuthResult result = await firebaseAuthService.signInWithGoogle();
-      setState(() {isLoggingIn = false;});
+      await userService.load();
 
       if(result.isSuccess){
         final doc = await FirebaseFirestore.instance
@@ -369,16 +401,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 uid: result.user!.uid
             );
 
-            printMsg('User logged in with Google');
+            setState(() {
+              userService.isUserLoggedIn = true;
+              busyLoggingIn = true;
+            });
 
           } else {
             if(!result.user!.emailVerified){
-              MyGlobalMessage.show("Error", "Email address not verified");
+              MyGlobalMessage.show("Warning", "Email address not verified", MyMessageType.warning);
               return false;
             }
             else {
 
-              MyGlobalMessage.show("Error", "Firebase User Credential == Null");
+              MyGlobalMessage.show("Warning", "User Credentials not found", MyMessageType.warning);
               return false;
             }
           }
@@ -386,50 +421,57 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       }
       else{
         if(result.code != null){
-          MyGlobalMessage.show("Error", result.code!);
+          MyGlobalMessage.show("Error", result.code!, MyMessageType.error);
         } else {
-          MyGlobalMessage.show("Error", result.exception.toString());
+          MyGlobalMessage.show("Error", result.exception.toString(), MyMessageType.error);
         }
       }
+      setState(() {
+        busyLoggingIn = false;
+      });
 
     } catch (e) {
-      printMsg('Sign in With Google Error: $e');
-      MyGlobalMessage.show("Error", '$e');
+      setState(() {
+        busyLoggingIn = false;
+      });
+
+      MyGlobalMessage.show("Error(LoginWithGoogle)", '$e', MyMessageType.debug);
       return false;
     }
+
     return true;
   }
-  Future<bool> resetPasswordWithEmail(BuildContext context) async {
+  Future<bool> _resetPasswordWithEmail() async {
     UserDataService userService = context.read<UserDataService>();
 
     if (_emailController.text.isEmpty) {
-      MyGlobalMessage.show("Warning", 'Please enter email address.');
+      MyGlobalMessage.show("Info", 'Please enter email address.', MyMessageType.info);
       return false;
     }
     if (!_emailController.text.contains('@')) {
-      MyGlobalMessage.show("Warning", 'Please enter a valid email address.');
+      MyGlobalMessage.show("Info", 'Please enter a valid email address.', MyMessageType.info);
       return false;
     }
 
     try {
       if(await firebaseAuthService.fireAuthResetPassword(context, _emailController.text)) {
         if(userService.userdata != null){
-          userService.isLoggedIn = false;
+          userService.isUserLoggedIn = false;
         }
         printMsg('Password Reset');
         return true;
       }
       else {
-        MyGlobalMessage.show("Error", 'Failed to reset password');
+        MyGlobalMessage.show("Error", 'Failed to reset password', MyMessageType.error);
         return false;
       }
 
     } catch (e) {
-      MyGlobalMessage.show("Error", '$e');
+      MyGlobalMessage.show("Error", '$e', MyMessageType.error);
       return false;
     }
   }
-  Future<void> _loginScreen (BuildContext context) async{
+  Future<void> _loginScreen () async{
     await showDialog<void>(
       context: context,
       builder: (BuildContext context) {
@@ -474,8 +516,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             backgroundColor: APP_BACKGROUND_COLOR,
                             foregroundColor: Colors.white,
                             controller: _emailController,
-                            hintText: "Enter Email Address",
-                            labelText: "Email Address",
+                            //hintText: "Enter Email Address",
+                            labelText: "Email",
                             valueFontSize: 12,
 
                           ),
@@ -489,7 +531,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             foregroundColor: Colors.white,
                             backgroundColor: APP_BACKGROUND_COLOR,
                             controller: _pwController,
-                            hintText: "Enter Password",
+                            //hintText: "Enter Password",
                             labelText: "Password",
                             isPasswordField: true,
                             valueFontSize: 12,
@@ -511,8 +553,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                             GestureDetector(
                               onTap: () async {
-                                if(await resetPasswordWithEmail(context)){
-                                  MyGlobalMessage.show("Check email", "Please check your email and follow the instructions");
+                                if(await _resetPasswordWithEmail()){
+                                  MyGlobalMessage.show("Check email", "Please check your email and follow the instructions", MyMessageType.info);
                                 }
                                 //Navigator.of(context).pop();
                               },
@@ -526,7 +568,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                         const SizedBox(height: 10),
 
-                        // Register
+                        // Sign up
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -540,10 +582,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                             GestureDetector(
                               onTap: () {
-                                showSignUpScreen(context);
+                                _signUpScreen();
                               },
                               child: const Text(
-                                "Register",
+                                "Sign up",
                                 style: TextStyle(color: COLOR_ORANGE),
                               ),
                             ),
@@ -562,7 +604,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               context: context,
                               onPressed: () async {
                                 Navigator.of(context).pop();
-                                await loginWithGoogle(context);
+                                await _loginWithGoogle(context);
                               },
                               iconPath: ICON_GOOGLE,
                             ),
@@ -602,11 +644,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             MyTextButton(
                               text: 'OK',
                               onPressed: () async {
-                                bool loggedIn = await loginWithEmail(context);
+                                bool loggedIn = await _loginWithEmail();
+                                if(!mounted) return;
+
                                 if(loggedIn){
-                                  if(mounted){
-                                    Navigator.of(context).pop();
-                                  }
+                                  Navigator.of(context).pop();
                                 }
                               },
                             )
@@ -645,7 +687,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     try {
       await user.sendEmailVerification();   // 🔥 Forces server check
     } catch (e) {
-      MyGlobalMessage.show("Error", e.toString());
+      MyGlobalMessage.show("Error", e.toString(), MyMessageType.error);
     }
   }
   void _showEmailVerificationDialog(BuildContext context) {
@@ -710,10 +752,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       },
     );
   }
-  void _startLoadingTimeout() {
+  void _startTimeout(int sec) {
     _loadingTimer?.cancel();
 
-    _loadingTimer = Timer(const Duration(seconds: 15), () async {
+    _loadingTimer = Timer(Duration(seconds: sec), () async {
       if (FirebaseAuth.instance.currentUser != null) {
         await FirebaseAuth.instance.signOut();
       }
@@ -733,12 +775,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           return Consumer2<SettingsService, UserDataService>(
               builder: (context, settings, user,__){
 
-                final isLoading = settings.isLoading || user.isLoading || snapshot.connectionState == ConnectionState.waiting || isLoggingIn;
+                final isLoading = settings.isLoading || user.isLoading || snapshot.connectionState == ConnectionState.waiting || busyLoggingIn;
                 final userLoggedIn = snapshot.hasData && user.userdata != null;
 
                 String image = "";
                 if(user.userdata!=null){
                   image = user.userdata!.imageURL ?? "";
+                }
+
+                if(settings.fireSettings?.connectedDeviceIp != null && MqttService().isConnected == false){
+                    MqttService().startService(settings.fireSettings!.connectedDeviceIp);
                 }
 
                 ImageProvider profileImage;
@@ -750,7 +796,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 }
 
                 if (isLoading) {
-                  _startLoadingTimeout();
+                  _startTimeout(10);
                 } else {
                   _cancelLoadingTimeout();
                 }
@@ -801,11 +847,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             padding: const EdgeInsets.only(right: 10, top: 2, bottom: 2),
                             child: GestureDetector(
                               onTap: () async {
+                                await user.load();
+
                                 if (!isLoading && userLoggedIn) {
                                   if (user.userdata?.emailValidated != true) {
                                     MyGlobalMessage.show(
                                       "Verify Email",
                                       "Please open your email.\nClick on the verify link",
+                                        MyMessageType.info
+
                                     );
                                     return;
                                   }
@@ -820,7 +870,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                 }
 
                                 if (!isLoading && !userLoggedIn) {
-                                 await _loginScreen(context);
+                                 await _loginScreen();
                                  await user.load();
                                 };
                               },

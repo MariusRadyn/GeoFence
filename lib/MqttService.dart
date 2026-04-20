@@ -7,60 +7,194 @@ import 'package:mqtt_client/mqtt_server_client.dart';
 Timer? _reconnectTimer;
 
 class MqttService {
-  String ipAdr;
-  final int port;
-  late String myDeviceId;
-  final String mqttPin;
-  bool isConnected = false;
-  bool autoReconnect = false;
+  static final MqttService _instance = MqttService._internal();
+  factory MqttService() => _instance;
+  MqttService._internal();
 
-  late MqttServerClient client;
+  late String ipAdr;
+  late int port;
+  late String myDeviceId;
+
+  bool isConnected = false;
+  bool _listenerStarted = false;
+  bool autoReconnect = false;
+  bool _initialized = false;
+
+  MqttServerClient? client;
   final Map<String, List<void Function(String)>> _topicCallbacks = {};
   StreamSubscription? _updatesSubscription;
   final Set<String> _subscribedTopics = {};
 
-  MqttService({
-    this.ipAdr = "",
-    this.port = 1883,
-    this.mqttPin = "",
-    this.isConnected = false,
-    this.autoReconnect = false
-  }){
-    init();
+  final _messageStreamController = StreamController<String>.broadcast();
+  Stream<String> get messageStream => _messageStreamController.stream;
+
+
+  void dispose() {
+    _messageStreamController.close();
   }
 
-  Future<void> init() async {
-     myDeviceId = await ClientIdManager.getClientId();
+  // -----------------------------------------------------------
+  // Initialize
+  // -----------------------------------------------------------
+  Future<bool> startService(String ip) async{
+    bool ok = true;
 
-    client = MqttServerClient(ipAdr, myDeviceId)
-      ..port = 1883
-      ..logging(on: false)
-      ..keepAlivePeriod = 20
-      ..onConnected = _onConnected
-      ..onDisconnected = _onDisconnected
-      ..onAutoReconnected = _onAutoReconnected
-      ..onAutoReconnect = _onAutoReconnect
-      ..onSubscribed = (t) => print("Subscribed to $t");
+    if(!_initialized) ok = await _init(ip);
+    if(ok && !isConnected) ok = await _connect();
+    if(ok && !_listenerStarted) _startListener();
 
-    client.setProtocolV311();
-
-    client.connectTimeoutPeriod = 4000;
-    client.autoReconnect = true;
-    client.resubscribeOnAutoReconnect = true;
+    return ok;
   }
+  Future<bool> _init(String ip) async {
 
+    try{
+      ipAdr = ip;
+      autoReconnect = true;
+      port = 1883;
+
+      if(ipAdr.isEmpty) return false;
+
+      myDeviceId = await ClientIdManager.getClientId();
+
+      client = MqttServerClient(ipAdr, myDeviceId)
+        ..port = port
+        ..logging(on: false)
+        ..keepAlivePeriod = 20
+        ..onConnected = _onConnected
+        ..onDisconnected = _onDisconnected
+        ..onAutoReconnected = _onAutoReconnected
+        ..onAutoReconnect = _onAutoReconnect
+        ..onSubscribed = (t) => printMsg("Subscribed to $t");
+
+      client!.setProtocolV311();
+
+      client!.connectTimeoutPeriod = 4000;
+      client!.autoReconnect = autoReconnect;
+      client!.resubscribeOnAutoReconnect = true;
+      _initialized = true;
+      return true;
+    }
+    catch (e)
+    {
+      printMsg("MQTT Init Error: $e");
+      return false;
+    }
+
+  }
+  void _startListener() {
+    if (!_listenerStarted) {
+      //_listenerStarted = true inside _rxStreamListener();
+      //baseService.setConnectedByIp(ip, true);
+
+      _rxStreamListener();
+      printMsg("MQTT Listener Started");
+    }
+    else {
+      printMsg("MQTT listener - already Started");
+    }
+  }
+  Future<bool> _connect() async {
+    try {
+      if(client == null) return false;
+
+      client!.connectionMessage = MqttConnectMessage()
+          .withClientIdentifier(myDeviceId)
+          .startClean()
+          .withWillTopic(MQTT_TOPIC_WILL)
+          .withWillMessage('offline')
+          .withWillQos(MqttQos.atLeastOnce);
+
+      printMsg("Connecting to MQTT broker... $ipAdr");
+      await client!.connect();
+
+      if (client!.connectionStatus != null && client!.connectionStatus!.state == MqttConnectionState.connected) {
+        printMsg("Connected successfully!");
+        return true;
+      } else {
+        printMsg("Connection failed");
+      }
+
+    } catch (e) {
+      printMsg("MQTT Connect Error: $e");
+
+    }
+    return false;
+  }
+  Future<bool> reconnect(String ip) async {
+    try {
+      isConnected = false;
+      _initialized = false;
+      _listenerStarted = false;
+      _updatesSubscription!.cancel();
+
+      _disconnect();
+      return await startService(ip);
+
+    } catch (e) {
+      print("Error connecting: $e");
+      return false;
+    }
+  }
+  Future<void> stopMessageListener() async {
+    await _updatesSubscription?.cancel();
+    _updatesSubscription = null;
+    await _messageStreamController.close();
+  }
+  void _subscribe(String topic){
+    if (_subscribedTopics.contains(topic)) return;
+    if(client == null)return;
+
+    _subscribedTopics.add(topic);
+    client!.subscribe(topic, MqttQos.atMostOnce);
+
+    final _topic = "$topic/$myDeviceId";
+    client!.subscribe(_topic, MqttQos.atLeastOnce);
+    printMsg("Subscribing: $topic");
+  }
+  void _disconnect() {
+    if(client != null) return;
+
+    // Disconnect if connected
+    if (_initialized && client!.connectionStatus?.state == MqttConnectionState.connected) {
+      client!.disconnect();
+      _initialized = false;
+    }
+
+    // // Cancel the updates listener
+    // await _updatesSubscription?.cancel();
+    // _updatesSubscription = null;
+    //
+    // // Clear topic callbacks
+    // _topicCallbacks.clear();
+    // _subscribedTopics.clear();
+    //
+    // // Optional: unsubscribe from all topics
+    // for (final topic in _subscribedTopics) {
+    //   client.unsubscribe(topic);
+    // }
+    //
+    // // Disconnect the client
+    // _reconnectTimer?.cancel();
+    // client.disconnect();
+    //
+    // isConnected = false;
+  }
 
   // -----------------------------------------------------------
   // CALLBACKS
   // -----------------------------------------------------------
   void _onConnected() {
     isConnected = true;
+
+    _subscribe(MQTT_TOPIC_TO_ANDROID);
+
     print("MQTT Connected");
     _reconnectTimer?.cancel(); // stop reconnection attempts
   }
   void _onDisconnected() {
     isConnected = false;
     print("MQTT Disconnected");
+    dispose();
     if(autoReconnect) _scheduleReconnect(); // auto schedule reconnect manually
   }
   void _onAutoReconnect() {
@@ -69,45 +203,88 @@ class MqttService {
   void _onAutoReconnected() {
     print("Auto-reconnected successfully");
   }
-  void onMessage(String topic, void Function(String message) callback) {
-    // Add subscription only once
-    String _topic = topic + "/" + myDeviceId;
-
-    if (!_subscribedTopics.contains(_topic)) {
-      client.subscribe(_topic, MqttQos.atLeastOnce);
-      _subscribedTopics.add(_topic);
-      print("Subscribed to topic: $_topic");
+  void _rxStreamListener() {
+    if (client == null || client!.updates == null) {
+      printMsg("MQTT RX Stream Error: Client == null");
+      return;
     }
 
-    // Store callback
-    _topicCallbacks.putIfAbsent(_topic, () => []);
-    _topicCallbacks[_topic]!.add(callback);
+    printMsg("MQTT RX Stream Started");
+    try{
+      _updatesSubscription = client!.updates!.listen((List<MqttReceivedMessage<MqttMessage>> messages) {
+        _listenerStarted = true;
 
-    print("Callback registered for topic: $_topic");
+        for (final recMsg in messages) {
+          try {
+            final topic = recMsg.topic;
+
+            if (recMsg.payload is! MqttPublishMessage) {
+              continue;
+            }
+
+            final publishMessage = recMsg.payload as MqttPublishMessage;
+            final payload = MqttPublishPayload.bytesToStringAsString(
+              publishMessage.payload.message,
+            );
+
+            // Push message to the stream
+            if (!_messageStreamController.isClosed) {
+              _messageStreamController.add(payload);
+            }
+
+            // Dispatch to callbacks
+            _dispatchMessage(topic, payload);
+            printMsg('MQTT message received on $topic: $payload');
+          }
+          catch (e) {
+            printMsg('MQTT Rx Stream: $e');
+          }
+        }
+      });
+    }
+    catch (e){
+        printMsg('MQTT Rx Stream: $e');
+    }
+
+  }
+  void onMessage(String topic, void Function(String message) callback) {
+  //   // Add subscription only once
+  //   String _topic = topic + "/" + myDeviceId;
+  //
+  //   if (!_subscribedTopics.contains(_topic)) {
+  //     client.subscribe(_topic, MqttQos.atLeastOnce);
+  //     _subscribedTopics.add(_topic);
+  //     print("Subscribed to topic: $_topic");
+  //   }
+  //
+  //   // Store callback
+  //   _topicCallbacks.putIfAbsent(_topic, () => []);
+  //   _topicCallbacks[_topic]!.add(callback);
+  //
+  //   print("Callback registered for topic: $_topic");
   }
 
   // -----------------------------------------------------------
   // Methods
   // -----------------------------------------------------------
-  void getClientId() async {
-    myDeviceId = await ClientIdManager.getClientId();
-  }
   void _scheduleReconnect() {
     if (_reconnectTimer?.isActive ?? false) return;
 
     _reconnectTimer = Timer.periodic(Duration(seconds: 5), (t) {
-      print("Reconnecting to MQTT…");
-      connect();
+      _connect();
+      printMsg("Reconnecting to MQTT…");
     });
   }
   void listenForSettings(void Function(Map<String, dynamic>) onSettingsReceived) {
-      subscribe(MQTT_TOPIC_TO_ANDROID);
+      _subscribe(MQTT_TOPIC_TO_ANDROID);
       //final topic = "$MQTT_TOPIC_RESPONSE/$_clientId";
       //client.subscribe(topic, MqttQos.atLeastOnce);
       //print("Subscribing: $MQTT_TOPIC_RESPONSE");
+      if(client?.updates == null) return;
 
       print("Listening: $MQTT_TOPIC_TO_ANDROID");
-      client.updates!.listen((messages) {
+
+      client!.updates!.listen((messages) {
         final mqttMsg = messages[0].payload as MqttPublishMessage;
         final payload = MqttPublishPayload.bytesToStringAsString(
           mqttMsg.payload.message,
@@ -124,6 +301,7 @@ class MqttService {
       });
     }
   void tx(String toDeviceId, String cmd, dynamic jsonMsg, String topic) {
+    if(client == null) return;
 
     final payload = jsonEncode({
       MQTT_JSON_FROM_DEVICE_ID: myDeviceId,
@@ -136,27 +314,8 @@ class MqttService {
     final builder = MqttClientPayloadBuilder();
     builder.addString(payload);
 
-    client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
+    client!.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
     print("MQTT TX: $payload");
-  }
-  void setupMessageListener() {
-    if(client.updates == null) return;
-
-    _updatesSubscription = client.updates!.listen((List<MqttReceivedMessage<MqttMessage>> messages) {
-      final recMsg = messages.first;
-      final topic = recMsg.topic;
-
-      final payload = MqttPublishPayload.bytesToStringAsString(
-        (recMsg.payload as MqttPublishMessage).payload.message,
-      );
-
-      // Send to your registered callbacks
-      _dispatchMessage(topic, payload);
-    });
-  }
-  void stopMessageListener()
-  {
-    _updatesSubscription?.cancel();
   }
   void _dispatchMessage(String topic, String message) {
     if (_topicCallbacks.containsKey(topic)) {
@@ -166,76 +325,50 @@ class MqttService {
     }
   }
 
-  // -----------------------------------------------------------
-  // Commands
-  // -----------------------------------------------------------
-  Future<bool> connect() async {
-    try {
-      client.connectionMessage = MqttConnectMessage()
-          .withClientIdentifier(myDeviceId)
-          .startClean()
-          .withWillTopic(MQTT_TOPIC_WILL)
-          .withWillMessage('offline')
-          .withWillQos(MqttQos.atLeastOnce);
-
-      print("Connecting to MQTT broker... $ipAdr");
-      await client.connect();
-
-      if (client.connectionStatus!.state == MqttConnectionState.connected) {
-        print("Connected successfully!");
-        return true;
-
-      } else {
-        print("Connection failed");
-      }
-
-    } catch (e) {
-      print("Error connecting: $e");
-
-    }
-    return false;
-  }
-  void publish(String topic, Map<String, dynamic> data) {
-    final builder = MqttClientPayloadBuilder();
-    builder.addString(jsonEncode(data));
-    client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
-  }
-  void listen(String topic, void Function(String message) callback) {
-    client.subscribe(topic, MqttQos.atLeastOnce);
-
-    client.updates!.listen((messages) {
-      final payload =
-      MqttPublishPayload.bytesToStringAsString(
-        (messages[0].payload as MqttPublishMessage).payload.message,
-      );
-
-      callback(payload);
-    });
-  }
-  void subscribe(String topic){
-    final _topic = "$topic/$myDeviceId";
-    client.subscribe(_topic, MqttQos.atLeastOnce);
-    print("Subscribing: $_topic");
-  }
-  Future<void> disconnect() async {
-    // Cancel the updates listener
-    await _updatesSubscription?.cancel();
-    _updatesSubscription = null;
-
-    // Clear topic callbacks
-    _topicCallbacks.clear();
-    _subscribedTopics.clear();
-
-    // Optional: unsubscribe from all topics
-    for (final topic in _subscribedTopics) {
-      client.unsubscribe(topic);
-    }
-
-    // Disconnect the client
-    _reconnectTimer?.cancel();
-    client.disconnect();
-  }
-
+// void publish(String topic, Map<String, dynamic> data) {
+//   if(client == null) return;
+//
+//   final builder = MqttClientPayloadBuilder();
+//   builder.addString(jsonEncode(data));
+//   client!.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
+// }
+// Future<bool> connectAndListen(String ip) async {
+//   if (!_listenerStarted) {
+//     if (ip.isEmpty) return false;
+//
+//     if (!isConnected) {
+//       final ok = await connect(ip);
+//       if(!ok) return false;
+//
+//       printMsg("MQTT Listener Started");
+//       //baseService.setConnectedByIp(ip, true);
+//
+//       if (!_listenerStarted) {
+//         _listenerStarted = true;
+//         _startListener();
+//         printMsg("MQTT Listener Started");
+//       }
+//       else {
+//         printMsg("MQTT listener - already Started");
+//       }
+//       return true;
+//     }
+//     return true;
+//   }
+//   return true;
+// }
+// void listen(String topic, void Function(String message) callback) {
+//   client.subscribe(topic, MqttQos.atLeastOnce);
+//
+//   client.updates!.listen((messages) {
+//     final payload =
+//     MqttPublishPayload.bytesToStringAsString(
+//       (messages[0].payload as MqttPublishMessage).payload.message,
+//     );
+//
+//     callback(payload);
+//   });
+// }
 }
 
 

@@ -1,5 +1,4 @@
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/splashScreen.dart';
@@ -7,16 +6,22 @@ import 'package:geofence/utils.dart';
 import 'package:geofence/firebase_options.dart';
 import 'package:provider/provider.dart';
 import 'gpsServices.dart';
-import 'homePage.dart';
+import 'mqtt_lifecycle_handler.dart';
+late AppLifecycleHandler lifecycleHandler;
 
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+
+     await Firebase.initializeApp(
+       options: DefaultFirebaseOptions.currentPlatform,
+     );
 
     await initializeGpsService();
+
+    //final mqttService = MqttService();
+    //lifecycleHandler = AppLifecycleHandler(mqttService);
+    //lifecycleHandler.init();
 
     // Web app
     //if(kIsWeb){
@@ -25,6 +30,7 @@ Future<void> main() async {
     //}else print("Android App");
 
     //runApp(MyApp());
+
     runApp(
       MultiProvider(
         providers: [
@@ -37,10 +43,9 @@ Future<void> main() async {
         child: MyApp(),
       ),
     );
-
   }
   catch(e){
-    print('Error $e');
+    print('StartUp Error: $e');
   }
 }
 

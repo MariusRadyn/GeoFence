@@ -64,6 +64,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
         MyGlobalMessage.show(
           "Vehicle Not Found",
           "No Vehicles Found.\nPlease set one in 'IOT Monitors'",
+            MyMessageType.warning
         );
       }
 

@@ -26,9 +26,17 @@ const APP_VERSION = "V1.0.1";
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool isDebug = true;
 String debugLog = '';
+bool disableDebugMsg = false;
 
 const String  googleAPiKey = String.fromEnvironment('MAPS_API_KEY');
-final mqtt_Service = MqttService();
+
+enum MyMessageType {
+  info,
+  debug,
+  warning,
+  error,
+  success,
+}
 
 // keytool -keystore C:\Users\mradyn\.android\debug.keystore -list
 // PW android
@@ -121,7 +129,6 @@ const List<String> settingOperatorTypeList = [
 // Profile Types
 const String profileTypeOperator = "operator";
 const String profileTypeUser = "user";
-
 
 // Operator Types
 const String opAccessOperator = "Operator";
@@ -420,7 +427,10 @@ class Grabber extends StatelessWidget {
 
 //--Global Messages ------------------------------------------------------------
 class MyGlobalMessage {
-  static void show(String header, String message) {
+
+  static void show(String header, String message, MyMessageType msgType) {
+    if(msgType == MyMessageType.debug && disableDebugMsg ) return;
+
     final context = navigatorKey.currentState?.overlay?.context;
     if (context == null) return;
 
@@ -660,13 +670,13 @@ class MyCustomTileWithPic extends StatelessWidget {
       child: Center(
         child: GestureDetector(
           onTap: (){
-            if(user.isLoggedIn == true){
+            if(user.isUserLoggedIn == true){
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => widget),
               );
             }else{
-              MyGlobalMessage.show("Warning", "User not Logged In");
+              MyGlobalMessage.show("Warning", "User not Logged In", MyMessageType.warning);
             }
           },
           child: Container(
@@ -1726,27 +1736,27 @@ Future<bool> _isWifiConnected(String ip, int port) async {
     return false;  // Cannot reach Pi
   }
 }
-Future<bool> _mqttConnect(String ip) async {
-  if (!await _isWifiConnected(ip, 1883)) {
-    //MyGlobalSnackBar.show("No Wifi Connection");
-    return false;
-  }
-
-  mqtt_Service.ipAdr = ip;
-  await mqtt_Service.init();
-
-  if (!await mqtt_Service.connect()) {
-    MyGlobalSnackBar.show("MQTT Failed");
-    return false;
-  }
-
-  MyGlobalSnackBar.show("Connected: $ip");
-  return true;
-}
-Future<void> _mqttDisconnect()async{
-  mqtt_Service.disconnect();
-  MyGlobalSnackBar.show("Disconnected");
-}
+// Future<bool> _mqttConnect(String ip) async {
+//   if (!await _isWifiConnected(ip, 1883)) {
+//     //MyGlobalSnackBar.show("No Wifi Connection");
+//     return false;
+//   }
+//
+//   mqtt_Service.ipAdr = ip;
+//   await mqtt_Service.init();
+//
+//   if (!await mqtt_Service.connect()) {
+//     MyGlobalSnackBar.show("MQTT Failed");
+//     return false;
+//   }
+//
+//   MyGlobalSnackBar.show("Connected: $ip");
+//   return true;
+// }
+// Future<void> _mqttDisconnect()async{
+//   mqtt_Service.disconnect();
+//   MyGlobalSnackBar.show("Disconnected");
+// }
 
 //--Services--------------------------------------------------------------------
 class UserData{
@@ -1808,15 +1818,11 @@ class UserData{
   }
 }
 class UserDataService extends ChangeNotifier {
-  //static final UserDataService _instance = UserDataService._internal();
-  //factory UserDataService() => _instance;
-  //UserDataService._internal();
-
   UserData? _userdata;
   UserData? get userdata => _userdata;
 
   bool isLoading = false;
-  bool isLoggedIn = false;
+  bool isUserLoggedIn = false;
   bool firebaseError = false;
   String errorMsg = "";
 
@@ -1828,7 +1834,7 @@ class UserDataService extends ChangeNotifier {
 
     if (user == null) {
       _userdata = null;
-      isLoggedIn = false;
+      isUserLoggedIn = false;
       isLoading = false;
       notifyListeners();
       return;
@@ -1838,38 +1844,50 @@ class UserDataService extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final user = FirebaseAuth.instance.currentUser; // Get the user object
+    final uid = user?.uid;
     final firestore = FirebaseFirestore.instance;
 
-    if (uid == null) {
-      firebaseError = true;
+    try {
+      isLoading = true;
+      firebaseError = false;
+      notifyListeners();
+
+      if (uid == null) {
+        firebaseError = true;
+        isLoading = false;
+        isUserLoggedIn = false;
+        errorMsg = "User ID not found";
+        notifyListeners();
+        return;
+      }
+
+      await user?.reload();
+
+      final doc = await firestore
+          .collection(CollectionUsers)
+          .doc(uid)
+          .get();
+
+      if (doc.exists) {
+        _userdata = UserData.fromMap(doc.data()?[FieldsUserData] ?? {});
+        _userdata?.userID = uid;
+        _userdata?.emailValidated = FirebaseAuth.instance.currentUser!.emailVerified;
+        isUserLoggedIn = true;
+      }
+      else {
+        _userdata = null;
+        isUserLoggedIn = false;
+      }
+
       isLoading = false;
-      isLoggedIn = false;
-      errorMsg = "User ID not found";
-      return;
+      notifyListeners();
     }
-
-    isLoading = true;
-    firebaseError = false;
-    notifyListeners();
-
-    final doc = await firestore
-        .collection(CollectionUsers)
-        .doc(uid)
-        .get();
-
-    if (doc.exists) {
-      _userdata = UserData.fromMap(doc.data()?[FieldsUserData] ?? {});
-      _userdata?.userID = uid;
-      _userdata?.emailValidated = FirebaseAuth.instance.currentUser!.emailVerified;
-      isLoggedIn = true;
-    } else {
-      _userdata = null;
-      isLoggedIn = false;
+    catch(e) {
+      isLoading = false;
+      notifyListeners();
+      MyGlobalMessage.show("Error(Load)", "$e", MyMessageType.debug);
     }
-
-    isLoading = false;
-    notifyListeners();
   }
   Future<void> create(UserData newUserData, {required String uid}) async {
     _userdata = newUserData;
@@ -1955,7 +1973,7 @@ class UserDataService extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-      MyGlobalMessage.show('update Userdata Fields:', '$e');
+      MyGlobalMessage.show('Error:', '$e', MyMessageType.error);
     }
   }
   Future<void> logout() async{
@@ -1967,7 +1985,7 @@ class UserDataService extends ChangeNotifier {
 
       notifyListeners();
     }catch (e){
-      MyGlobalMessage.show('Logout:', '$e');
+      MyGlobalMessage.show('Error:', '$e', MyMessageType.error);
     }
   }
   void printHash() {
@@ -2058,20 +2076,26 @@ class SettingsService extends ChangeNotifier {
   Future<void> load() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
+    try{
+      isLoading = true;
 
-    isLoading = true;
+      final doc = await _db
+          .collection(CollectionUsers)
+          .doc(uid)
+          .get();
 
-    final doc = await _db
-        .collection(CollectionUsers)
-        .doc(uid)
-        .get();
+      if (doc.exists) {
+        _settings = FireSettings.fromMap(doc.data()?[FieldsSettings] ?? {});
+      }
 
-    if (doc.exists) {
-      _settings = FireSettings.fromMap(doc.data()?[FieldsSettings] ?? {});
+      isLoading = false;
       notifyListeners();
-    }
 
-    isLoading = false;
+    } catch (e) {
+      isLoading = false;
+      notifyListeners();
+      MyGlobalMessage.show('Error(Settings)', '$e', MyMessageType.debug);
+    }
   }
   Map<String, dynamic> flattenMap(Map<String, dynamic> map, [String prefix = '']) {
     final result = <String, dynamic>{};
@@ -2123,42 +2147,42 @@ class SettingsService extends ChangeNotifier {
       notifyListeners();
 
     } catch (e) {
-      MyGlobalMessage.show('updateSettingFields:', '$e');
+      MyGlobalMessage.show('Error:', '$e', MyMessageType.error);
     }
   }
   void notify() => notifyListeners();
 
-  Future<bool> mqttConnect(String ip) async {
-    if (isConnecting) return true;
-    if (isBaseStationConnected) return true;
-
-    isConnecting = true;
-    notifyListeners();
-
-    try {
-      if(await _mqttConnect(ip)){
-        isBaseStationConnected = true;
-        lastConnectionError = '';
-      }
-    } catch (e) {
-      lastConnectionError = e.toString();
-    } finally {
-      isConnecting = false;
-      notifyListeners();
-    }
-
-    if(!isBaseStationConnected){
-      return false;
-    }
-    else {
-      return true;
-    }
-  }
-  Future<void> mqttDisconnect()async{
-    await _mqttDisconnect();
-    isBaseStationConnected = false;
-    notifyListeners();
-  }
+  // Future<bool> mqttConnect(String ip) async {
+  //   if (isConnecting) return true;
+  //   if (isBaseStationConnected) return true;
+  //
+  //   isConnecting = true;
+  //   notifyListeners();
+  //
+  //   try {
+  //     if(await _mqttConnect(ip)){
+  //       isBaseStationConnected = true;
+  //       lastConnectionError = '';
+  //     }
+  //   } catch (e) {
+  //     lastConnectionError = e.toString();
+  //   } finally {
+  //     isConnecting = false;
+  //     notifyListeners();
+  //   }
+  //
+  //   if(!isBaseStationConnected){
+  //     return false;
+  //   }
+  //   else {
+  //     return true;
+  //   }
+  // }
+  // Future<void> mqttDisconnect()async{
+  //   await _mqttDisconnect();
+  //   isBaseStationConnected = false;
+  //   notifyListeners();
+  // }
 
   void update({
     bool? isBaseStationConnected,
@@ -2916,7 +2940,7 @@ Widget MyTextButton({double fontSize = 20, VoidCallback? onPressed, required Str
 Widget ShowWelcomeMsg(BuildContext context) {
   UserDataService user = context.read<UserDataService>();
 
-  if (user.isLoggedIn) {
+  if (user.isUserLoggedIn) {
     return Text(
       'Welcome ${user.userdata!.displayName}',
       style: const TextStyle(

@@ -67,6 +67,7 @@ dependencies:
   #lan_scanner: ^4.0.0
   #network_info_plus: ^6.0.0
   path: any
+  firebase_app_check: ^0.3.2+10
 
 flutter_launcher_icons:
   android: true

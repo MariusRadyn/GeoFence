@@ -281,7 +281,7 @@ class FirebaseAuthService {
   void fireAuthChangeListner() {
     _auth.userChanges().listen((User? user) {
       if (user == null) {
-        print('User is currently signed out!');
+        printMsg('User is currently signed out!');
       } else {
         print('User Data Changed!');
       }
@@ -291,16 +291,14 @@ class FirebaseAuthService {
     try {
       _auth.currentUser!.updateDisplayName(username);
     } catch (e) {
-      printMsg("Firebase update username Error: $e");
-      MyGlobalMessage.show("Error","Firebase update username: $e");
+      MyGlobalMessage.show("Error","$e", MyMessageType.error);
     }
   }
   void updatePhotoURL(String url) {
     try {
       _auth.currentUser!.updatePhotoURL(url);
     } catch (e) {
-      printMsg("Firebase update URL Error: $e");
-      MyGlobalMessage.show("Error","Firebase update URL: $e");
+      MyGlobalMessage.show("Error","$e", MyMessageType.error);
     }
   }
 

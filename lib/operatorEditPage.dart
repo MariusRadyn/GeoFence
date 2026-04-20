@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:geofence/MqttService.dart';
 import 'package:geofence/editProfilePicPage.dart';
 import 'package:geofence/utils.dart';
 import 'package:image_picker/image_picker.dart';
@@ -21,6 +22,7 @@ class OperatorEditPage extends StatefulWidget {
 }
 
 class _OperatorEditPageState extends State<OperatorEditPage> {
+  final mqttService = MqttService();
   TextEditingController? controllerName;
   TextEditingController? controllerSurname;
   TextEditingController? controllerTag;
@@ -47,15 +49,13 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       listenerStarted = false;
-      mqtt_Service.isConnected = false;
-      _setupMqttListener();
+      //_setupMqttListener();
+      _startMqttListener();
     });
   }
 
   @override
   void dispose() {
-    mqtt_Service.stopMessageListener();
-    mqtt_Service.isConnected = false;
     listenerStarted = false;
     tagRequested = false;
     _timeout?.cancel();
@@ -77,76 +77,56 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
 
       if (!mounted || _dialogShown) return;
       _dialogShown = true; // set before showing to avoid races
-      MyGlobalMessage.show("Timeout", "No Reply From Base Station");
+      MyGlobalMessage.show("Timeout", "No Reply From Base Station", MyMessageType.warning);
     });
   }
 
   // MQTT
-  void _setupMqttListener() async {
-    if( !listenerStarted){
-      final ip = settingService.fireSettings?.connectedDeviceIp;
-      if (ip == null || ip.isEmpty) return;
+  void _startMqttListener() {
+    mqttService.messageStream.listen((msg) {
+      debugPrint('MQTT RX: $msg');
 
-      if(!mqtt_Service.isConnected){
-        final ok = await settingService.mqttConnect(ip);
-        if (ok) {
-          baseService.setConnectedByIp(ip, true);
+      final jsonData = jsonDecode(msg);
+      final cmd = jsonData[MQTT_JSON_CMD];
+      final fromId = jsonData[MQTT_JSON_FROM_DEVICE_ID];
 
-          if (!listenerStarted) {
-            listenerStarted = true;
-            mqtt_Service.setupMessageListener();
-            mqtt_Service.onMessage( MQTT_TOPIC_TO_ANDROID, _onMqttMessage);
-            debugPrint("MQTT Listener Started");
+      // Tag Data (from any IOT)
+      if (cmd == MQTT_CMD_TAG_DATA) {
+        if(tagRequested){
+          tagRequested = false;
+
+          _timeout?.cancel();
+          final payload = jsonData[MQTT_JSON_PAYLOAD];
+          final tagId = payload[MQTT_JSON_TAG_DATA];
+
+          // Pop Dialog box
+          if (Navigator.canPop(navigatorKey.currentContext!)) {
+            Navigator.pop(navigatorKey.currentContext!);
           }
-          else {
-            debugPrint("MQTT listener - already Started");
+
+          if(widget.operatorData != null){
+            setState(() {
+              widget.operatorData!.tagId = tagId.toString();
+              controllerTag!.text = tagId.toString();
+            });
           }
-        }
-        else{
-          return;
+
+          mqttService.tx("", MQTT_CMD_TAG_ACK, {}, MQTT_TOPIC_FROM_ANDROID );
+
+          if(!mounted)return;
+          context.read<OperatorService>().save(widget.operatorData!);
+          debugPrint("Tag: $tagId");
         }
       }
-    }
-  }
-  void _onMqttMessage(String msg) {
-    debugPrint('MQTT RX: $msg');
 
-    final Map<String, dynamic> jsonData = jsonDecode(msg);
-    final cmd = jsonData[MQTT_JSON_CMD];
-
-    // Tag Data (from any IOT)
-    if (cmd == MQTT_CMD_TAG_DATA) {
-      if(tagRequested){
-        tagRequested = false;
-
+      // ACK (from Base)
+      if (cmd == MQTT_CMD_ACK) {
         _timeout?.cancel();
-        final payload = jsonData[MQTT_JSON_PAYLOAD];
-        final tagId = payload[MQTT_JSON_TAG_DATA];
-
-        // Pop Dialog box
-        if (Navigator.canPop(navigatorKey.currentContext!)) {
-          Navigator.pop(navigatorKey.currentContext!);
-        }
-
-        if(widget.operatorData != null){
-          setState(() {
-            widget.operatorData!.tagId = tagId.toString();
-            controllerTag!.text = tagId.toString();
-          });
-        }
-
-        mqtt_Service.tx("", MQTT_CMD_TAG_ACK, {}, MQTT_TOPIC_FROM_ANDROID );
-        context.read<OperatorService>().save(widget.operatorData!);
-        debugPrint("Tag: $tagId");
+        debugPrint("ACK From Base");
       }
-    }
-
-    // ACK (from Base)
-    if (cmd == MQTT_CMD_ACK) {
-      _timeout?.cancel();
-      debugPrint("ACK From Base");
-    }
+    });
   }
+
 
   Future<void> requestTag() async{
     final base = context.read<BaseStationService>();
@@ -155,7 +135,8 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     if(base.lstBaseStations.isEmpty){
       MyGlobalMessage.show(
           'Base Stations',
-          'No Base Stations found. Please set one in Base Stations page'
+          'No Base Stations found. Please set one in Base Stations page',
+          MyMessageType.info
       );
       return;
     }
@@ -164,17 +145,19 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     if (ip == null || ip.isEmpty) {
       MyGlobalMessage.show(
           'Base Stations',
-          'No Base Station connection found. Please connect to one in Base Stations page'
+          'No Base Station connection found. Please connect to one in Base Stations page',
+          MyMessageType.info
       );
       return;
     }
 
     if(!settings.isBaseStationConnected) {
-      if(!await settings.mqttConnect(ip)){
+      if(!await mqttService.startService(ip)){
         if(mounted){
           MyGlobalMessage.show(
               'Base Stations',
-              'Could not connect to Base Station. Please check that the Base Station is powered up and running'
+              'Could not connect to Base Station. Please check that the Base Station is powered up and running',
+              MyMessageType.info
           );
           return;
         }
@@ -185,11 +168,13 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
 
     // Send Request
     // This only tells the Base to pass on any tags received from any IOTs
-    mqtt_Service.tx("",MQTT_CMD_TAG_REQ,{}, MQTT_TOPIC_FROM_ANDROID );
+    mqttService.tx("",MQTT_CMD_TAG_REQ,{}, MQTT_TOPIC_FROM_ANDROID );
     if(mounted) {
       MyGlobalMessage.show(
           "Read Tag",
-          'Present a Tag On Any IOT Device That is in WiFi Range');
+          'Present a Tag On Any IOT Device That is in WiFi Range',
+          MyMessageType.info
+      );
     }
 
     startTimer();

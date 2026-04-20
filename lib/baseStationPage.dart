@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:geofence/MqttService.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -20,11 +22,13 @@ class BaseStationPage extends StatefulWidget {
 }
 
 class _BaseStationState extends State<BaseStationPage> with TickerProviderStateMixin{
+  final mqttService = MqttService();
   bool Debug = false;
   bool isLoading = true;
   TabController? _tabController;
   int _selectedIndex = 0;
   late  BaseStationData baseSelected;
+  Timer? _timeoutTimer;
 
   final Map<String, TextEditingController> _controllersName = {};
   final Map<String, TextEditingController> _controllersDesc = {};
@@ -43,6 +47,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
   List<ScanResult> lstAvailableDevices = [];
   ScanResult? selectedAvailableDevice;
+  late StreamSubscription<String> _mqttSubscription;
 
   BluetoothDevice? pairedDevice;
   BluetoothDevice? selectedDevice;
@@ -59,6 +64,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   void initState() {
     super.initState();
     _getBluetoothDevices();
+    _startMqttListener();
     _initTts();
 
     _focusNodeName = FocusNode();
@@ -91,14 +97,55 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     _focusNodeName.dispose();
     _focusNodeDesc.dispose();
     _focusNodeIP.dispose();
-
     _flutterTts.stop();
     _tabController?.dispose();
+    _mqttSubscription.cancel();
 
     FlutterBluePlus.stopScan();
     super.dispose();
   }
 
+  // MQTT
+  void _startMqttListener() {
+    _mqttSubscription = mqttService.messageStream.listen((msg) {
+      if(!mounted) return;
+
+      debugPrint('MQTT RX: $msg');
+
+      final jsonData = jsonDecode(msg);
+      final cmd = jsonData[MQTT_JSON_CMD];
+      final fromId = jsonData[MQTT_JSON_FROM_DEVICE_ID];
+
+      // Tag Data (from any IOT)
+      if (cmd == MQTT_CMD_PING) {
+        _timeoutTimer!.cancel();
+
+        // Pass
+        setState(() {
+          context.read<SettingsService>().updateFireSettingsFields({
+            SettingConnectedDevice : baseSelected.baseName,
+            SettingConnectedDeviceIp : baseSelected.ipAddress
+          });
+        });
+
+        setState(() {
+          baseSelected.isConnected = true;
+        });
+      }
+    });
+  }
+
+  void _startTimeout(int sec) {
+    _timeoutTimer?.cancel();
+
+    _timeoutTimer = Timer(Duration(seconds: sec), () async {
+      if ( !baseSelected.isConnected) {
+        MyGlobalMessage.show("Connection Timeout", "Base Station not found", MyMessageType.warning);
+      }
+    });
+  }
+
+  // Methods
   void _handleFocusChange(FocusNode node, String field) {
     if (!node.hasFocus) {
       setState(() {
@@ -277,7 +324,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
       }
     });
   }
-
   Future<void> _getBluetoothDevices() async {
       lstPairedDevices = await getBluetoothDevices();
 
@@ -664,7 +710,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                     final bluetoothName = baseSelected.bluetoothName;
 
                                     if(bluetoothName == ""){
-                                      MyGlobalMessage.show("Warning", "No Identification Selected");
+                                      MyGlobalMessage.show("Warning", "No Identification Selected", MyMessageType.warning);
                                       return;
                                     }
 
@@ -705,32 +751,23 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                 children: [
                                   InkWell(
                                       onTap: () async {
-                                        final ip = baseSelected.ipAddress ;
 
-                                        if(ip == ""){
-                                          MyGlobalMessage.show("Warning", "No IP Address");
+                                        if(baseSelected.ipAddress == ""){
+                                          MyGlobalMessage.show("Warning", "No IP Address", MyMessageType.warning);
                                           return;
                                         }
 
                                         // Connect MQTT
                                         if(baseSelected.isConnected == false){
-                                          if(await settingsService.mqttConnect(ip)) {
-
-                                            // Pass
-                                            setState(() {
-                                              baseSelected.isConnected = true;
-
-                                              settingsService.updateFireSettingsFields({
-                                                SettingConnectedDevice : baseSelected.baseName,
-                                                SettingConnectedDeviceIp : ip
-                                              });
-                                            });
-
+                                          if(await mqttService.startService(baseSelected.ipAddress)) {
+                                            mqttService.tx(baseSelected.bluetoothName, MQTT_CMD_PING, {} ,MQTT_TOPIC_FROM_ANDROID);
+                                            _startTimeout(3);
                                           } else {
 
                                             // Failed
-                                            MyGlobalMessage.show("Warning", "Wifi connection FAILED");
+                                            MyGlobalMessage.show("Warning", "Wifi connection FAILED", MyMessageType.warning);
                                             setState(() {
+                                              //mqttService.disconnect();
                                               baseSelected.isConnected = false;
                                             });
                                             return;
@@ -738,7 +775,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                         }
                                         else {
                                           // Disconnect
-                                          settingsService.mqttDisconnect();
+                                          mqttService.client!.disconnect();
 
                                           setState(() {
                                             baseSelected.isConnected = false;

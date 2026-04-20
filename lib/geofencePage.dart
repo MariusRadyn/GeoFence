@@ -292,7 +292,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
   }
   Future<void> _saveGeoFence() async {
     if (_currentPolygonPoints.length < 3) {
-      MyGlobalMessage.show("Warning", 'You need at least 3 points to create a geofence');
+      MyGlobalMessage.show("Warning", 'You need at least 3 points to create a geofence', MyMessageType.warning);
       return;
     }
 
@@ -350,7 +350,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
           .toList();
 
       if (geoPointsList.isEmpty){
-        MyGlobalMessage.show("Warning", 'No Geofence points found');
+        MyGlobalMessage.show("Warning", 'No Geofence points found', MyMessageType.warning);
       }
       else{
         // Get the document to update or create new one
@@ -380,7 +380,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       }
 
     } catch (e) {
-      MyGlobalMessage.show("Error", "$e");
+      MyGlobalMessage.show("Error", "$e", MyMessageType.error);
     } finally {
       setState(() {
         _isLoading = false;
@@ -440,12 +440,12 @@ class _GeoFencePageState extends State<GeoFencePage> {
     UserData? userData = context.read<UserDataService>().userdata;
 
     if(firestoreId.isEmpty){
-      MyGlobalMessage.show("Warning", "Please select a Fence");
+      MyGlobalMessage.show("Warning", "Please select a Fence", MyMessageType.warning);
       return;
     }
 
     if (userData == null) {
-      MyGlobalMessage.show("Error", "User not loaded");
+      MyGlobalMessage.show("Error", "User not loaded", MyMessageType.error);
       return;
     }
 
