@@ -2785,8 +2785,9 @@ class OperatorService extends ChangeNotifier {
   bool firebaseError = false;
 
   final newOperator = OperatorData(
-      name: 'New',
-      surname: 'Operator',
+      docId: '',
+      name: 'none',
+      surname: 'none',
       tagId: 'none',
       accessLevel: opAccessOperator
   );
@@ -2802,21 +2803,19 @@ class OperatorService extends ChangeNotifier {
 
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
+    try{
 
-    final snapshot = await FirebaseFirestore.instance
+      final snapshot = await FirebaseFirestore.instance
         .collection(CollectionUsers)
         .doc(uid)
         .collection(CollectionOperators)
         .get();
 
-    final list = snapshot.docs
+      final list = snapshot.docs
         .map((doc) => OperatorData.fromMap(doc.data(), doc.id))
         .toList();
 
-    try {
-      if (lstOperators.length != list.length) {
-        setOperators(list);
-      }
+      setOperators(list);
     }
     catch (e) {
       MyGlobalSnackBar.show("Cloud Error: $e");
@@ -2827,30 +2826,32 @@ class OperatorService extends ChangeNotifier {
       notifyListeners();
     }
   }
-  Future<String> addNew() async {
+  Future<OperatorData?> addNew() async {
     try{
       String? uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return "";
+      if (uid == null) return null;
+
+      isLoading = true; // Set loading state
+      notifyListeners();
 
       final ref = FirebaseFirestore.instance
           .collection(CollectionUsers)
           .doc(uid)
           .collection(CollectionOperators);
 
-      final doc = await ref.add(newOperator.toMap());
+      final docRef = ref.doc();
+      final newOp = newOperator.copyWith(docID: docRef.id);
+      await docRef.set(newOp.toMap());
       await load();
 
-      notifyListeners();
-      return doc.id;
+      return newOp;
     }
     catch(e){
-      MyGlobalSnackBar.show('Cloud Error $e');
-      firebaseError = true;
-      return "";
-    }
-    finally {
+      MyGlobalSnackBar.show('$e');
       isLoading = false;
+      firebaseError = true;
       notifyListeners();
+      return null;
     }
   }
   Future<void> save(OperatorData operator) async{
@@ -2883,7 +2884,6 @@ class OperatorService extends ChangeNotifier {
         );
       }
 
-
       await load();
       MyGlobalSnackBar.show('Saved');
     }
@@ -2903,10 +2903,16 @@ class OperatorService extends ChangeNotifier {
           .doc(operator.docId)
           .delete();
 
+
+      _lstOps.removeWhere((c) => c.docId == operator.docId);
+      notifyListeners();
+
       await load();
 
-      String path = "$profileTypeOperator/${operator.docId}/${operator.imageFilename}";
-      await fireStoreDeleteFile(path);
+      if(operator.imageFilename != null && operator.imageFilename!.isNotEmpty){
+        String path = "$profileTypeOperator/${operator.docId}/${operator.imageFilename}";
+        await fireStoreDeleteFile(path);
+      }
 
     } catch (e) {
       MyGlobalSnackBar.show('Delete Failed: $e');

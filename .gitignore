@@ -6563,3 +6563,4 @@ node_modules/@firebase/remote-config/dist/esm/src/public_types.d.ts
 node_modules/@firebase/remote-config/dist/esm/src/register.d.ts
 node_modules/@firebase/remote-config/dist/esm/src/remote_config.d.ts
 /android/app/google-services.json
+/lib/firebase_options.dart

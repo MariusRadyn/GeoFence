@@ -20,12 +20,11 @@ class OperatorEditPage extends StatefulWidget {
   @override
   State<OperatorEditPage> createState() => _OperatorEditPageState();
 }
-
 class _OperatorEditPageState extends State<OperatorEditPage> {
   final mqttService = MqttService();
-  TextEditingController? controllerName;
-  TextEditingController? controllerSurname;
-  TextEditingController? controllerTag;
+  TextEditingController? _controllerName;
+  TextEditingController? _controllerSurname;
+  TextEditingController? _controllerTag;
   bool tagRequested = false;
   bool listenerStarted = false;
   late final SettingsService settingService;
@@ -34,14 +33,25 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
   bool _dialogScheduled = false; // prevents multiple registrations
   bool _dialogShown = false;     // prevents multiple dialogs
 
+  late String oldName;
+  late String oldSurname;
+
+  late FocusNode _focusNodeName;
+  late FocusNode _focusNodeSurname;
 
   @override
   void initState() {
     super.initState();
 
-    controllerName = TextEditingController(text: widget.operatorData?.name ?? '');
-    controllerSurname = TextEditingController(text: widget.operatorData?.surname ?? '');
-    controllerTag = TextEditingController(text: widget.operatorData?.tagId ?? '');
+    _controllerName = TextEditingController(text: widget.operatorData?.name ?? '');
+    _controllerSurname = TextEditingController(text: widget.operatorData?.surname ?? '');
+    _controllerTag = TextEditingController(text: widget.operatorData?.tagId ?? '');
+
+    _focusNodeName = FocusNode();
+    _focusNodeSurname = FocusNode();
+
+    _focusNodeName.addListener(() => _handleFocusChange(_focusNodeName, 'name'));
+    _focusNodeSurname.addListener(() => _handleFocusChange(_focusNodeSurname, 'surname'));
 
     settingService = context.read<SettingsService>();
     baseService = context.read<BaseStationService>();
@@ -49,7 +59,6 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       listenerStarted = false;
-      //_setupMqttListener();
       _startMqttListener();
     });
   }
@@ -59,9 +68,14 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     listenerStarted = false;
     tagRequested = false;
     _timeout?.cancel();
-    controllerName?.dispose();
-    controllerSurname?.dispose();
-    controllerTag?.dispose();
+
+    _focusNodeName.dispose();
+    _focusNodeSurname.dispose();
+
+    _controllerName?.dispose();
+    _controllerSurname?.dispose();
+    _controllerTag?.dispose();
+
     super.dispose();
   }
 
@@ -107,7 +121,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
           if(widget.operatorData != null){
             setState(() {
               widget.operatorData!.tagId = tagId.toString();
-              controllerTag!.text = tagId.toString();
+              _controllerTag!.text = tagId.toString();
             });
           }
 
@@ -127,7 +141,18 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     });
   }
 
+// Methods
+  void _handleFocusChange(FocusNode node, String field) {
+    if (!node.hasFocus) {
+      setState(() {
+        if (field == 'name')  widget.operatorData!.name = _controllerName!.text;
+        if (field == 'surname')  widget.operatorData!.surname = _controllerSurname!.text;
 
+        if(oldName == widget.operatorData!.name && oldSurname == widget.operatorData!.surname) return;
+        context.read<OperatorService>().save(widget.operatorData!);
+      });
+    }
+  }
   Future<void> requestTag() async{
     final base = context.read<BaseStationService>();
     final settings = context.read<SettingsService>();
@@ -184,6 +209,11 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
 
   @override
   Widget build(BuildContext context) {
+    if(_controllerName != null && _controllerSurname != null) {
+      oldName = _controllerName!.text;
+      oldSurname = _controllerSurname!.text;
+    }
+
     return  Scaffold(
       backgroundColor: APP_BACKGROUND_COLOR,
       appBar: AppBar(
@@ -239,6 +269,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                   // Name Surname
                   SizedBox(height: 10),
                   MyText(
+
                       text: '${widget.operatorData!.name} ${widget.operatorData!.surname}',
                       fontsize: 20,
                   ),
@@ -270,10 +301,10 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
                     child: MyTextFormField(
+                      focusNode: _focusNodeName,
                       backgroundColor: APP_BACKGROUND_COLOR,
                       foregroundColor: Colors.white,
-                      controller: controllerName,
-                      hintText: "Enter Name",
+                      controller: _controllerName,
                       labelText: "Name",
                       onFieldSubmitted: (value){
                         setState(() {
@@ -288,10 +319,10 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
                     child: MyTextFormField(
+                      focusNode: _focusNodeSurname,
                       backgroundColor: APP_BACKGROUND_COLOR,
                       foregroundColor: Colors.white,
-                      controller: controllerSurname,
-                      hintText: "Enter Surname",
+                      controller: _controllerSurname,
                       labelText: "Surname",
                       onFieldSubmitted: (value){
                         setState(() {
@@ -316,7 +347,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                               isReadOnly: true,
                               backgroundColor: APP_BACKGROUND_COLOR,
                               foregroundColor: Colors.white,
-                              controller: controllerTag,
+                              controller: _controllerTag,
                               hintText: "none",
                               labelText: "Tag ID",
                               onFieldSubmitted: (value){},

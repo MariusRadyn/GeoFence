@@ -18,6 +18,7 @@ class _OperatorsPageState extends State<OperatorsPage> {
   @override
   void initState() {
     super.initState();
+    context.read<OperatorService>().load();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -65,11 +66,12 @@ class _OperatorsPageState extends State<OperatorsPage> {
     final separator = photoUrl.contains('?') ? '&' : '?';
     return '$photoUrl${separator}v=$version';
   }
-  void _addNew() async {
-    if (!mounted) return;
+  Future<OperatorData?> _addNew() async {
+    if (!mounted) return null;
 
     OperatorService operatorService = context.read<OperatorService>();
-    final docId = await operatorService.addNew();
+    final newOperator = await operatorService.addNew();
+    return newOperator;
   }
   void _deleteOperatorDialog(OperatorData operator) async {
     showDialog(
@@ -149,13 +151,16 @@ class _OperatorsPageState extends State<OperatorsPage> {
           floatingActionButton: FloatingActionButton(
             backgroundColor: COLOR_ORANGE,
             foregroundColor: Colors.white,
-            onPressed: (){
-              _addNew();
+            onPressed: () async{
+              OperatorData? newOperator =  await _addNew();
+              if(newOperator == null) return;
+              if(!mounted) return;
+
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => OperatorEditPage(
-                      operatorData: context.read<OperatorService>().newOperator,
+                      operatorData: newOperator,
                   ),
                 ),
               );

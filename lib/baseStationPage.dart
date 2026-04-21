@@ -56,6 +56,10 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
 
+  late String oldBaseName;
+  late String oldBaseDesc;
+  late String oldBaseIp;
+
   late FocusNode _focusNodeName;
   late FocusNode _focusNodeDesc;
   late FocusNode _focusNodeIP;
@@ -97,6 +101,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     _focusNodeName.dispose();
     _focusNodeDesc.dispose();
     _focusNodeIP.dispose();
+
     _flutterTts.stop();
     _tabController?.dispose();
     _mqttSubscription.cancel();
@@ -153,6 +158,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
         if (field == 'desc') baseSelected.baseDesc = _controllerDesc.text;
         if (field == 'ip') baseSelected.ipAddress = _controllerIpAddress.text;
 
+        if(oldBaseName == baseSelected.baseName && oldBaseDesc == baseSelected.baseDesc && oldBaseIp == baseSelected.ipAddress) return;
         _saveBase(baseSelected);
       });
     }
@@ -175,20 +181,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     if (_tabController == null) return;
     BaseStationService baseService = context.read<BaseStationService>();
 
-    // final uid = FirebaseAuth.instance.currentUser?.uid;
-    // if (uid == null) return;
-    //
-    // final ref = FirebaseFirestore.instance
-    //     .collection(CollectionUsers)
-    //     .doc(uid)
-    //     .collection(CollectionServers);
-    //
-    // await ref.doc(base.docId).set(
-    //   base.toMap(),
-    //   SetOptions(merge: true),              // UPDATE
-    // );
-    //
-    // await baseService.load();
     await baseService.save(base);
 
     if (_tabController != null &&  baseService.lstBaseStations.isNotEmpty) {
@@ -202,21 +194,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     if (!mounted) return;
 
     BaseStationService baseService = context.read<BaseStationService>();
-
-    // String? uid = FirebaseAuth.instance.currentUser?.uid;
-    // if (uid == null) return;
-    //
-    // final ref = FirebaseFirestore.instance
-    //     .collection(CollectionUsers)
-    //     .doc(uid)
-    //     .collection(CollectionServers);
-    //
-    // final base = BaseStationData(
-    //   baseName: 'New Base',
-    // );
-    //
-    // final doc = await ref.add(base.toMap());
-    // await baseService.load();
     final docId = await baseService.addNew();
 
     if(docId.isNotEmpty){
@@ -281,19 +258,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     );
   }
   Future<void> _deleteBase(BaseStationData base) async {
-
-    //User? user = FirebaseAuth.instance.currentUser;
     BaseStationService baseService = context.read<BaseStationService>();
-
-    // 1️⃣ Delete from Firestore
-    // await FirebaseFirestore.instance
-    //     .collection(CollectionUsers)
-    //     .doc(user?.uid)
-    //     .collection(CollectionServers)
-    //     .doc(base.docId)
-    //     .delete();
-    //
-    // await baseService.load();
     await baseService.delete(base);
 
     setState(() {
@@ -538,7 +503,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                   ),
 
                   // Delete Button
-
                   BottomNavigationBarItem(
                     icon: Icon(Icons.delete_forever),
                     label: 'Delete',
@@ -577,6 +541,10 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                       _controllerIpAddress = _getControllerIpAdr(baseSelected);
                       _controllerBluetooth = _getControllerBluetooth(baseSelected);
 
+                      oldBaseName = _controllerName.text;
+                      oldBaseDesc = _controllerDesc.text;
+                      oldBaseIp = _controllerIpAddress.text;
+
                       if(selectedDevice != null){
                         _controllerBluetooth.text = selectedDevice?.platformName ?? '';
                       }
@@ -612,10 +580,10 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   hintText: "Base Station Name",
                                   labelText: "Name",
                                   onFieldSubmitted: (value){
-                                    setState(() {
-                                      baseSelected.baseName = value;
-                                      _saveBase(baseSelected);
-                                    });
+                                    //setState(() {
+                                    //  baseSelected.baseName = value;
+                                    //  _saveBase(baseSelected);
+                                    //});
                                   },
                                 ),
                               ),
