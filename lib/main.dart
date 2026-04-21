@@ -5,6 +5,7 @@ import 'package:geofence/splashScreen.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/firebase_options.dart';
 import 'package:provider/provider.dart';
+import 'MqttService.dart';
 import 'gpsServices.dart';
 import 'mqtt_lifecycle_handler.dart';
 late AppLifecycleHandler lifecycleHandler;
@@ -19,9 +20,9 @@ Future<void> main() async {
 
     await initializeGpsService();
 
-    //final mqttService = MqttService();
-    //lifecycleHandler = AppLifecycleHandler(mqttService);
-    //lifecycleHandler.init();
+    final mqttService = MqttService();
+    lifecycleHandler = AppLifecycleHandler(mqttService);
+    lifecycleHandler.init();
 
     // Web app
     //if(kIsWeb){
@@ -45,7 +46,7 @@ Future<void> main() async {
     );
   }
   catch(e){
-    print('StartUp Error: $e');
+    printMsg('StartUp Error: $e');
   }
 }
 

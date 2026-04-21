@@ -42,192 +42,201 @@ enum MyMessageType {
 // PW android
 
 //-- Constants Images ----------------------------------------------------------
-const String IMAGE_WHEEL = "assets/distanceWheel.jpg";
-const String IMAGE_VEHICLE = "assets/red_pickup2.png";
-const String IMAGE_MOBILE_MACHINE = "'assets/tractor.jpg'";
-const String IMAGE_STATIONARY_MACHINE = "assets/generator.jpg";
-const String IMAGE_NO_IMAGE = 'assets/noImage.jpg';
-const String IMAGE_PROFILE = 'assets/profile.png';
+const String imageWheel = "assets/distanceWheel.jpg";
+const String imageVehicle = "assets/red_pickup2.png";
+const String imageMobileMachine = "'assets/tractor.jpg'";
+const String imageStationaryMachine = "assets/generator.jpg";
+const String imageNoImage = 'assets/noImage.jpg';
+const String imageProfile = 'assets/profile.png';
 
-const String ICON_WARNING = "assets/warning.png";
-const String ICON_GOOGLE = 'assets/google_icon.png';
-const String ICON_FACEBOOK = 'assets/facebook_icon.png';
-const String ICON_TRACK = 'assets/track.jpg';
-const String ICON_GEOFENCE = 'assets/geofence.jpg';
-const String ICON_IOT = 'assets/iot.png';
-const String ICON_BASE = 'assets/base_station.png';
-const String ICON_REPORT = 'assets/report.png';
-const String ICON_LIMITLESS_LOGO = 'assets/limitless_logo.png';
-const String ICON_LIMITLESS_WORD = 'assets/limitlessIotWord.png';
+const String iconWarning = "assets/warning.png";
+const String iconGoogle = 'assets/google_icon.png';
+const String iconFacebook = 'assets/facebook_icon.png';
+const String iconTrack = 'assets/track.jpg';
+const String iconGeoFence = 'assets/geofence.jpg';
+const String iconIot = 'assets/iot.png';
+const String iconBase = 'assets/base_station.png';
+const String iconReport = 'assets/report.png';
+const String iconLimitlessLogo = 'assets/limitless_logo.png';
+const String iconLimitlessWord = 'assets/limitlessIotWord.png';
 
 //-- Constants Colors ----------------------------------------------------------
-const COLOR_ICE_BLUE = Color.fromARGB(202, 139, 229, 245);
-const COLOR_BLUE = Color.fromARGB(255, 4, 145, 246);
-const COLOR_DARK_BLUE = Color.fromARGB(255, 1, 57, 86);
-const COLOR_DARK_HEADER = Colors.white;
-const COLOR_DARK_TEXT = Colors.white;
-const COLOR_BLACK = Color(0xFF14140F);
-const COLOR_BLACK_LIGHT = Color(0x10A3CCAB);
-const COLOR_TEAL_LIGHT = Color(0xFFA3CCAB);
-const COLOR_TEAL_MID = Color(0xFF34675C);
-const COLOR_TEAL_DARK = Color(0xFF053D38);
-const COLOR_ORANGE = Color.fromARGB(255, 255, 60, 1);
-const COLOR_GREY = Color.fromARGB(139, 119, 119, 119);
-const COLOR_LIGHT_GREY = Color.fromARGB(137, 222, 222, 222);
-
-const APP_BAR_COLOR = Color.fromARGB(255, 0, 36, 52);
-const APP_BACKGROUND_COLOR = COLOR_DARK_BLUE;
-const APP_TILE_COLOR = Color.fromARGB(255, 21, 34, 52);
-const DRAWER_COLOR = Color.fromARGB(255, 33, 137, 215);
-const PROGRESS_CIRCLE_COLOR = Colors.lightBlueAccent ;
+const colorIceBlue = Color.fromARGB(202, 139, 229, 245);
+const colorBlue = Color.fromARGB(255, 4, 145, 246);
+const colorDarkBlue = Color.fromARGB(255, 1, 57, 86);
+const colorDarkHeader = Colors.white;
+const colorDarkText = Colors.white;
+const colorBlack = Color(0xFF14140F);
+const colorBlackLight = Color(0x10A3CCAB);
+const colorTealLight = Color(0xFFA3CCAB);
+const colorTealMid = Color(0xFF34675C);
+const colorTealDark = Color(0xFF053D38);
+const colorOrange = Color.fromARGB(255, 255, 60, 1);
+const colorGrey = Color.fromARGB(139, 119, 119, 119);
+const colorLightGrey = Color.fromARGB(137, 222, 222, 222);
+const colorAppBar = Color.fromARGB(255, 0, 36, 52);
+const colorAppBackground = colorDarkBlue;
+const colorAppTitle = Color.fromARGB(255, 21, 34, 52);
+const colorDrawer = Color.fromARGB(255, 33, 137, 215);
+const colorProgressCircle = Colors.lightBlueAccent ;
 
 final FirebaseAuthService firebaseAuthService = FirebaseAuthService();
 final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
 final String fireUserName = 'user1';
-final String fireUserRecyclebin = '${fireUserName}_recycle/';
-const String DB_TABLE_USERS = 'UserTable';
+final String fireUserRecycleBin = '${fireUserName}_recycle/';
+const String dbTableUsers = 'UserTable';
+const String geoFenceMarker = "marker_";
+const String geoFencePolygon = "polygon_";
+const String geoFencePoint = "point_";
+const String geoFenceDrawingPolygon = "drawing_polygon";
 
 //-- Firebase Settings ---------------------------------------------------------
-const CollectionUsers = 'users';
-const CollectionGeoFences = 'geoFences';
-const CollectionTrackingSessions = 'trackingSessions';
-const CollectionLocations = 'locations';
-const CollectionMonitors = 'monitors';
-const CollectionMonitorData = 'iotData';
-const CollectionBaseStations = 'baseStations';
-const CollectionClients = 'clients';
-const CollectionOperators = 'operators';
+const collectionUsers = 'users';
+const collectionGeoFences = 'geoFences';
+const collectionTrackingSessions = 'trackingSessions';
+const collectionLocations = 'locations';
+const collectionMonitors = 'monitors';
+const collectionMonitorData = 'iotData';
+const collectionBaseStations = 'baseStations';
+const collectionClients = 'clients';
+const collectionOperators = 'operators';
 
-const FieldsSettings = 'settings';
-const FieldsUserData = 'userdata';
+const fieldsSettings = 'settings';
+const fieldsUserData = 'userdata';
 
-const DocAppSettings = 'app_settings';
+const docAppSettings = 'app_settings';
 
 // General Settings
-const SettingIsVoicePromptOn = 'isVoicePromptOn';
-const SettingLogPointPerMeter = 'logPointPerMeter';
-const SettingRebateValue = 'rebateValuePerLiter';
-const SettingDieselPrice = 'dieselPrice';
-const SettingConnectedDevice = 'connectedDevice';
-const SettingConnectedDeviceIp = 'connectedDeviceIp';
-const SettingServerData = 'serverData';
-const double SettingMonDefaultTicksPerM = 20; // Default value when new Monitor is created
+const settingIsVoicePromptOn = 'isVoicePromptOn';
+const settingLogPointPerMeter = 'logPointPerMeter';
+const settingRebateValue = 'rebateValuePerLiter';
+const settingDieselPrice = 'dieselPrice';
+const settingConnectedDevice = 'connectedDevice';
+const settingConnectedDeviceIp = 'connectedDeviceIp';
+const settingServerData = 'serverData';
+const double settingMonDefaultTicksPerM = 20; // Default value when new Monitor is created
 
 // Monitor Types
-const List<String> settingMonitorTypeList = [
-  MonTypeVehicle,
-  MonTypeMobileMachineMon,
-  MonTypeStationaryMachineMon,
-  MonTypeWheel,
-];
-const List<String> settingOperatorTypeList = [
-  opAccessOperator,
-  opAccessSupervisor
-];
 
 // Profile Types
 const String profileTypeOperator = "operator";
 const String profileTypeUser = "user";
 
 // Operator Types
-const String opAccessOperator = "Operator";
-const String opAccessSupervisor = "Supervisor";
+const String userTypeOperator = "Operator";
+const String userTypeSupervisor = "Supervisor";
+const List<String> settingOperatorTypeList = [
+  userTypeOperator,
+  userTypeSupervisor
+];
 
 // Monitor Types
-const String MonTypeVehicle = "Vehicle";
-const String MonTypeMobileMachineMon = "Mobile Machine";
-const String MonTypeStationaryMachineMon = "Stationary Machine";
-const String MonTypeWheel = "Distance Wheel";
+const String monitorTypeVehicle = "Vehicle";
+const String monitorTypeMobileMachineMon = "Mobile Machine";
+const String monitorTypeStationaryMachineMon = "Stationary Machine";
+const String monitorTypeWheel = "Distance Wheel";
+const List<String> settingMonitorTypeList = [
+  monitorTypeVehicle,
+  monitorTypeMobileMachineMon,
+  monitorTypeStationaryMachineMon,
+  monitorTypeWheel,
+];
 
 // Monitor Log Data
-const LogMonDocId = 'monDocId';
-const LogMonUserDocId = 'userDocId';
-const LogMonType = 'iotType';
-const LogMonName = 'name';
-const LogMonDistance = 'distance';
-const LogMonLines = 'lines';
-const LogMonOperator = 'operator';
-const LogMonSupervisor = 'supervisor';
-const LogMonTimestamp = 'timestamp';
+const monitorLogDocId = 'monDocId';
+const monitorLogUserDocId = 'userDocId';
+const monitorLogType = 'iotType';
+const monitorLogName = 'name';
+const monitorLogDistance = 'distance';
+const monitorLogLines = 'lines';
+const monitorLogOperator = 'operator';
+const monitorLogSupervisor = 'supervisor';
+const monitorLogTimestamp = 'timestamp';
 
 // Monitor Debug
-const DebugMonitorConnected = 'debugConnected';
-const DebugMonitorWheelDistance = 'debugWheelDistance';
-const DebugMonitorWheelSignal = 'debugWheelSignal';
+const debugMonitorConnected = 'debugConnected';
+const debugMonitorWheelDistance = 'debugWheelDistance';
+const debugMonitorWheelSignal = 'debugWheelSignal';
+
+// Firebase - GEO Fence Settings
+const fireGeoCreateDate = 'createdAt';
+const fireGeoName = 'name';
+const fireGeoPoints = 'points';
+const fireGeoUpdateDate = 'updatedAt';
 
 // Firebase - Base Station Settings
-const FIRE_BASE_NAME = 'name';
-const FIRE_BASE_DESC = 'description';
-const FIRE_BASE_IP = 'ipAdr';
-const FIRE_BASE_ID = 'baseId';
-const FIRE_BASE_BT_MAC = 'bluetoothMAC';
-const FIRE_BASE_IMAGE = 'image';
+const fireBaseName = 'name';
+const fireBaseDesc = 'description';
+const fireBaseIp = 'ipAdr';
+const fireBaseId = 'baseId';
+const fireBaseBtMac = 'bluetoothMAC';
+const fireBaseImage = 'image';
 
 // Firebase - Monitor settings
-const FIRE_MON_NAME = 'name';
-const FIRE_MON_FUEL_CONSUMPTION = 'fuelConsumption';
-const FIRE_MON_REGISTRATION = 'registrationNumber';
-const FIRE_MON_BT_NAME = 'bluetoothDeviceName';
-const FIRE_MON_BT_MAC = 'bluetoothMAC';
-const FIRE_MON_IMAGE = 'imageURL';
-const FIRE_MON_IMAGE_FILENAME = 'imageFilename';
-const FIRE_MON_TYPE = 'type';
-const FIRE_MON_ID = 'monitorId';
-const FIRE_MON_TICKS_PER_M = 'ticksPerM';
-const FIRE_MON_TIMESTAMP = 'timestamp';
-const FIRE_MON_LAST_LOG_TIMESTAMP = 'lastLogTimestamp';
+const fireMonitorName = 'name';
+const fireMonitorFuelConsumption = 'fuelConsumption';
+const fireMonitorReg = 'registrationNumber';
+const fireMonitorBtName = 'bluetoothDeviceName';
+const fireMonitorBtMac = 'bluetoothMAC';
+const fireMonitorImage = 'imageURL';
+const fireMonitorImageFilename = 'imageFilename';
+const fireMonitorType = 'type';
+const fireMonitorId = 'monitorId';
+const fireMonitorTicksPerM = 'ticksPerM';
+const fireMonitorTimestamp = 'timestamp';
+const fireMonitorLastLogTimestamp = 'lastLogTimestamp';
 
 // Firebase - Tracking settings
-const FIRE_TRACK_DIST_IN = 'distance_inside';
-const FIRE_TRACK_DIST_OUT = 'distance_outside';
-const FIRE_TRACK_START_TIME = 'start_time';
-const FIRE_TRACK_END_TIME = 'end_time';
-const FIRE_TRACK_ACTIVE = 'is_active';
-const FIRE_TRACK_VEH_DOC_ID = 'vehicle_id';
+const fireTrackingDistanceInside = 'distance_inside';
+const fireTrackingDistanceOutside = 'distance_outside';
+const fireTrackingStartTime = 'start_time';
+const fireTrackingEndTime = 'end_time';
+const fireTrackingIsActive = 'is_active';
+const fireTrackingVehicleDocId = 'vehicle_id';
 
 // Clients Settings
-const SettingClientIpAdr = 'IPAdress';
+const settingClientIpAdr = 'IPAdress';
 
 // MQTT Topics
-const MQTT_TOPIC_FROM_IOT = "mqtt/from/iot";
-const MQTT_TOPIC_TO_IOT = "mqtt/to/iot";
-const MQTT_TOPIC_TO_ANDROID = "mqtt/to/android";
-const MQTT_TOPIC_FROM_ANDROID = "mqtt/from/android";
-const MQTT_TOPIC_WILL = "mqtt/will";
+const mqttTopicFromIot = "mqtt/from/iot";
+const mqttTopicToIot = "mqtt/to/iot";
+const mqttTopicToAndroid = "mqtt/to/android";
+const mqttTopicFromAndroid = "mqtt/from/android";
+const mqttTopicLastWill = "mqtt/will";
 
 // MQTT Commands
-const MQTT_CMD_DISCOVER = "#REQ_MONITOR";
-const MQTT_CMD_FOUND_MONITOR = "#FOUND_MONITOR";
-const MQTT_CMD_CONNECT_MONITOR = "#CONNECT_MONITOR";
-const MQTT_CMD_DISCONNECT_MONITOR = "#DISCONNECT_MONITOR";
-const MQTT_CMD_ACK = "#ACK";
-const MQTT_CMD_PING = "#PING";
-const MQTT_CMD_LIVE_MONITOR_DATA = "#MONITOR_DATA";
-const MQTT_CMD_TAG_REQ = "#TAG_REQ";
-const MQTT_CMD_TAG_DATA = "#TAG_DATA";
-const MQTT_CMD_TAG_ACK = "#TAG_ACK";
+const mqttCmdDiscover = "#REQ_MONITOR";
+const mqttCmdFoundMonitor = "#FOUND_MONITOR";
+const mqttCmdConnectMonitor = "#CONNECT_MONITOR";
+const mqttCmdDisconnectMonitor = "#DISCONNECT_MONITOR";
+const mqttCmdAck = "#ACK";
+const mqttCmdPing = "#PING";
+const mqttCmdLiveMonitorData = "#MONITOR_DATA";
+const mqttCmdTagRequest = "#TAG_REQ";
+const mqttCmdTagData = "#TAG_DATA";
+const mqttCmdTagAck = "#TAG_ACK";
 
 // MQTT Payload
-const MQTT_JSON_FROM_DEVICE_ID = "from";
-const MQTT_JSON_TO_DEVICE_ID = "to";
-const MQTT_JSON_TOPIC = "topic";
-const MQTT_JSON_PAYLOAD = "payload";
-const MQTT_JSON_CMD = "cmd";
-const MQTT_JSON_WHEEL_DISTANCE = "wheel_distance";
-const MQTT_JSON_TAG_DATA = "tag_data";
+const mqttJsonFromDeviceId = "from";
+const mqttJsonToDeviceId = "to";
+const mqttJsonTopic = "topic";
+const mqttJsonPayload = "payload";
+const mqttJsonCmd = "cmd";
+const mqttJsonWheelDistance = "wheel_distance";
+const mqttJsonTagData = "tag_data";
 
 // JSON Settings
-const MQTT_JSON_MON_ID = "monId";
-const MQTT_JSON_TICKS_PER_M = "ticksPerM";
-const MQTT_JSON_IOT_TYPE = "iotType";
-const MQTT_JSON_IOT_NAME = "iotName";
-const MQTT_JSON_MON_DOC_ID = "monDocId";
-const MQTT_JSON_USER_DOC_ID = "userDocId";
+const mqttJsonMonitorId = "monId";
+const mqttJsonTicksPerM = "ticksPerM";
+const mqttJsonIotType = "iotType";
+const mqttJsonIotName = "iotName";
+const mqttJsonMonitorDocId = "monDocId";
+const mqttJsonUserDocId = "userDocId";
 
 //--Bluetooth-------------------------------------------------------------------
-const BT_SERVICE_UUID = 'f3a1c2d0-6b4e-4e9a-9f3e-8d2f1c9b7a1e';
-const BT_CHAR_UUID = 'c7b2e3f4-1a5d-4c3b-8e2f-9a6b1d8c2f3a';
+const bluetoothServiceUuid = 'f3a1c2d0-6b4e-4e9a-9f3e-8d2f1c9b7a1e';
+const bluetoothCharUuid = 'c7b2e3f4-1a5d-4c3b-8e2f-9a6b1d8c2f3a';
 Future<List<BluetoothDevice>> getBluetoothDevices() async {
   try {
     final statuses = await [
@@ -334,7 +343,7 @@ class MyDialogWidget extends StatelessWidget {
     required this.but2Text,
     this.onPressedBut1,
     this.onPressedBut2,
-    this.image = ICON_WARNING,
+    this.image = iconWarning,
   });
 
   @override
@@ -444,7 +453,7 @@ class MyGlobalMessage {
             width: 2, // Border width
           ),
         ),
-        backgroundColor: APP_TILE_COLOR,
+        backgroundColor: colorAppTitle,
         shadowColor: Colors.black,
         title: MyText(
             text: header,
@@ -691,7 +700,7 @@ class MyCustomTileWithPic extends StatelessWidget {
                   0.9
                 ],
                 colors: [
-                  COLOR_BLUE,
+                  colorBlue,
                   Colors.black,
                 ],
               ),
@@ -1215,7 +1224,7 @@ class MyOperatorTile extends StatelessWidget {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: APP_BAR_COLOR,
+          color: colorAppBar,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Padding(
@@ -1232,7 +1241,7 @@ class MyOperatorTile extends StatelessWidget {
                     radius: 28,
                     backgroundImage: operator.imageURL != null &&  operator.imageURL!.isNotEmpty
                         ? CachedNetworkImageProvider(operator.imageURL!)
-                        : AssetImage(IMAGE_PROFILE) as ImageProvider,
+                        : AssetImage(imageProfile) as ImageProvider,
                   ),
                 ),
               ),
@@ -1328,18 +1337,18 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
 
   void loadSettings() {
     vehicleNameController = TextEditingController(
-        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_NAME] : ''
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![fireMonitorName] : ''
     );
     fuelConsumptionController = TextEditingController(
-        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_FUEL_CONSUMPTION].toString() : ''
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![fireMonitorFuelConsumption].toString() : ''
     );
     vehicleRegController = TextEditingController(
-        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![FIRE_MON_REGISTRATION] : ''
+        text: widget.vehicleSnapshot != null ? widget.vehicleSnapshot![fireMonitorReg] : ''
     );
 
     if (widget.vehicleSnapshot != null) {
-      bluetoothDeviceName = widget.vehicleSnapshot![FIRE_MON_BT_NAME];
-      bluetoothMAC = widget.vehicleSnapshot![FIRE_MON_BT_MAC];
+      bluetoothDeviceName = widget.vehicleSnapshot![fireMonitorBtName];
+      bluetoothMAC = widget.vehicleSnapshot![fireMonitorBtMac];
     }
   }
 
@@ -1357,7 +1366,7 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
     loadSettings();
 
     return Container(
-      color: APP_BACKGROUND_COLOR,
+      color: colorAppBackground,
       child:  Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1384,7 +1393,7 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
                   child: MyTextFormField(
-                    backgroundColor: APP_BACKGROUND_COLOR,
+                    backgroundColor: colorAppBackground,
                     foregroundColor: Colors.white,
                     controller: vehicleNameController,
                     hintText: "Enter value here",
@@ -1398,7 +1407,7 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
                   child: MyTextFormField(
-                    backgroundColor: APP_BACKGROUND_COLOR,
+                    backgroundColor: colorAppBackground,
                     foregroundColor: Colors.white,
                     controller: fuelConsumptionController,
                     hintText: "Enter value here",
@@ -1414,7 +1423,7 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0),
                   child: MyTextFormField(
-                    backgroundColor: APP_BACKGROUND_COLOR,
+                    backgroundColor: colorAppBackground,
                     foregroundColor: Colors.white,
                     controller: vehicleRegController,
                     hintText: "Enter value here",
@@ -1487,7 +1496,7 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
                   child: Theme(
                     data: Theme.of(context).copyWith(
                       // Set items list background color
-                        canvasColor: APP_TILE_COLOR
+                        canvasColor: colorAppTitle
                     ),
                     child: DropdownButtonFormField<BluetoothDevice>(
                       value: selectedDevice,
@@ -1495,7 +1504,7 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
                       decoration: InputDecoration(
                         labelText: 'Select Bluetooth Device',
                         labelStyle: TextStyle(color: Colors.grey),
-                        fillColor: APP_BACKGROUND_COLOR,
+                        fillColor: colorAppBackground,
                         filled: true,
                         prefixIcon: const Icon(
                           Icons.bluetooth,
@@ -1597,7 +1606,7 @@ Future<T?> MyQuestionAlertBox<T> ({
                 width: 2, // Border width
               ),
             ),
-            backgroundColor: APP_TILE_COLOR,
+            backgroundColor: colorAppTitle,
             shadowColor: Colors.black,
             title: MyText(
                 text: header,
@@ -1671,7 +1680,7 @@ class MyDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
-      dropdownColor: APP_BAR_COLOR,
+      dropdownColor: colorAppBar,
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: Colors.grey, fontSize: 22),
@@ -1726,37 +1735,6 @@ class MyBottomNavItem extends BottomNavigationBarItem {
     label: label,
   );
 }
-
-Future<bool> _isWifiConnected(String ip, int port) async {
-  try {
-    final socket = await Socket.connect(ip, port, timeout: Duration(seconds: 2));
-    socket.destroy();
-    return true;   // Connected!
-  } catch (e) {
-    return false;  // Cannot reach Pi
-  }
-}
-// Future<bool> _mqttConnect(String ip) async {
-//   if (!await _isWifiConnected(ip, 1883)) {
-//     //MyGlobalSnackBar.show("No Wifi Connection");
-//     return false;
-//   }
-//
-//   mqtt_Service.ipAdr = ip;
-//   await mqtt_Service.init();
-//
-//   if (!await mqtt_Service.connect()) {
-//     MyGlobalSnackBar.show("MQTT Failed");
-//     return false;
-//   }
-//
-//   MyGlobalSnackBar.show("Connected: $ip");
-//   return true;
-// }
-// Future<void> _mqttDisconnect()async{
-//   mqtt_Service.disconnect();
-//   MyGlobalSnackBar.show("Disconnected");
-// }
 
 //--Services--------------------------------------------------------------------
 class UserData{
@@ -1865,12 +1843,12 @@ class UserDataService extends ChangeNotifier {
       await user?.reload();
 
       final doc = await firestore
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(uid)
           .get();
 
       if (doc.exists) {
-        _userdata = UserData.fromMap(doc.data()?[FieldsUserData] ?? {});
+        _userdata = UserData.fromMap(doc.data()?[fieldsUserData] ?? {});
         _userdata?.userID = uid;
         _userdata?.emailValidated = FirebaseAuth.instance.currentUser!.emailVerified;
         isUserLoggedIn = true;
@@ -1894,8 +1872,8 @@ class UserDataService extends ChangeNotifier {
     final firestore = FirebaseFirestore.instance;
 
     try {
-      await firestore.collection(CollectionUsers).doc(uid).set({
-        FieldsUserData: newUserData.toMap(),
+      await firestore.collection(collectionUsers).doc(uid).set({
+        fieldsUserData: newUserData.toMap(),
       }, SetOptions(merge: true));
 
       notifyListeners();
@@ -1909,7 +1887,7 @@ class UserDataService extends ChangeNotifier {
       if (uid == null) return;
 
       final doc = FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(uid);
 
       if(user.userID.isNotEmpty){
@@ -1917,7 +1895,7 @@ class UserDataService extends ChangeNotifier {
         // Update
         await doc.set(
           {
-            FieldsUserData: user.toMap(),
+            fieldsUserData: user.toMap(),
           },
           SetOptions(merge: true),
         );
@@ -1962,12 +1940,12 @@ class UserDataService extends ChangeNotifier {
       final Map<String, dynamic> nestedUpdates = {};
       updated.toMap().forEach((key, value) {
         if (updates.containsKey(key)) {
-          nestedUpdates['$FieldsUserData.$key'] = value;
+          nestedUpdates['$fieldsUserData.$key'] = value;
         }
       });
 
       await firestore
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(uid)
           .update(nestedUpdates);
 
@@ -2014,15 +1992,15 @@ class FireSettings{
 
   factory FireSettings.fromMap(Map<String, dynamic> map){
     return FireSettings(
-      isVoicePromptOn: map[SettingIsVoicePromptOn] ?? true,
-      dieselPrice: map[SettingDieselPrice] ?? 20,
-      logPointPerMeter: map[SettingLogPointPerMeter] ?? 10,
-      rebateValuePerLiter: map[SettingRebateValue] ?? 2.6,
-      connectedDevice: map[SettingConnectedDevice] ?? "",
-      connectedDeviceIp: map[SettingConnectedDeviceIp] ?? "",
-      serverData: map[SettingServerData] != null
+      isVoicePromptOn: map[settingIsVoicePromptOn] ?? true,
+      dieselPrice: map[settingDieselPrice] ?? 20,
+      logPointPerMeter: map[settingLogPointPerMeter] ?? 10,
+      rebateValuePerLiter: map[settingRebateValue] ?? 2.6,
+      connectedDevice: map[settingConnectedDevice] ?? "",
+      connectedDeviceIp: map[settingConnectedDeviceIp] ?? "",
+      serverData: map[settingServerData] != null
         ? List<ServerData>.from(
-        (map[SettingServerData] as List)
+        (map[settingServerData] as List)
             .map((e) => ServerData.fromMap(e as Map<String, dynamic>)))
         : null,
     );
@@ -2030,13 +2008,13 @@ class FireSettings{
 
   Map<String, dynamic> toMap(){
     return{
-      SettingIsVoicePromptOn : isVoicePromptOn,
-      SettingDieselPrice : dieselPrice,
-      SettingLogPointPerMeter : logPointPerMeter,
-      SettingRebateValue : rebateValuePerLiter,
-      SettingConnectedDevice : connectedDevice,
-      SettingConnectedDeviceIp : connectedDeviceIp,
-      SettingServerData : serverData?.map((e) => e.toMap()).toList(),
+      settingIsVoicePromptOn : isVoicePromptOn,
+      settingDieselPrice : dieselPrice,
+      settingLogPointPerMeter : logPointPerMeter,
+      settingRebateValue : rebateValuePerLiter,
+      settingConnectedDevice : connectedDevice,
+      settingConnectedDeviceIp : connectedDeviceIp,
+      settingServerData : serverData?.map((e) => e.toMap()).toList(),
     };
   }
 
@@ -2080,12 +2058,12 @@ class SettingsService extends ChangeNotifier {
       isLoading = true;
 
       final doc = await _db
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(uid)
           .get();
 
       if (doc.exists) {
-        _settings = FireSettings.fromMap(doc.data()?[FieldsSettings] ?? {});
+        _settings = FireSettings.fromMap(doc.data()?[fieldsSettings] ?? {});
       }
 
       isLoading = false;
@@ -2137,10 +2115,10 @@ class SettingsService extends ChangeNotifier {
       // });
 
       updates.forEach((key, value) {
-        nestedUpdates['$FieldsSettings.$key'] = value;
+        nestedUpdates['$fieldsSettings.$key'] = value;
       });
 
-      await _db.collection(CollectionUsers)
+      await _db.collection(collectionUsers)
           .doc(uid)
           .update(nestedUpdates);
 
@@ -2258,7 +2236,7 @@ class MonitorSettings {
   MonitorSettings({
     // Firebase
     this.monitorId = "none",
-    this.monitorType = MonTypeVehicle,
+    this.monitorType = monitorTypeVehicle,
     this.monitorName = "New Item",
     this.reg = "none",
     this.fuelConsumption = 10,
@@ -2284,33 +2262,33 @@ class MonitorSettings {
     return MonitorSettings(
       monDocId: docId,
       userDocId: userId,
-      monitorId: map[FIRE_MON_ID] ?? 'none',
-      monitorType: map[FIRE_MON_TYPE] ?? 'none',
-      monitorName: map[FIRE_MON_NAME] ?? 'New Item',
-      reg: map[FIRE_MON_REGISTRATION] ?? 'None',
-      fuelConsumption: (map[FIRE_MON_FUEL_CONSUMPTION] as num?)?.toDouble() ?? 0.0,
-      bluetoothDeviceName: map[FIRE_MON_BT_NAME] ?? '',
-      bluetoothMac: map[FIRE_MON_BT_MAC] ?? '',
-      ticksPerM: (map[FIRE_MON_TICKS_PER_M] as num?)?.toDouble() ?? SettingMonDefaultTicksPerM,
-      imageURL: map[FIRE_MON_IMAGE] ?? '',
-      imageFilename: map[FIRE_MON_IMAGE_FILENAME] ?? '',
+      monitorId: map[fireMonitorId] ?? 'none',
+      monitorType: map[fireMonitorType] ?? 'none',
+      monitorName: map[fireMonitorName] ?? 'New Item',
+      reg: map[fireMonitorReg] ?? 'None',
+      fuelConsumption: (map[fireMonitorFuelConsumption] as num?)?.toDouble() ?? 0.0,
+      bluetoothDeviceName: map[fireMonitorBtName] ?? '',
+      bluetoothMac: map[fireMonitorBtMac] ?? '',
+      ticksPerM: (map[fireMonitorTicksPerM] as num?)?.toDouble() ?? settingMonDefaultTicksPerM,
+      imageURL: map[fireMonitorImage] ?? '',
+      imageFilename: map[fireMonitorImageFilename] ?? '',
     );
   }
 
   // To Firebase (NO local fields)
   Map<String, dynamic> toMap() {
     return {
-      FIRE_MON_ID: monitorId,
-      FIRE_MON_TYPE: monitorType,
-      FIRE_MON_NAME: monitorName,
-      FIRE_MON_REGISTRATION: reg,
-      FIRE_MON_FUEL_CONSUMPTION: fuelConsumption,
-      SettingRebateValue: rebateValue,
-      FIRE_MON_BT_NAME: bluetoothDeviceName,
-      FIRE_MON_BT_MAC: bluetoothMac,
-      FIRE_MON_TICKS_PER_M: ticksPerM,
-      FIRE_MON_IMAGE: imageURL,
-      FIRE_MON_IMAGE_FILENAME: imageFilename
+      fireMonitorId: monitorId,
+      fireMonitorType: monitorType,
+      fireMonitorName: monitorName,
+      fireMonitorReg: reg,
+      fireMonitorFuelConsumption: fuelConsumption,
+      settingRebateValue: rebateValue,
+      fireMonitorBtName: bluetoothDeviceName,
+      fireMonitorBtMac: bluetoothMac,
+      fireMonitorTicksPerM: ticksPerM,
+      fireMonitorImage: imageURL,
+      fireMonitorImageFilename: imageFilename
     };
   }
 }
@@ -2326,9 +2304,9 @@ class MonitorSettingsService extends ChangeNotifier {
     if (uid == null) return;
 
     final snapshot = await FirebaseFirestore.instance
-        .collection(CollectionUsers)
+        .collection(collectionUsers)
         .doc(uid)
-        .collection(CollectionMonitors)
+        .collection(collectionMonitors)
         .get();
 
     final list = snapshot.docs
@@ -2350,9 +2328,9 @@ class MonitorSettingsService extends ChangeNotifier {
       if (uid == null) return;
 
       final ref = FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(uid)
-          .collection(CollectionMonitors);
+          .collection(collectionMonitors);
 
       if(monitor.monDocId.isNotEmpty){
 
@@ -2465,15 +2443,15 @@ class MonitorData {
     final map = doc.data() as Map<String, dynamic>;
 
     return MonitorData(
-      monDocId: map[LogMonDocId],
-      userDocId: map[LogMonUserDocId],
-      monitorType: map[LogMonType],
-      monitorName: map[LogMonName],
-      operator: map[LogMonOperator] ?? '',
-      supervisor: map[LogMonSupervisor] ?? '',
-      distance: (map[LogMonDistance] as num?)?.toDouble() ?? 0,
-      lines: (map[LogMonLines] as num?)?.toInt() ?? 0,
-      timestamp: map[LogMonTimestamp],
+      monDocId: map[monitorLogDocId],
+      userDocId: map[monitorLogUserDocId],
+      monitorType: map[monitorLogType],
+      monitorName: map[monitorLogName],
+      operator: map[monitorLogOperator] ?? '',
+      supervisor: map[monitorLogSupervisor] ?? '',
+      distance: (map[monitorLogDistance] as num?)?.toDouble() ?? 0,
+      lines: (map[monitorLogLines] as num?)?.toInt() ?? 0,
+      timestamp: map[monitorLogTimestamp],
     );
   }
 }
@@ -2503,7 +2481,7 @@ class MonitorDataService extends ChangeNotifier {
 
     // IOT Data - subcollection
     final dataSnapshot = await monitorSnapshot.reference
-        .collection(CollectionMonitorData)
+        .collection(collectionMonitorData)
         .get();
 
     final dataList = dataSnapshot.docs
@@ -2514,8 +2492,8 @@ class MonitorDataService extends ChangeNotifier {
 
     return MonitorDataService(
       monDocId : monitorSnapshot.id,
-      monitorType: map[FIRE_MON_TYPE] ?? '',
-      monitorName: map[FIRE_MON_BT_NAME] ?? '',
+      monitorType: map[fireMonitorType] ?? '',
+      monitorName: map[fireMonitorBtName] ?? '',
       lstMonitorData: dataList,
     );
   }
@@ -2556,24 +2534,24 @@ class BaseStationData {
   factory BaseStationData.fromMap(Map<String, dynamic> map, String docId) {
     return BaseStationData(
       docId: docId,
-      baseName: map[FIRE_BASE_NAME] ?? 'none',
-      baseDesc: map[FIRE_BASE_DESC] ?? 'none',
-      ipAddress: map[FIRE_BASE_IP] ?? 'New Item',
-      bluetoothName: map[FIRE_BASE_ID] ?? 'None',
-      bluetoothMac: map[FIRE_MON_BT_MAC] ?? '',
-      image: map[FIRE_BASE_IMAGE] ?? '',
+      baseName: map[fireBaseName] ?? 'none',
+      baseDesc: map[fireBaseDesc] ?? 'none',
+      ipAddress: map[fireBaseIp] ?? 'New Item',
+      bluetoothName: map[fireBaseId] ?? 'None',
+      bluetoothMac: map[fireMonitorBtMac] ?? '',
+      image: map[fireBaseImage] ?? '',
     );
   }
 
   // To Firebase (NO local fields)
   Map<String, dynamic> toMap() {
     return {
-      FIRE_BASE_NAME : baseName,
-      FIRE_BASE_DESC : baseDesc,
-      FIRE_BASE_IP : ipAddress,
-      FIRE_BASE_ID : bluetoothName,
-      FIRE_BASE_BT_MAC : bluetoothMac,
-      FIRE_BASE_IMAGE: image
+      fireBaseName : baseName,
+      fireBaseDesc : baseDesc,
+      fireBaseIp : ipAddress,
+      fireBaseId : bluetoothName,
+      fireBaseBtMac : bluetoothMac,
+      fireBaseImage: image
     };
   }
 }
@@ -2592,9 +2570,9 @@ class BaseStationService extends ChangeNotifier {
     if (uid == null) return;
 
     final snapshot = await FirebaseFirestore.instance
-        .collection(CollectionUsers)
+        .collection(collectionUsers)
         .doc(uid)
-        .collection(CollectionBaseStations)
+        .collection(collectionBaseStations)
         .get();
 
     final list = snapshot.docs
@@ -2625,9 +2603,9 @@ class BaseStationService extends ChangeNotifier {
       if (uid == null) return "";
 
       final ref = FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(uid)
-          .collection(CollectionBaseStations);
+          .collection(collectionBaseStations);
 
       final base = BaseStationData(
         baseName: 'New Base',
@@ -2651,9 +2629,9 @@ class BaseStationService extends ChangeNotifier {
       if (uid == null) return;
 
       final ref = FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(uid)
-          .collection(CollectionBaseStations);
+          .collection(collectionBaseStations);
 
       await ref.doc(base.docId).set(
         base.toMap(),
@@ -2673,9 +2651,9 @@ class BaseStationService extends ChangeNotifier {
 
       // 1️⃣ Delete from Firestore
       await FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(user?.uid)
-          .collection(CollectionBaseStations)
+          .collection(collectionBaseStations)
           .doc(base.docId)
           .delete();
 
@@ -2789,7 +2767,7 @@ class OperatorService extends ChangeNotifier {
       name: 'none',
       surname: 'none',
       tagId: 'none',
-      accessLevel: opAccessOperator
+      accessLevel: userTypeOperator
   );
 
   void setOperators(List<OperatorData> list) {
@@ -2806,9 +2784,9 @@ class OperatorService extends ChangeNotifier {
     try{
 
       final snapshot = await FirebaseFirestore.instance
-        .collection(CollectionUsers)
+        .collection(collectionUsers)
         .doc(uid)
-        .collection(CollectionOperators)
+        .collection(collectionOperators)
         .get();
 
       final list = snapshot.docs
@@ -2835,9 +2813,9 @@ class OperatorService extends ChangeNotifier {
       notifyListeners();
 
       final ref = FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(uid)
-          .collection(CollectionOperators);
+          .collection(collectionOperators);
 
       final docRef = ref.doc();
       final newOp = newOperator.copyWith(docID: docRef.id);
@@ -2860,9 +2838,9 @@ class OperatorService extends ChangeNotifier {
       if (uid == null) return;
 
       final ref = FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(uid)
-          .collection(CollectionOperators);
+          .collection(collectionOperators);
 
       if(operator.docId.isNotEmpty){
 
@@ -2897,9 +2875,9 @@ class OperatorService extends ChangeNotifier {
 
       // 1️⃣ Delete from Firestore
       await FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(user?.uid)
-          .collection(CollectionOperators)
+          .collection(collectionOperators)
           .doc(operator.docId)
           .delete();
 
@@ -3029,9 +3007,9 @@ LinearGradient MyTileGradient() {
       0.7,
       ],
       colors: [
-        APP_TILE_COLOR,
-        APP_BACKGROUND_COLOR,
-        APP_TILE_COLOR,
+        colorAppTitle,
+        colorAppBackground,
+        colorAppTitle,
       ],
   );
 }
@@ -3044,7 +3022,7 @@ LinearGradient MyTileGradientBlue() {
       0.9
     ],
     colors: [
-      COLOR_BLUE,
+      colorBlue,
       Colors.black,
     ],
   );
@@ -3052,13 +3030,13 @@ LinearGradient MyTileGradientBlue() {
 Widget MyProgressCircle() {
   return Center(
       child: CircularProgressIndicator(
-          color: PROGRESS_CIRCLE_COLOR
+          color: colorProgressCircle
       )
   );
 }
 Widget MyCenterMsg(String msg){
   return Container(
-    color: APP_BACKGROUND_COLOR,
+    color: colorAppBackground,
     child: Center(
       child: MyText(text: msg),
     ),

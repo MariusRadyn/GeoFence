@@ -27,7 +27,7 @@ class AppLifecycleHandler with WidgetsBindingObserver {
         break;
 
       case AppLifecycleState.detached:
-        //mqttService.dispose();
+        mqttService.dispose();
         break;
 
       case AppLifecycleState.inactive:

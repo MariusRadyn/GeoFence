@@ -146,7 +146,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         child: MyTextFormField(
                           controller: _userController,
                           hintText: "Enter Username",
-                          backgroundColor: APP_BACKGROUND_COLOR,
+                          backgroundColor: colorAppBackground,
                           foregroundColor: Colors.white,
                         ),
                       ),
@@ -159,7 +159,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         child: MyTextFormField(
                           controller: _emailController,
                           hintText: "Enter Email Address",
-                          backgroundColor: APP_BACKGROUND_COLOR,
+                          backgroundColor: colorAppBackground,
                           foregroundColor: Colors.white,
                         ),
                       ),
@@ -172,7 +172,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         child: MyTextFormField(
                           controller: _pwController,
                           hintText: "Password",
-                          backgroundColor: APP_BACKGROUND_COLOR,
+                          backgroundColor: colorAppBackground,
                           foregroundColor: Colors.white,
                           isPasswordField: true,
                         ),
@@ -186,7 +186,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         child: MyTextFormField(
                           controller: _pwController2,
                           hintText: "Confirm Password",
-                          backgroundColor: APP_BACKGROUND_COLOR,
+                          backgroundColor: colorAppBackground,
                           foregroundColor: Colors.white,
                           isPasswordField: true,
                         ),
@@ -262,7 +262,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
       if (result.isSuccess && result.user != null) {
         final doc = await FirebaseFirestore.instance
-            .collection(CollectionUsers)
+            .collection(collectionUsers)
             .doc(result.user!.uid)
             .get();
 
@@ -383,7 +383,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
       if(result.isSuccess){
         final doc = await FirebaseFirestore.instance
-            .collection(CollectionUsers)
+            .collection(collectionUsers)
             .doc(result.user!.uid)
             .get();
 
@@ -513,7 +513,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: MyTextFormField(
                             inputType: TextInputType.emailAddress,
-                            backgroundColor: APP_BACKGROUND_COLOR,
+                            backgroundColor: colorAppBackground,
                             foregroundColor: Colors.white,
                             controller: _emailController,
                             //hintText: "Enter Email Address",
@@ -529,7 +529,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: MyTextFormField(
                             foregroundColor: Colors.white,
-                            backgroundColor: APP_BACKGROUND_COLOR,
+                            backgroundColor: colorAppBackground,
                             controller: _pwController,
                             //hintText: "Enter Password",
                             labelText: "Password",
@@ -560,7 +560,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               },
                               child: const Text(
                                 "Reset",
-                                style: TextStyle(color: COLOR_ORANGE),
+                                style: TextStyle(color: colorOrange),
                               ),
                             ),
                           ],
@@ -586,7 +586,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               },
                               child: const Text(
                                 "Sign up",
-                                style: TextStyle(color: COLOR_ORANGE),
+                                style: TextStyle(color: colorOrange),
                               ),
                             ),
                           ],
@@ -606,7 +606,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                 Navigator.of(context).pop();
                                 await _loginWithGoogle(context);
                               },
-                              iconPath: ICON_GOOGLE,
+                              iconPath: iconGoogle,
                             ),
 
                             const SizedBox(width: 20),
@@ -618,7 +618,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                 // loginWithFacebook implementation would go here
                                 Navigator.of(context).pop();
                               },
-                              iconPath: ICON_FACEBOOK,
+                              iconPath: iconFacebook,
                             ),
                           ],
                         ),
@@ -728,7 +728,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               width: 2, // Border width
             ),
           ),
-          backgroundColor: APP_TILE_COLOR,
+          backgroundColor: colorAppTitle,
           shadowColor: Colors.black,
           actions: [
             MyTextButton(
@@ -792,7 +792,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 if (!isLoading && userLoggedIn && image.isNotEmpty == true) {
                   profileImage = NetworkImage(image);
                 } else {
-                  profileImage = AssetImage(IMAGE_PROFILE);
+                  profileImage = AssetImage(imageProfile);
                 }
 
                 if (isLoading) {
@@ -803,8 +803,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                 return Scaffold(
                   appBar: AppBar(
-                    iconTheme: IconThemeData(color: COLOR_ICE_BLUE),
-                    backgroundColor: APP_BAR_COLOR,
+                    iconTheme: IconThemeData(color: colorIceBlue),
+                    backgroundColor: colorAppBar,
                     leading: GestureDetector(
                       onTap: (){
                         if(userLoggedIn) toggleDrawer();
@@ -911,10 +911,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       ),
                     ],
                   ),
-                  backgroundColor: APP_BACKGROUND_COLOR,
+                  backgroundColor: colorAppBackground,
                   body: isLoading
                       ? Scaffold(
-                    backgroundColor: APP_BACKGROUND_COLOR,
+                    backgroundColor: colorAppBackground,
                     body: MyProgressCircle(),
                   )
                       : !userLoggedIn
@@ -932,7 +932,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                               // Track Vehicle
                               MyCustomTileWithPic(
-                                imagePath: ICON_TRACK,
+                                imagePath: iconTrack,
                                 header: 'Track',
                                 description: 'Track your vehicle as it moves inside and outside of your GeoFences',
                                 widget: TrackingPage(),
@@ -942,7 +942,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                               // GeoFence
                               const MyCustomTileWithPic(
-                                imagePath: ICON_GEOFENCE,
+                                imagePath: iconGeoFence,
                                 header: 'GeoFence',
                                 description: 'Set all the fence perimeters where you would like to record refundable tax rebate',
                                 widget: GeoFencePage(),
@@ -952,7 +952,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                               // Base Stations
                               MyCustomTileWithPic(
-                                imagePath: ICON_BASE,
+                                imagePath: iconBase,
                                 header: 'Base Stations',
                                 description: 'Add multiple base stations that acts as master network controllers.',
                                 widget: BaseStationPage(),
@@ -962,7 +962,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                               // iOT Monitors
                               const MyCustomTileWithPic(
-                                imagePath: ICON_IOT,
+                                imagePath: iconIot,
                                 header: 'iOT Monitors',
                                 description: 'Add multiple iOT monitors for various use cases',
                                 widget: IotMonitorsPage(),
@@ -971,7 +971,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               const SizedBox(height: 10),
 
                               const MyCustomTileWithPic(
-                                imagePath: ICON_REPORT,
+                                imagePath: iconReport,
                                 header: 'Tracking History',
                                 description: 'View tracking history',
                                 widget: TrackingHistoryPage(),
@@ -1033,7 +1033,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                     ),
 
                                                     Image.asset(
-                                                      ICON_LIMITLESS_LOGO,
+                                                      iconLimitlessLogo,
                                                       width: 60,
                                                       height: 60,
                                                       fit: BoxFit.contain,
@@ -1083,7 +1083,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                     text: "Tracking",
                                                     color: Colors.black,
                                                     fontsize: 18,
-                                                    linecolor: APP_BACKGROUND_COLOR,
+                                                    linecolor: colorAppBackground,
                                                   ),
                                                 ),
 
@@ -1148,7 +1148,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                     text: "iOT",
                                                     color: Colors.black,
                                                     fontsize: 18,
-                                                    linecolor: APP_BACKGROUND_COLOR,
+                                                    linecolor: colorAppBackground,
                                                   ),
                                                 ),
 
@@ -1237,7 +1237,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                     text: "Settings",
                                                     color: Colors.black,
                                                     fontsize: 18,
-                                                    linecolor: APP_BACKGROUND_COLOR,
+                                                    linecolor: colorAppBackground,
                                                   ),
                                                 ),
 

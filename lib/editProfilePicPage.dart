@@ -139,7 +139,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: APP_BAR_COLOR,
+        backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
         title: MyAppbarTitle('Profile Picture'),
         leading: IconButton(
@@ -150,7 +150,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
         )
 
       ),
-      backgroundColor: APP_BACKGROUND_COLOR,
+      backgroundColor: colorAppBackground,
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
@@ -158,7 +158,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
           // Camera
           FloatingActionButton(
             heroTag: "heroCamera",
-              backgroundColor: COLOR_ORANGE,
+              backgroundColor: colorOrange,
               foregroundColor: Colors.white,
             onPressed: () async {
               File? file = await _selectImage(source:  ImageSource.camera);
@@ -175,7 +175,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
           // Select Image
           FloatingActionButton(
             heroTag: "heroSelectImage",
-            backgroundColor: COLOR_ORANGE,
+            backgroundColor: colorOrange,
             foregroundColor: Colors.white,
             onPressed: () async {
               File? file = await _selectImage(source:  ImageSource.gallery);
@@ -195,7 +195,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
           Image(
             image: widget.imageURL != null && widget.imageURL!.isNotEmpty
                 ? CachedNetworkImageProvider(widget.imageURL!) as ImageProvider
-                : AssetImage(IMAGE_PROFILE) as ImageProvider,
+                : AssetImage(imageProfile) as ImageProvider,
             fit: BoxFit.contain, // ✅ shows entire image
           ),
 

@@ -80,7 +80,7 @@ class _signupPageState extends State<signupPage> {
                         left: 80, right: 80, top: 10, bottom: 10),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(40),
-                      color: COLOR_ORANGE,
+                      color: colorOrange,
                     ),
                     child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,

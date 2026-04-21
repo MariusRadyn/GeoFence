@@ -57,11 +57,11 @@ class _TrackingHistoryMapState extends State<TrackingHistoryMap> {
 
     try{
       final locationsSnapshot = await firestore
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(widget.userId)
-          .collection(CollectionTrackingSessions)
+          .collection(collectionTrackingSessions)
           .doc(widget.trackSessionId)
-          .collection(CollectionLocations)
+          .collection(collectionLocations)
           .orderBy('timestamp') // optional, if order matters
           .get();
 
@@ -104,21 +104,21 @@ class _TrackingHistoryMapState extends State<TrackingHistoryMap> {
     try {
       final userId = widget.userId;// _userData.userID;// firebaseAuthService. _auth.currentUser!.uid;
       final geoFencesSnapshot = await firestore
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(userId)
-          .collection(CollectionGeoFences)
+          .collection(collectionGeoFences)
           .get();
 
       if (geoFencesSnapshot.docs.isNotEmpty) {
         for (var doc in geoFencesSnapshot.docs) {
           final data = doc.data();
-          final points = List<GeoPoint>.from(data['points']);
+          final points = List<GeoPoint>.from(data[fireGeoPoints]);
           final polygonPoints = points.map((point) =>
               LatLng(point.latitude, point.longitude)).toList();
 
           if (polygonPoints.length >= 3) {
-            final polygonId = 'polygon_${_polygonIdCounter++}';
-            final markerId = 'marker_${_polygonIdCounter++}';
+            final polygonId = '$geoFencePolygon${_polygonIdCounter++}';
+            final markerId = '$geoFenceMarker${_polygonIdCounter++}';
 
             setState(() {
               // Add marker for the label
@@ -127,7 +127,7 @@ class _TrackingHistoryMapState extends State<TrackingHistoryMap> {
                   icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta),
                   markerId: MarkerId(markerId),
                   position: calculateCentroid(polygonPoints),
-                  infoWindow: InfoWindow(title: data['name']),
+                  infoWindow: InfoWindow(title: data[fireGeoName]),
                   //onTap: ()=> _onMarkerTap(polygonId, doc.id, data['name'], polygonPoints),
                 ),
               );
@@ -239,7 +239,7 @@ class _TrackingHistoryMapState extends State<TrackingHistoryMap> {
       final point = _trackSessionPoints[i];
       pointMarkers.add(
         Marker(
-          markerId: MarkerId('point_$i'),
+          markerId: MarkerId('$geoFencePoint$i'),
           position: point,
           icon: BitmapDescriptor.defaultMarkerWithHue(
             BitmapDescriptor.hueAzure, // Or use red, green, etc.
@@ -296,7 +296,7 @@ class _TrackingHistoryMapState extends State<TrackingHistoryMap> {
       else {
         markersOn = false;
         setState(() {
-          _markers.removeWhere((val) => val.markerId.value.startsWith('point_'));
+          _markers.removeWhere((val) => val.markerId.value.startsWith(geoFencePoint));
         });
       }
     }
@@ -307,12 +307,12 @@ class _TrackingHistoryMapState extends State<TrackingHistoryMap> {
     return Scaffold(
       appBar: AppBar(
         title: MyAppbarTitle('Track History') ,
-        backgroundColor: APP_BAR_COLOR,
+        backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
       ) ,
       bottomNavigationBar: BottomNavigationBar(
           onTap: _onBotBarTap,
-          backgroundColor: APP_BAR_COLOR,
+          backgroundColor: colorAppBar,
           unselectedItemColor: Colors.grey,
           selectedItemColor: Colors.grey,
           items: const [
@@ -364,7 +364,7 @@ class _TrackingHistoryMapState extends State<TrackingHistoryMap> {
           ),
           if (_isLoading)
             Container(
-              color: APP_BACKGROUND_COLOR,
+              color: colorAppBackground,
               child: const Center(
                 child: CircularProgressIndicator(color: Colors.white),
               ),

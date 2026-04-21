@@ -120,7 +120,7 @@ class _profilePageState extends State<profilePage> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 stops: [0.3, 0.9],
-                colors: [COLOR_BLUE, COLOR_ICE_BLUE],
+                colors: [colorBlue, colorIceBlue],
               ),
               borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(100),
@@ -174,7 +174,7 @@ class _profilePageState extends State<profilePage> {
                       child: CircleAvatar(
                         backgroundImage:  user.userdata?.imageURL != null &&  user.userdata!.imageURL!.isNotEmpty
                             ? CachedNetworkImageProvider(user.userdata!.imageURL!) as ImageProvider
-                            : AssetImage(IMAGE_PROFILE),
+                            : AssetImage(imageProfile),
                         radius: 50,
                       ),
                     ),
@@ -199,7 +199,7 @@ class _profilePageState extends State<profilePage> {
               width: 120,
               height: 40,
               decoration: const BoxDecoration(
-                color: COLOR_ORANGE,
+                color: colorOrange,
                 borderRadius: BorderRadius.all(Radius.circular(20)),
               ),
               child: TextButton(
@@ -244,10 +244,10 @@ class _profilePageState extends State<profilePage> {
         }
 
         return Scaffold(
-          backgroundColor: APP_BACKGROUND_COLOR,
+          backgroundColor: colorAppBackground,
           appBar: AppBar(
             title: MyAppbarTitle('Profile'),
-            backgroundColor: APP_BAR_COLOR,
+            backgroundColor: colorAppBar,
             foregroundColor: Colors.white,
           ),
           body: Padding(
@@ -270,7 +270,7 @@ class _profilePageState extends State<profilePage> {
 
                         // Display Name
                         MyTextFormField(
-                          backgroundColor: APP_BACKGROUND_COLOR,
+                          backgroundColor: colorAppBackground,
                           foregroundColor: Colors.white,
                           controller: _displaynameControl,
                           hintText: "Enter Name",
@@ -286,7 +286,7 @@ class _profilePageState extends State<profilePage> {
 
                         // Email
                         MyTextFormField(
-                          backgroundColor: APP_BACKGROUND_COLOR,
+                          backgroundColor: colorAppBackground,
                           foregroundColor: Colors.white,
                           controller: _emailController,
                           hintText: "Enter Email",

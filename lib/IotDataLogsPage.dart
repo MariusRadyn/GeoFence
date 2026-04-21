@@ -60,7 +60,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                 width: 2, // Border width
               ),
             ),
-            backgroundColor: APP_TILE_COLOR,
+            backgroundColor: colorAppTitle,
             shadowColor: Colors.black,
             title: const Text(
               "Delete",
@@ -97,11 +97,11 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                 ),
                 onPressed: () async {
                 _firestore
-                  .collection(CollectionUsers)
+                  .collection(collectionUsers)
                   .doc(userDocId)
-                  .collection(CollectionMonitors)
+                  .collection(collectionMonitors)
                   .doc(monDocId)
-                  .collection(CollectionMonitorData)
+                  .collection(collectionMonitorData)
                   .doc(iotDocId)
                   .delete();
 
@@ -119,16 +119,16 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
     return Scaffold(
       appBar: AppBar(
         title: MyText(text: "iOT Log Data", fontsize: 18,),
-        backgroundColor: APP_BAR_COLOR,
+        backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
       ),
       body: Container(
-        color: APP_BACKGROUND_COLOR,
+        color: colorAppBackground,
         child:  StreamBuilder<QuerySnapshot>(
           stream: _firestore
-            .collection(CollectionUsers).doc(FirebaseAuth.instance.currentUser?.uid)
-            .collection(CollectionMonitors).doc(widget.monDocId)
-            .collection(CollectionMonitorData)
+            .collection(collectionUsers).doc(FirebaseAuth.instance.currentUser?.uid)
+            .collection(collectionMonitors).doc(widget.monDocId)
+            .collection(collectionMonitorData)
             .snapshots(),
 
           builder: (context, monitorSnapshot) {
@@ -150,7 +150,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           stops: [0.3, 0.9],
-                          colors: [Colors.blueGrey, APP_BACKGROUND_COLOR],
+                          colors: [Colors.blueGrey, colorAppBackground],
                         ),
                         borderRadius: BorderRadius.only(
                           bottomLeft: Radius.circular(100),
@@ -205,15 +205,15 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                     itemBuilder: (context, index) {
                       var monitorData = docs[index];
 
-                      String operator = monitorData[LogMonOperator];
-                      String sup = monitorData[LogMonSupervisor];
-                      num nrOfItems = monitorData[LogMonLines];
-                      String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[FIRE_MON_TIMESTAMP].toDate());
-                      String dist = monitorData[LogMonDistance].toStringAsFixed(2);
+                      String operator = monitorData[monitorLogOperator];
+                      String sup = monitorData[monitorLogSupervisor];
+                      num nrOfItems = monitorData[monitorLogLines];
+                      String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[fireMonitorTimestamp].toDate());
+                      String dist = monitorData[monitorLogDistance].toStringAsFixed(2);
 
                       String image;
                       String img = widget.image;
-                      img.isEmpty ? image = IMAGE_WHEEL : image = img;
+                      img.isEmpty ? image = imageWheel : image = img;
 
                       return Column(
                         children: [
@@ -224,7 +224,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                             subtext: 'Operator: $operator\nSupervisor: $sup\nLines: $nrOfItems\nDistance: $dist m',
                             headerColor: Colors.white,
                             textColor: Colors.white,
-                            gradient: LinearGradient(colors: [Colors.blueGrey,APP_BACKGROUND_COLOR]),
+                            gradient: LinearGradient(colors: [Colors.blueGrey,colorAppBackground]),
                             height: 130,
 
                             onTapDelete: (){

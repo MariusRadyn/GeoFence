@@ -45,7 +45,7 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 child: MyTextFormField(
-                  backgroundColor: APP_BACKGROUND_COLOR,
+                  backgroundColor: colorAppBackground,
                   foregroundColor: Colors.white,
                   controller: TextEditingController(text: widget.monitorData.monitorName),
                   hintText: "Enter value here",
@@ -58,7 +58,7 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 child: MyTextFormField(
-                  backgroundColor: APP_BACKGROUND_COLOR,
+                  backgroundColor: colorAppBackground,
                   foregroundColor: Colors.white,
                   controller: TextEditingController(text:  widget.monitorData.fuelConsumption.toString()),
                   hintText: "Enter value here",
@@ -73,7 +73,7 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 child: MyTextFormField(
-                  backgroundColor: APP_BACKGROUND_COLOR,
+                  backgroundColor: colorAppBackground,
                   foregroundColor: Colors.white,
                   controller: TextEditingController(text: widget.monitorData.reg),
                   hintText: "Enter value here",
@@ -138,7 +138,7 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
         // Select Bluetooth
         Padding( padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 20),
           child: Theme(
-            data: Theme.of(context).copyWith(canvasColor: APP_TILE_COLOR),
+            data: Theme.of(context).copyWith(canvasColor: colorAppTitle),
             child: DropdownButtonFormField<BluetoothDevice>(
               value: (() {
 
@@ -153,7 +153,7 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
                 isDense: false,
                 labelText: 'Select Bluetooth',
                 labelStyle: TextStyle(color: Colors.grey),
-                fillColor: APP_BACKGROUND_COLOR,
+                fillColor: colorAppBackground,
                 filled: true,
                 prefixIcon: const Icon(
                   Icons.bluetooth,
@@ -316,7 +316,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
           padding: const EdgeInsets.symmetric(horizontal: 15),
           child: MyTextFormField(
             focusNode: _focusNodeName,
-            backgroundColor: APP_BACKGROUND_COLOR,
+            backgroundColor: colorAppBackground,
             foregroundColor: Colors.white,
             controller: _controllerName,
             hintText: "none",
@@ -335,7 +335,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 child: MyTextFormField(
                   focusNode: _focusNodeID,
-                  backgroundColor: APP_BACKGROUND_COLOR,
+                  backgroundColor: colorAppBackground,
                   foregroundColor: Colors.white,
                   controller: _controllerId,
                   hintText: "none",
@@ -380,7 +380,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
           padding: const EdgeInsets.symmetric(horizontal: 15),
           child: MyTextFormField(
             focusNode: _focusNodeTicks,
-            backgroundColor: APP_BACKGROUND_COLOR,
+            backgroundColor: colorAppBackground,
             foregroundColor: Colors.white,
             controller: _controllerTicks,
             hintText: "none",
@@ -447,7 +447,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 15),
           child: MyTextFormField(
-            backgroundColor: APP_BACKGROUND_COLOR,
+            backgroundColor: colorAppBackground,
             foregroundColor: Colors.white,
             controller: _controllerDistance,
             hintText: "Waiting for movement",

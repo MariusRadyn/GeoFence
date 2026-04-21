@@ -118,18 +118,18 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
       debugPrint('MQTT RX: $msg');
 
       final jsonData = jsonDecode(msg);
-      final cmd = jsonData[MQTT_JSON_CMD];
-      final fromId = jsonData[MQTT_JSON_FROM_DEVICE_ID];
+      final cmd = jsonData[mqttJsonCmd];
+      final fromId = jsonData[mqttJsonFromDeviceId];
 
       // Tag Data (from any IOT)
-      if (cmd == MQTT_CMD_PING) {
+      if (cmd == mqttCmdPing) {
         _timeoutTimer!.cancel();
 
         // Pass
         setState(() {
           context.read<SettingsService>().updateFireSettingsFields({
-            SettingConnectedDevice : baseSelected.baseName,
-            SettingConnectedDeviceIp : baseSelected.ipAddress
+            settingConnectedDevice : baseSelected.baseName,
+            settingConnectedDeviceIp : baseSelected.ipAddress
           });
         });
 
@@ -221,7 +221,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                 width: 2, // Border width
               ),
             ),
-            backgroundColor: APP_TILE_COLOR,
+            backgroundColor: colorAppTitle,
             shadowColor: Colors.black,
             title: const MyText(
                 text: "Delete",
@@ -312,7 +312,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
           width: MediaQuery.of(context).size.width * 0.85,
           height: MediaQuery.of(context).size.height * 0.8,
           decoration: BoxDecoration(
-            color: APP_TILE_COLOR,
+            color: colorAppTitle,
             borderRadius: BorderRadius.circular(20),
           ),
           child: ClipRRect(
@@ -335,7 +335,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                     borderRadius: BorderRadius.circular(15),
                   ),
                   elevation: 2,
-                  color: APP_BACKGROUND_COLOR,
+                  color: colorAppBackground,
                   shadowColor: Colors.blue,
                   margin: const EdgeInsets.symmetric(vertical: 6),
                   child: ListTile(
@@ -392,9 +392,9 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   Future<void> sendTextToDevice(BluetoothDevice device, String message) async {
     List<BluetoothService> services = await device.discoverServices();
     for (BluetoothService service in services) {
-      if (service.uuid.str.toLowerCase() == BT_SERVICE_UUID) {
+      if (service.uuid.str.toLowerCase() == bluetoothServiceUuid) {
         for (BluetoothCharacteristic characteristic in service.characteristics) {
-          if (characteristic.uuid.toString().toLowerCase() == BT_CHAR_UUID) {
+          if (characteristic.uuid.toString().toLowerCase() == bluetoothCharUuid) {
             await characteristic.write(utf8.encode(message), withoutResponse: true);
             print("Message sent: $message");
           }
@@ -478,14 +478,14 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
           return Scaffold(
             appBar: AppBar(
-              backgroundColor: APP_BAR_COLOR,
+              backgroundColor: colorAppBar,
               foregroundColor: Colors.white,
               title: MyAppbarTitle('Base Stations'),
             ),
-            backgroundColor: APP_BACKGROUND_COLOR,
+            backgroundColor: colorAppBackground,
             bottomNavigationBar: BottomNavigationBar(
                 currentIndex: _selectedIndex,
-                backgroundColor: APP_BAR_COLOR,
+                backgroundColor: colorAppBar,
                 unselectedItemColor: Colors.grey,
                 selectedItemColor: Colors.grey,
                 onTap: (index) {
@@ -574,7 +574,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                 child: MyTextFormField(
                                   focusNode: _focusNodeName,
                                   isReadOnly: false,
-                                  backgroundColor: APP_BACKGROUND_COLOR,
+                                  backgroundColor: colorAppBackground,
                                   foregroundColor: Colors.white,
                                   controller: _controllerName,
                                   hintText: "Base Station Name",
@@ -593,7 +593,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 0),
                                 child: MyTextFormField(
                                   focusNode: _focusNodeDesc,
-                                  backgroundColor: APP_BACKGROUND_COLOR,
+                                  backgroundColor: colorAppBackground,
                                   foregroundColor: Colors.white,
                                   controller: _controllerDesc,
                                   hintText: "Enter value here",
@@ -616,7 +616,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                     Expanded(
                                       child: MyTextFormField(
                                         isReadOnly: true,
-                                        backgroundColor: APP_BACKGROUND_COLOR,
+                                        backgroundColor: colorAppBackground,
                                         foregroundColor: Colors.white,
                                         controller: _controllerBluetooth,
                                         hintText: "Bluetooth Identification",
@@ -653,7 +653,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                 child: MyTextFormField(
                                   focusNode: _focusNodeIP,
                                   isReadOnly: false,
-                                  backgroundColor: APP_BACKGROUND_COLOR,
+                                  backgroundColor: colorAppBackground,
                                   foregroundColor: Colors.white,
                                   controller: _controllerIpAddress,
                                   hintText: "none",
@@ -683,7 +683,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                     }
 
                                     final docSnap = await FirebaseFirestore.instance
-                                        .collection(CollectionClients)
+                                        .collection(collectionClients)
                                         .doc(bluetoothName)
                                         .get();
 
@@ -692,7 +692,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                       return;
                                     }
 
-                                    final ipAdr = docSnap.get(SettingClientIpAdr);
+                                    final ipAdr = docSnap.get(settingClientIpAdr);
                                     if(ipAdr == ""){
                                       MyGlobalSnackBar.show('No IP Address Found');
                                       return;
@@ -706,8 +706,8 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                       _saveBase(baseSelected);
 
                                       settingsService.updateFireSettingsFields({
-                                        SettingConnectedDevice : baseSelected.baseName,
-                                        SettingConnectedDeviceIp : ipAdr
+                                        settingConnectedDevice : baseSelected.baseName,
+                                        settingConnectedDeviceIp : ipAdr
                                       });
                                     });
                                   },
@@ -728,7 +728,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                         // Connect MQTT
                                         if(baseSelected.isConnected == false){
                                           if(await mqttService.startService(baseSelected.ipAddress)) {
-                                            mqttService.tx(baseSelected.bluetoothName, MQTT_CMD_PING, {} ,MQTT_TOPIC_FROM_ANDROID);
+                                            mqttService.tx(baseSelected.bluetoothName, mqttCmdPing, {} ,mqttTopicFromAndroid);
                                             _startTimeout(3);
                                           } else {
 

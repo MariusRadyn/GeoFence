@@ -101,17 +101,17 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
       debugPrint('MQTT RX: $msg');
 
       final jsonData = jsonDecode(msg);
-      final cmd = jsonData[MQTT_JSON_CMD];
-      final fromId = jsonData[MQTT_JSON_FROM_DEVICE_ID];
+      final cmd = jsonData[mqttJsonCmd];
+      final fromId = jsonData[mqttJsonFromDeviceId];
 
       // Tag Data (from any IOT)
-      if (cmd == MQTT_CMD_TAG_DATA) {
+      if (cmd == mqttCmdTagData) {
         if(tagRequested){
           tagRequested = false;
 
           _timeout?.cancel();
-          final payload = jsonData[MQTT_JSON_PAYLOAD];
-          final tagId = payload[MQTT_JSON_TAG_DATA];
+          final payload = jsonData[mqttJsonPayload];
+          final tagId = payload[mqttJsonTagData];
 
           // Pop Dialog box
           if (Navigator.canPop(navigatorKey.currentContext!)) {
@@ -125,7 +125,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
             });
           }
 
-          mqttService.tx("", MQTT_CMD_TAG_ACK, {}, MQTT_TOPIC_FROM_ANDROID );
+          mqttService.tx("", mqttCmdTagAck, {}, mqttTopicFromAndroid );
 
           if(!mounted)return;
           context.read<OperatorService>().save(widget.operatorData!);
@@ -134,7 +134,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
       }
 
       // ACK (from Base)
-      if (cmd == MQTT_CMD_ACK) {
+      if (cmd == mqttCmdAck) {
         _timeout?.cancel();
         debugPrint("ACK From Base");
       }
@@ -193,7 +193,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
 
     // Send Request
     // This only tells the Base to pass on any tags received from any IOTs
-    mqttService.tx("",MQTT_CMD_TAG_REQ,{}, MQTT_TOPIC_FROM_ANDROID );
+    mqttService.tx("",mqttCmdTagRequest,{}, mqttTopicFromAndroid );
     if(mounted) {
       MyGlobalMessage.show(
           "Read Tag",
@@ -215,9 +215,9 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     }
 
     return  Scaffold(
-      backgroundColor: APP_BACKGROUND_COLOR,
+      backgroundColor: colorAppBackground,
       appBar: AppBar(
-        backgroundColor: APP_BAR_COLOR,
+        backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
         title: MyAppbarTitle('Operator'),
       ),
@@ -260,7 +260,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                       child: CircleAvatar(
                         backgroundImage:  widget.operatorData?.imageURL != null &&  widget.operatorData!.imageURL!.isNotEmpty
                             ? CachedNetworkImageProvider(widget.operatorData!.imageURL!) as ImageProvider
-                            : AssetImage(IMAGE_PROFILE),
+                            : AssetImage(imageProfile),
                         radius: 50,
                       ),
                     ),
@@ -302,7 +302,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
                     child: MyTextFormField(
                       focusNode: _focusNodeName,
-                      backgroundColor: APP_BACKGROUND_COLOR,
+                      backgroundColor: colorAppBackground,
                       foregroundColor: Colors.white,
                       controller: _controllerName,
                       labelText: "Name",
@@ -320,7 +320,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
                     child: MyTextFormField(
                       focusNode: _focusNodeSurname,
-                      backgroundColor: APP_BACKGROUND_COLOR,
+                      backgroundColor: colorAppBackground,
                       foregroundColor: Colors.white,
                       controller: _controllerSurname,
                       labelText: "Surname",
@@ -345,7 +345,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
                             padding: const EdgeInsets.fromLTRB(0,10,15,10),
                             child: MyTextFormField(
                               isReadOnly: true,
-                              backgroundColor: APP_BACKGROUND_COLOR,
+                              backgroundColor: colorAppBackground,
                               foregroundColor: Colors.white,
                               controller: _controllerTag,
                               hintText: "none",

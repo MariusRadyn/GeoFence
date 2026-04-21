@@ -53,9 +53,9 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
   }
   Future<List<Map<String, dynamic>>> getVehicles() async {
     final QuerySnapshot snapshot = await FirebaseFirestore.instance
-        .collection(CollectionUsers)
+        .collection(collectionUsers)
         .doc(_auth.currentUser!.uid)
-        .collection(CollectionMonitors)
+        .collection(collectionMonitors)
         .get();
 
     return snapshot.docs.map((doc) {
@@ -78,7 +78,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
                 width: 2, // Border width
               ),
             ),
-            backgroundColor: APP_TILE_COLOR,
+            backgroundColor: colorAppTitle,
             shadowColor: Colors.black,
             title: const Text(
               "Delete",
@@ -126,13 +126,13 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
   }
   Future<void> _deleteSessionWithLocations(String? userId, String sessionId) async {
     final sessionRef = _firestore
-        .collection(CollectionUsers)
+        .collection(collectionUsers)
         .doc(userId)
-        .collection(CollectionTrackingSessions)
+        .collection(collectionTrackingSessions)
         .doc(sessionId);
 
     // Delete all documents in the CollectionLocations subcollection
-    final locations = await sessionRef.collection(CollectionLocations).get();
+    final locations = await sessionRef.collection(collectionLocations).get();
     for (var doc in locations.docs) {
       await doc.reference.delete();
     }
@@ -221,7 +221,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
               width: 2, // Border width
             ),
           ),
-          backgroundColor: APP_TILE_COLOR,
+          backgroundColor: colorAppTitle,
           shadowColor: Colors.black,
           title: Text('Email Address',
             style: TextStyle(color: Colors.white)),
@@ -258,7 +258,7 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: APP_BAR_COLOR,
+        backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
 
         actions: [
@@ -296,15 +296,15 @@ class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
         ],
       ),
       body: Container(
-        color: APP_BACKGROUND_COLOR,
+        color: colorAppBackground,
         child: StreamBuilder<QuerySnapshot>(
           stream: _firestore
-              .collection(CollectionUsers)
+              .collection(collectionUsers)
               .doc(_auth.currentUser!.uid)
-              .collection(CollectionTrackingSessions)
-              .where(FIRE_TRACK_START_TIME, isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedDateFrom))
-              .where(FIRE_TRACK_START_TIME, isLessThanOrEqualTo: Timestamp.fromDate(_selectedDateTo))
-              .orderBy(FIRE_TRACK_START_TIME, descending: true)
+              .collection(collectionTrackingSessions)
+              .where(fireTrackingStartTime, isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedDateFrom))
+              .where(fireTrackingStartTime, isLessThanOrEqualTo: Timestamp.fromDate(_selectedDateTo))
+              .orderBy(fireTrackingStartTime, descending: true)
               .snapshots(),
 
           builder: (context, snapshot) {

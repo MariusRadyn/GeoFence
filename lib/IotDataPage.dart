@@ -70,7 +70,7 @@ class _IotDataPageState extends State<IotDataPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: APP_BAR_COLOR,
+        backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
 
         actions: [
@@ -108,15 +108,15 @@ class _IotDataPageState extends State<IotDataPage> {
         ],
       ),
       body: Container(
-        color: APP_BACKGROUND_COLOR,
+        color: colorAppBackground,
         child: StreamBuilder<QuerySnapshot>(
           stream:
           _firestore
-              .collection(CollectionUsers).doc(FirebaseAuth.instance.currentUser?.uid)
-              .collection(CollectionMonitors)
-              .where(FIRE_MON_LAST_LOG_TIMESTAMP, isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedDateFrom))
-              .where(FIRE_MON_LAST_LOG_TIMESTAMP, isLessThanOrEqualTo: Timestamp.fromDate(_selectedDateTo))
-              .orderBy(FIRE_MON_LAST_LOG_TIMESTAMP, descending: true)
+              .collection(collectionUsers).doc(FirebaseAuth.instance.currentUser?.uid)
+              .collection(collectionMonitors)
+              .where(fireMonitorLastLogTimestamp, isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedDateFrom))
+              .where(fireMonitorLastLogTimestamp, isLessThanOrEqualTo: Timestamp.fromDate(_selectedDateTo))
+              .orderBy(fireMonitorLastLogTimestamp, descending: true)
               .snapshots(),
 
           builder: (context, monitorSnapshot) {
@@ -159,7 +159,7 @@ class _IotDataPageState extends State<IotDataPage> {
 
                       return StreamBuilder<QuerySnapshot>(
                         stream: monitorData.reference
-                            .collection(CollectionMonitorData)
+                            .collection(collectionMonitorData)
                             .snapshots(),
                         builder: (context, iotSnapshot){
 
@@ -174,18 +174,18 @@ class _IotDataPageState extends State<IotDataPage> {
                           num lines = 0;
 
                           iotData.forEach((doc) {
-                            distance += doc.get(LogMonDistance) ?? 0.0;
-                            lines += doc.get(LogMonLines) ?? 0;
+                            distance += doc.get(monitorLogDistance) ?? 0.0;
+                            lines += doc.get(monitorLogLines) ?? 0;
                           });
 
-                          String iotName = monitorData[LogMonName];
+                          String iotName = monitorData[monitorLogName];
                           String nrOfItems = iotData.length.toString();
-                          String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[FIRE_MON_LAST_LOG_TIMESTAMP].toDate());
+                          String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[fireMonitorLastLogTimestamp].toDate());
                           String dist = distance.toStringAsFixed(2);
 
                           String image;
-                          String img = monitorData[FIRE_MON_IMAGE];
-                          img.isEmpty ? image = IMAGE_WHEEL : image = img;
+                          String img = monitorData[fireMonitorImage];
+                          img.isEmpty ? image = imageWheel : image = img;
 
                           return Column(
                             children: [
@@ -204,7 +204,7 @@ class _IotDataPageState extends State<IotDataPage> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(builder: (context) => IotDataLogsPage(
-                                      monitorName: monitorData[FIRE_MON_NAME],
+                                      monitorName: monitorData[fireMonitorName],
                                       image: image,
                                       snapshot: iotData,
                                       userDocId: FirebaseAuth.instance.currentUser?.uid ,

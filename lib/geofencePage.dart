@@ -30,21 +30,19 @@ class _GeoFencePageState extends State<GeoFencePage> {
   BottomBarMode _bottomBarMode = BottomBarMode.normal;
 
   bool _isDrawing = false;
-  bool _isEditing = false;
-  bool _isSaving = false;
   String? _editingFenceId;
   bool _isLoading = false;
+  bool _isSaving = false;
   int _polygonIdCounter = 0;
   LatLng _currentLocation = const LatLng(-29.6, 30.3);
   bool isGeoFenceSet = false;
-  final int _currentIndex = 0;
   bool _isStreetView = false;
   bool _isDrawerVisible = true;
   bool _isBotScrolDrawerVisible = false;
+  bool  _isEditing = false;
   int _fencePntr = 0;
   String _appBarTitle = "GeoFence";
   FenceData fenceData = FenceData();
-  bool _errorGeoFence = false;
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Future<Position>? currentPosition;
@@ -130,9 +128,9 @@ class _GeoFencePageState extends State<GeoFencePage> {
     try {
       final userId = userData!.userID;// firebaseAuthService. _auth.currentUser!.uid;
       final geoFencesSnapshot = await firestore
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(userId)
-          .collection(CollectionGeoFences)
+          .collection(collectionGeoFences)
           .get();
 
       if (geoFencesSnapshot.docs.isNotEmpty) {
@@ -143,8 +141,8 @@ class _GeoFencePageState extends State<GeoFencePage> {
               LatLng(point.latitude, point.longitude)).toList();
 
           if (polygonPoints.length >= 3) {
-            final polygonId = 'polygon_$_polygonIdCounter';
-            final markerId = 'marker_${_polygonIdCounter++}';
+            final polygonId = '$geoFencePolygon$_polygonIdCounter';
+            final markerId = '$geoFenceMarker${_polygonIdCounter++}';
 
             setState(() {
               // Add marker for the label
@@ -175,7 +173,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       }
 
       // Focus map on user's location if available
-      final userDoc = await firestore.collection(CollectionUsers).doc(userId).get();
+      final userDoc = await firestore.collection(collectionUsers).doc(userId).get();
       if (userDoc.exists && userDoc.data()!.containsKey('location')) {
         final location = userDoc.data()!['location'] as GeoPoint;
         _mapController?.animateCamera(
@@ -183,9 +181,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
         );
       }
     } catch (e) {
-      setState(() {
-        _errorGeoFence = true;
-      });
+      MyGlobalMessage.show('Error', "$e", MyMessageType.error);
     } finally {
       setState(() {
         _isLoading = false;
@@ -212,7 +208,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       _currentPolygonPoints.add(position);
       _markers.add(
         Marker(
-          markerId: MarkerId('point_${_currentPolygonPoints.length}'),
+          markerId: MarkerId('$geoFencePoint${_currentPolygonPoints.length}'),
           position: position,
 
         ),
@@ -221,12 +217,12 @@ class _GeoFencePageState extends State<GeoFencePage> {
       // If more than one point, draw lines
       if (_currentPolygonPoints.length > 1) {
         _polygons.removeWhere(
-              (polygon) => polygon.polygonId.value == 'drawing_polygon',
+              (polygon) => polygon.polygonId.value == geoFenceDrawingPolygon,
         );
 
         _polygons.add(
           Polygon(
-            polygonId: const PolygonId('drawing_polygon'),
+            polygonId: const PolygonId(geoFenceDrawingPolygon),
             points: _currentPolygonPoints,
             strokeWidth: 2,
             strokeColor: Colors.red,
@@ -277,18 +273,12 @@ class _GeoFencePageState extends State<GeoFencePage> {
       _editingFenceId = null;
       _currentPolygonPoints.clear();
       _markers.removeWhere((marker) =>
-          marker.markerId.value.startsWith('point_'));
+          marker.markerId.value.startsWith(geoFencePoint));
       _polygons.removeWhere((polygon) =>
-      polygon.polygonId.value == 'drawing_polygon');
+      polygon.polygonId.value == geoFenceDrawingPolygon);
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Tap on the map to add GEO points'),
-        duration: Duration(seconds:  10),
-        showCloseIcon: true,
-      ),
-    );
+    MyGlobalSnackBar.show('Tap on the map to add GEO points');
   }
   Future<void> _saveGeoFence() async {
     if (_currentPolygonPoints.length < 3) {
@@ -355,27 +345,24 @@ class _GeoFencePageState extends State<GeoFencePage> {
       else{
         // Get the document to update or create new one
         final docRef = _editingFenceId != null
-            ? firestore.collection('users').doc(userId).collection('geofences').doc(_editingFenceId)
-            : firestore.collection('users').doc(userId).collection('geofences').doc();
+            ? firestore.collection(collectionUsers).doc(userId).collection(collectionGeoFences).doc(_editingFenceId)
+            : firestore.collection(collectionUsers).doc(userId).collection(collectionGeoFences).doc();
 
         await docRef.set({
-          'name': name,
-          'points': geoPointsList,
-          'createdAt': _editingFenceId != null ? FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
+          fireGeoName: name,
+          fireGeoPoints: geoPointsList,
+          fireGeoCreateDate: _editingFenceId != null ? FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
+          fireGeoUpdateDate: _editingFenceId != null ? FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
         });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Geo fence "$name" saved successfully')),
-        );
+        MyGlobalSnackBar.show('Geo fence "$name" saved successfully');
 
         setState(() {
           _isDrawing = false;
           _isEditing = false;
           _editingFenceId = null;
           _currentPolygonPoints.clear();
-          _markers.removeWhere((marker) => marker.markerId.value.startsWith('point_'));
-          _polygons.removeWhere((polygon) => polygon.polygonId.value == 'drawing_polygon');
+          _markers.removeWhere((marker) => marker.markerId.value.startsWith(geoFencePoint));
+          _polygons.removeWhere((polygon) => polygon.polygonId.value == geoFenceDrawingPolygon);
         });
       }
 
@@ -394,8 +381,8 @@ class _GeoFencePageState extends State<GeoFencePage> {
       _isEditing = false;
       _editingFenceId = null;
       _currentPolygonPoints.clear();
-      _markers.removeWhere((marker) => marker.markerId.value.startsWith('point_'));
-      _polygons.removeWhere((polygon) => polygon.polygonId.value == 'drawing_polygon');
+      _markers.removeWhere((marker) => marker.markerId.value.startsWith(geoFencePoint));
+      _polygons.removeWhere((polygon) => polygon.polygonId.value == geoFenceDrawingPolygon);
     });
   }
   void _editGeoFence(String firestoreId, String name, List<LatLng> points) {
@@ -407,14 +394,14 @@ class _GeoFencePageState extends State<GeoFencePage> {
       _currentPolygonPoints.addAll(points);
       _geoFenceNameController.text = name;
 
-      _markers.removeWhere((marker) => marker.markerId.value.startsWith('marker_'));
-      _polygons.removeWhere((polygon) => polygon.polygonId.value == 'drawing_polygon');
+      _markers.removeWhere((marker) => marker.markerId.value.startsWith(geoFenceMarker));
+      _polygons.removeWhere((polygon) => polygon.polygonId.value == geoFenceDrawingPolygon);
 
       // Add markers for each point
       for (int i = 0; i < points.length; i++) {
         _markers.add(
           Marker(
-            markerId: MarkerId('point_${i + 1}'),
+            markerId: MarkerId('$geoFencePoint${i + 1}'),
             position: points[i],
           ),
         );
@@ -423,7 +410,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       // Add polygon
       _polygons.add(
         Polygon(
-          polygonId: const PolygonId('drawing_polygon'),
+          polygonId: const PolygonId(geoFenceDrawingPolygon),
           points: _currentPolygonPoints,
           strokeWidth: 2,
           strokeColor: Colors.red,
@@ -456,9 +443,9 @@ class _GeoFencePageState extends State<GeoFencePage> {
       try {
         final userId = userData!.userID;
         await firestore
-            .collection(CollectionUsers)
+            .collection(collectionUsers)
             .doc(userId)
-            .collection(CollectionGeoFences)
+            .collection(collectionGeoFences)
             .doc(firestoreId)
             .delete();
 
@@ -517,7 +504,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
         return BottomNavigationBar(
           type: BottomNavigationBarType.fixed, // Force Background color
           onTap: _onNormalBarTap,
-          backgroundColor: APP_BAR_COLOR,
+          backgroundColor: colorAppBar,
           unselectedItemColor: Colors.white,
           selectedItemColor: Colors.white,
           items: [
@@ -532,7 +519,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
         return BottomNavigationBar(
           onTap: _onAddingBarTap,
           type: BottomNavigationBarType.fixed, // Force Background color
-          backgroundColor: APP_BAR_COLOR,
+          backgroundColor: colorAppBar,
           unselectedItemColor: Colors.white,
           selectedItemColor: Colors.white,
           items: [
@@ -602,7 +589,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       width: _isDrawerVisible ? DRAW_WIDTH : 0, // Animate width
       duration: Duration(milliseconds: 1000),
       decoration: const BoxDecoration(
-        color: DRAWER_COLOR,
+        color: colorDrawer,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(10),
           bottomLeft: Radius.circular(10),
@@ -683,7 +670,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       width: _isDrawerVisible ? DRAW_WIDTH : 0, // Animate width
       duration: Duration(milliseconds: 300),
       decoration: const BoxDecoration(
-        color: DRAWER_COLOR,
+        color: colorDrawer,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           bottomLeft: Radius.circular(20),
@@ -768,7 +755,7 @@ class _GeoFencePageState extends State<GeoFencePage> {
       width: _isDrawerVisible ? DRAW_WIDTH : 0, // Animate width
       duration: Duration(milliseconds: 300),
       decoration: const BoxDecoration(
-        color: DRAWER_COLOR,
+        color: colorDrawer,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           bottomLeft: Radius.circular(20),
@@ -1011,10 +998,10 @@ class _GeoFencePageState extends State<GeoFencePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: APP_BACKGROUND_COLOR,
+      backgroundColor: colorAppBackground,
       appBar: AppBar(
         foregroundColor: Colors.white,
-        backgroundColor: APP_BAR_COLOR,
+        backgroundColor: colorAppBar,
         title: MyAppbarTitle(_appBarTitle),
         actions: [
           IconButton(

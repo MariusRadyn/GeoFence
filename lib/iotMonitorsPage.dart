@@ -97,9 +97,9 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     if (uid == null) return;
 
     final ref = FirebaseFirestore.instance
-        .collection(CollectionUsers)
+        .collection(collectionUsers)
         .doc(uid)
-        .collection(CollectionMonitors);
+        .collection(collectionMonitors);
 
     final monitor = MonitorSettings(
       monitorName: 'New Monitor',
@@ -127,9 +127,9 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
       // 1️⃣ Delete from Firestore
       await FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(user?.uid)
-          .collection(CollectionMonitors)
+          .collection(collectionMonitors)
           .doc(monitor.monDocId)
           .delete();
 
@@ -167,24 +167,24 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
   ImageProvider<Object> _getMonitorImage(MonitorSettings monitor) {
     if (monitor.imageURL == null || monitor.imageURL!.isEmpty ) {
       switch (monitor.monitorType) {
-        case MonTypeVehicle:
-          return AssetImage(IMAGE_VEHICLE);
+        case monitorTypeVehicle:
+          return AssetImage(imageVehicle);
 
-        case MonTypeWheel:
-          return AssetImage(IMAGE_WHEEL);
+        case monitorTypeWheel:
+          return AssetImage(imageWheel);
 
-        case MonTypeMobileMachineMon:
-          return AssetImage(IMAGE_MOBILE_MACHINE);
+        case monitorTypeMobileMachineMon:
+          return AssetImage(imageMobileMachine);
 
-        case MonTypeStationaryMachineMon:
-          return AssetImage(IMAGE_STATIONARY_MACHINE);
+        case monitorTypeStationaryMachineMon:
+          return AssetImage(imageStationaryMachine);
 
         default:
-          return AssetImage(IMAGE_NO_IMAGE);
+          return AssetImage(imageNoImage);
       }
     }
     else {
-      return AssetImage(IMAGE_NO_IMAGE);
+      return AssetImage(imageNoImage);
     }
   }
   void _updateTabs(int length) {
@@ -239,14 +239,14 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       debugPrint('MQTT RX: $msg');
 
       final jsonData = jsonDecode(msg);
-      final cmd = jsonData[MQTT_JSON_CMD];
-      final fromId = jsonData[MQTT_JSON_FROM_DEVICE_ID];
+      final cmd = jsonData[mqttJsonCmd];
+      final fromId = jsonData[mqttJsonFromDeviceId];
 
       if(!mounted) return;
       final monitorService = context.read<MonitorSettingsService>();
 
       // Pair - Set Device ID
-      if (cmd == MQTT_CMD_DISCOVER) {
+      if (cmd == mqttCmdDiscover) {
         scanBusy = false;
         final monitor = monitorService.lstMonitors[_tabController!.index];
 
@@ -290,41 +290,41 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
         }
 
         final payload =  {
-          MQTT_JSON_USER_DOC_ID: context.read<UserDataService>().userdata!.userID,
-          MQTT_JSON_MON_DOC_ID: monitorService.lstMonitors[_selectedIndex].monDocId,
-          MQTT_JSON_IOT_NAME: monitorService.lstMonitors[_selectedIndex].monitorName,
-          MQTT_JSON_IOT_TYPE: monitorService.lstMonitors[_selectedIndex].monitorType,
-          MQTT_JSON_TICKS_PER_M: monitorService.lstMonitors[_selectedIndex].ticksPerM,
+          mqttJsonUserDocId: context.read<UserDataService>().userdata!.userID,
+          mqttJsonMonitorDocId: monitorService.lstMonitors[_selectedIndex].monDocId,
+          mqttJsonIotName: monitorService.lstMonitors[_selectedIndex].monitorName,
+          mqttJsonIotType: monitorService.lstMonitors[_selectedIndex].monitorType,
+          mqttJsonTicksPerM: monitorService.lstMonitors[_selectedIndex].ticksPerM,
         };
 
         // Reply - Found Monitor
         mqttService.tx(
           monitor.monitorId,
-          MQTT_CMD_FOUND_MONITOR,
+          mqttCmdFoundMonitor,
           payload,
-          MQTT_TOPIC_FROM_ANDROID,
+          mqttTopicFromAndroid,
         );
       }
 
       // Connecting to IOT Monitor
-      if(cmd == MQTT_CMD_CONNECT_MONITOR){
+      if(cmd == mqttCmdConnectMonitor){
         final monitor = monitorService.lstMonitors[_tabController!.index];
         monitorService.setConnectedToIot(monitor.monitorId, true);
         debugPrint('IOT Connected');
       }
 
       // DisConnecting from IOT Monitor
-      if(cmd == MQTT_CMD_DISCONNECT_MONITOR){
+      if(cmd == mqttCmdDisconnectMonitor){
         final monitor = monitorService.lstMonitors[_tabController!.index];
         monitorService.setConnectedToIot(monitor.monitorId, false);
         debugPrint('IOT Connected');
       }
 
       // IOT Monitor Data
-      if(cmd == MQTT_CMD_LIVE_MONITOR_DATA){
+      if(cmd == mqttCmdLiveMonitorData){
         final monitor = monitorService.lstMonitors[_tabController!.index];
-        final payload = jsonData[MQTT_JSON_PAYLOAD];
-        final value = payload[MQTT_JSON_WHEEL_DISTANCE];
+        final payload = jsonData[mqttJsonPayload];
+        final value = payload[mqttJsonWheelDistance];
 
         if(value is num) _updateWheelDistance(value.toDouble());
         debugPrint('Wheel distance: ${monitor.wheelDistance}');
@@ -384,11 +384,11 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
 
     final payload =  {
-      MQTT_JSON_IOT_TYPE: monitorService.lstMonitors[_selectedIndex].monitorType,
+      mqttJsonIotType: monitorService.lstMonitors[_selectedIndex].monitorType,
     };
 
     if(mqttService.isConnected){
-      mqttService.tx("", MQTT_CMD_DISCOVER, payload, MQTT_TOPIC_FROM_ANDROID);
+      mqttService.tx("", mqttCmdDiscover, payload, mqttTopicFromAndroid);
     }
     return true;
   }
@@ -400,12 +400,12 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
 
     final payload = {
-      MQTT_JSON_IOT_TYPE: monitor.monitorType,
-      MQTT_JSON_TICKS_PER_M: monitor.ticksPerM,
+      mqttJsonIotType: monitor.monitorType,
+      mqttJsonTicksPerM: monitor.ticksPerM,
     };
 
     if(mqttService.isConnected){
-      mqttService.tx(monitor.monitorId, MQTT_CMD_CONNECT_MONITOR, payload ,MQTT_TOPIC_FROM_ANDROID);
+      mqttService.tx(monitor.monitorId, mqttCmdConnectMonitor, payload ,mqttTopicFromAndroid);
     }
     return true;
   }
@@ -417,7 +417,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
 
     if(mqttService.isConnected){
-      mqttService.tx(monitor.monitorId, MQTT_CMD_DISCONNECT_MONITOR, '' ,MQTT_TOPIC_FROM_ANDROID);
+      mqttService.tx(monitor.monitorId, mqttCmdDisconnectMonitor, '' ,mqttTopicFromAndroid);
     }
     return true;
   }
@@ -446,7 +446,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       final settingService = context.read<SettingsService>();
 
       switch(monitor.monitorType){
-        case MonTypeVehicle:
+        case monitorTypeVehicle:
           return IotVehicleType(
             monitorData: monitor,
             lstPairedDevices: lstPairedDevices,
@@ -485,7 +485,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             },
           );
 
-        case MonTypeWheel:
+        case monitorTypeWheel:
           return IotDistanceWheelType(
             key: key,
             monitorData: monitor,
@@ -587,7 +587,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
         return Scaffold(
           appBar: AppBar(
-            backgroundColor: APP_BAR_COLOR,
+            backgroundColor: colorAppBar,
             foregroundColor: Colors.white,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -629,7 +629,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
           ),
           bottomNavigationBar: BottomNavigationBar(
               currentIndex: _selectedIndex,
-              backgroundColor: APP_BAR_COLOR,
+              backgroundColor: colorAppBar,
               unselectedItemColor: Colors.white,
               selectedItemColor: Colors.white,
               onTap: (index) {
@@ -661,7 +661,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
           body: monitorService.lstMonitors.isEmpty
             ?  MyCenterMsg('No iOT Monitors')
               :Container(
-            color: APP_BACKGROUND_COLOR,
+            color: colorAppBackground,
             child: TabBarView(
               controller: _tabController,
               children: List.generate(monitorService.lstMonitors.length, (index){

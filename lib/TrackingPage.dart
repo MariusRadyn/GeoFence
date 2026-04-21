@@ -130,9 +130,9 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       final user = context.read<UserDataService>();
 
       final geoFencesSnapshot = await firestore
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(user.userdata!.userID)
-          .collection(CollectionGeoFences)
+          .collection(collectionGeoFences)
           .get();
 
       if (geoFencesSnapshot.docs.isNotEmpty) {
@@ -143,8 +143,8 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
               LatLng(point.latitude, point.longitude)).toList();
 
           if (polygonPoints.length >= 3) {
-            final polygonId = 'polygon_${_polygonIdCounter++}';
-            final markerId = 'marker_${_polygonIdCounter++}';
+            final polygonId = '${geoFencePolygon}${_polygonIdCounter++}';
+            final markerId = '${geoFenceMarker}${_polygonIdCounter++}';
 
             setState(() {
               // Add marker for the label
@@ -183,7 +183,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
 
       // Focus map on user's location if available
       final userDoc = await firestore
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(user.userdata!.userID)
           .get();
 
@@ -235,10 +235,10 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       });
 
       final vehiclesSnapshot = await _firestore
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(userId)
-          .collection(CollectionMonitors)
-          .where('type',isEqualTo: MonTypeVehicle)
+          .collection(collectionMonitors)
+          .where('type',isEqualTo: monitorTypeVehicle)
           .get();
 
       if(vehiclesSnapshot.docs.isNotEmpty){
@@ -413,9 +413,9 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
           final userId = context.read<UserDataService>().userdata!.userID;
 
           final sessionRef = await _firestore
-              .collection(CollectionUsers)
+              .collection(collectionUsers)
               .doc(userId)
-              .collection(CollectionTrackingSessions)
+              .collection(collectionTrackingSessions)
               .add({
             'vehicle_id': _selectedVehicleId,
             'start_time': FieldValue.serverTimestamp(),
@@ -466,9 +466,9 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
 
       final batch = _firestore.batch();
       final trackingRef = _firestore
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(userId)
-          .collection(CollectionTrackingSessions)
+          .collection(collectionTrackingSessions)
           .doc(_trackingSessionId);
 
       final locationRef = trackingRef.collection('locations').doc();
@@ -527,9 +527,9 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
       final userId = context.read<UserDataService>().userdata!.userID;
 
       await _firestore
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(userId)
-          .collection(CollectionTrackingSessions)
+          .collection(collectionTrackingSessions)
           .doc(_trackingSessionId)
           .update({
         'is_active': false,
@@ -562,7 +562,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
   }
   Widget _buildVehicleSelector() {
     return Card(
-      color: APP_TILE_COLOR,
+      color: colorAppTitle,
       margin: const EdgeInsets.all(5.0),
       child: Padding(
         padding: const EdgeInsets.all(5.0),
@@ -657,15 +657,15 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
     // }
 
     return Scaffold(
-      backgroundColor: APP_BACKGROUND_COLOR,
+      backgroundColor: colorAppBackground,
       appBar: AppBar(
         foregroundColor: Colors.white,
-        backgroundColor: _isTracking ? Colors.redAccent : APP_BAR_COLOR,
+        backgroundColor: _isTracking ? Colors.redAccent : colorAppBar,
         title: MyAppbarTitle(_statusMessage),
       ),
       bottomNavigationBar: BottomNavigationBar(
           onTap: _onBotBarTap,
-          backgroundColor: APP_BAR_COLOR,
+          backgroundColor: colorAppBar,
           unselectedItemColor: Colors.grey,
           selectedItemColor: Colors.grey,
           items: [

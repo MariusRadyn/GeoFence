@@ -89,7 +89,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: APP_BACKGROUND_COLOR,
+      backgroundColor: colorAppBackground,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -126,7 +126,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                                       child: Transform.rotate(
                                         angle: _iconRotationAnimation.value,
                                         child: Image.asset(
-                                          ICON_LIMITLESS_LOGO,
+                                          iconLimitlessLogo,
                                           width: 150,
                                         ),
                                       ),
@@ -152,7 +152,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                                       child: SlideTransition(
                                         position: _textSlideAnimation,
                                         child: Image.asset(
-                                          ICON_LIMITLESS_WORD,
+                                          iconLimitlessWord,
                                           width: 200,
                                         ),
                                       ),

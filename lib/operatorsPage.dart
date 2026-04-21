@@ -85,7 +85,7 @@ class _OperatorsPageState extends State<OperatorsPage> {
                 width: 2, // Border width
               ),
             ),
-            backgroundColor: APP_TILE_COLOR,
+            backgroundColor: colorAppTitle,
             shadowColor: Colors.black,
             title: const MyText(
                 text: "Delete",
@@ -143,13 +143,13 @@ class _OperatorsPageState extends State<OperatorsPage> {
       builder: (_, operatorService, __) {
         return Scaffold(
           appBar: AppBar(
-            backgroundColor: APP_BAR_COLOR,
+            backgroundColor: colorAppBar,
             foregroundColor: Colors.white,
             title: MyAppbarTitle('Operators'),
           ),
-          backgroundColor: APP_BACKGROUND_COLOR,
+          backgroundColor: colorAppBackground,
           floatingActionButton: FloatingActionButton(
-            backgroundColor: COLOR_ORANGE,
+            backgroundColor: colorOrange,
             foregroundColor: Colors.white,
             onPressed: () async{
               OperatorData? newOperator =  await _addNew();

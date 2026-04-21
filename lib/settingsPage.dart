@@ -135,9 +135,9 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
       if(uid == null) return;
 
       final snapshot =  await  FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(uid)
-          .collection(CollectionBaseStations)
+          .collection(collectionBaseStations)
           .get();
 
       setState(() {
@@ -177,9 +177,9 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
 
       // 1️⃣ Delete from Firestore
       await FirebaseFirestore.instance
-          .collection(CollectionUsers)
+          .collection(collectionUsers)
           .doc(user?.uid)
-          .collection(CollectionBaseStations)
+          .collection(collectionBaseStations)
           .doc(docId)
           .delete();
 
@@ -222,9 +222,9 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   Future<void> sendTextToDevice(BluetoothDevice device, String message) async {
     List<BluetoothService> services = await device.discoverServices();
     for (BluetoothService service in services) {
-      if (service.uuid.str.toLowerCase() == BT_SERVICE_UUID) {
+      if (service.uuid.str.toLowerCase() == bluetoothServiceUuid) {
         for (BluetoothCharacteristic characteristic in service.characteristics) {
-          if (characteristic.uuid.toString().toLowerCase() == BT_CHAR_UUID) {
+          if (characteristic.uuid.toString().toLowerCase() == bluetoothCharUuid) {
             await characteristic.write(utf8.encode(message), withoutResponse: true);
             print("Message sent: $message");
           }
@@ -257,7 +257,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
         if (_settings.isLoading || isLoading) {
           return Scaffold(
             appBar: AppBar(
-              backgroundColor: APP_BAR_COLOR,
+              backgroundColor: colorAppBar,
               foregroundColor: Colors.white,
               title: MyAppbarTitle('Settings'),
             ),
@@ -275,9 +275,9 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
         return DefaultTabController(
           length: 3,
           child: Scaffold(
-            backgroundColor: APP_BACKGROUND_COLOR,
+            backgroundColor: colorAppBackground,
             appBar: AppBar(
-              backgroundColor: APP_BAR_COLOR,
+              backgroundColor: colorAppBar,
               foregroundColor: Colors.white,
               title: MyAppbarTitle('Settings'),
               actions: [
@@ -290,10 +290,10 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                   ),
                   onPressed: () {
                     _settings.updateFireSettingsFields({
-                      SettingLogPointPerMeter: int.parse(
+                      settingLogPointPerMeter: int.parse(
                           _controllerLogPointPerM.text),
 
-                      SettingRebateValue: double.parse(
+                      settingRebateValue: double.parse(
                           _controllerRebateValue.text),
                     });
                     MyGlobalSnackBar.show("Saved");
@@ -349,7 +349,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                           //  _isVoicePromptOn = value;
                           //}),
                           _settings.updateFireSettingsFields({
-                            SettingIsVoicePromptOn: value
+                            settingIsVoicePromptOn: value
                           }),
 
                           if(value) {

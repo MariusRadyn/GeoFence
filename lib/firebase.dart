@@ -50,7 +50,7 @@ Future<void> fireStoreUploadFile(String filename) async {
   //Future<String> url = "" as Future<String>;
   try {
     //Create a reference to the location you want to upload to in firebase
-    Reference reference = fireStorageInstance.ref().child(fireUserRecyclebin);
+    Reference reference = fireStorageInstance.ref().child(fireUserRecycleBin);
 
     //Upload the file to firebase
     UploadTask uploadTask = reference.putFile(File(filename));
@@ -166,7 +166,7 @@ Future fireDbGetSongs(String table) async {
 }
 Future fireDbGetUserById(String id) async {
   final CollectionReference fRef =
-      FirebaseFirestore.instance.collection(DB_TABLE_USERS);
+      FirebaseFirestore.instance.collection(dbTableUsers);
 
   try {
     return await fRef.doc(id).get();
@@ -177,7 +177,7 @@ Future fireDbGetUserById(String id) async {
 }
 Future<QuerySnapshot> fireDbSearchUserByEmail(String email) async {
     CollectionReference ref =
-        FirebaseFirestore.instance.collection(DB_TABLE_USERS);
+        FirebaseFirestore.instance.collection(dbTableUsers);
 
     QuerySnapshot querySnapshot =
         await ref.where('email', isEqualTo: email).get();
@@ -186,13 +186,13 @@ Future<QuerySnapshot> fireDbSearchUserByEmail(String email) async {
 }
 Future<bool> fireDbcheckIfUserExists(String userId) async {
   final QuerySnapshot querySnapshot = await FirebaseFirestore.instance
-      .collection(DB_TABLE_USERS)
+      .collection(dbTableUsers)
       .limit(1)
       .get();
 
   // Create Collection if it doesn't exist
   if (querySnapshot.docs.isNotEmpty == false) {
-    await FirebaseFirestore.instance.collection(DB_TABLE_USERS).add({
+    await FirebaseFirestore.instance.collection(dbTableUsers).add({
       'Dummy': 'Dummy',
     });
     return false;
@@ -200,7 +200,7 @@ Future<bool> fireDbcheckIfUserExists(String userId) async {
 
   // Check User ID
   DocumentReference ref =
-      FirebaseFirestore.instance.collection(DB_TABLE_USERS).doc(userId);
+      FirebaseFirestore.instance.collection(dbTableUsers).doc(userId);
 
   // Check if the document exists
   DocumentSnapshot docSnapshot = await ref.get();
@@ -208,7 +208,7 @@ Future<bool> fireDbcheckIfUserExists(String userId) async {
 }
 Future<void> fireDbUpdateUserData(User user) async {
   final CollectionReference users =
-      FirebaseFirestore.instance.collection(DB_TABLE_USERS);
+      FirebaseFirestore.instance.collection(dbTableUsers);
 
     await users.doc(user.uid).update({
       'displayName': user.displayName,
@@ -221,7 +221,7 @@ Future<void> fireDbUpdateUserData(User user) async {
 }
 Future<void> fireDbCreateUser(User user) async {
   final CollectionReference users =
-      FirebaseFirestore.instance.collection(DB_TABLE_USERS);
+      FirebaseFirestore.instance.collection(dbTableUsers);
 
     await users.doc(user.uid).set({
       'displayName': user.displayName,

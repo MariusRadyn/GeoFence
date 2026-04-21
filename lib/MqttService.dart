@@ -100,7 +100,7 @@ class MqttService {
       client!.connectionMessage = MqttConnectMessage()
           .withClientIdentifier(myDeviceId)
           .startClean()
-          .withWillTopic(MQTT_TOPIC_WILL)
+          .withWillTopic(mqttTopicLastWill)
           .withWillMessage('offline')
           .withWillQos(MqttQos.atLeastOnce);
 
@@ -186,7 +186,7 @@ class MqttService {
   void _onConnected() {
     isConnected = true;
 
-    _subscribe(MQTT_TOPIC_TO_ANDROID);
+    _subscribe(mqttTopicToAndroid);
 
     print("MQTT Connected");
     _reconnectTimer?.cancel(); // stop reconnection attempts
@@ -276,13 +276,13 @@ class MqttService {
     });
   }
   void listenForSettings(void Function(Map<String, dynamic>) onSettingsReceived) {
-      _subscribe(MQTT_TOPIC_TO_ANDROID);
+      _subscribe(mqttTopicToAndroid);
       //final topic = "$MQTT_TOPIC_RESPONSE/$_clientId";
       //client.subscribe(topic, MqttQos.atLeastOnce);
       //print("Subscribing: $MQTT_TOPIC_RESPONSE");
       if(client?.updates == null) return;
 
-      print("Listening: $MQTT_TOPIC_TO_ANDROID");
+      print("Listening: $mqttTopicToAndroid");
 
       client!.updates!.listen((messages) {
         final mqttMsg = messages[0].payload as MqttPublishMessage;
@@ -304,11 +304,11 @@ class MqttService {
     if(client == null) return;
 
     final payload = jsonEncode({
-      MQTT_JSON_FROM_DEVICE_ID: myDeviceId,
-      MQTT_JSON_TO_DEVICE_ID: toDeviceId,
-      MQTT_JSON_PAYLOAD: jsonMsg,
-      MQTT_JSON_CMD: cmd,
-      MQTT_JSON_TOPIC: topic
+      mqttJsonFromDeviceId: myDeviceId,
+      mqttJsonToDeviceId: toDeviceId,
+      mqttJsonPayload: jsonMsg,
+      mqttJsonCmd: cmd,
+      mqttJsonTopic: topic
     });
 
     final builder = MqttClientPayloadBuilder();
