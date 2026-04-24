@@ -61,7 +61,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-
+      //context.read<SettingsService>().tryStartMqtt();
       // final ip = context.read<SettingsService>().fireSettings?.connectedDeviceIp;
       // if (ip != null) {
       //   final mqtt = MqttService();
@@ -783,10 +783,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   image = user.userdata!.imageURL ?? "";
                 }
 
-                if(settings.fireSettings?.connectedDeviceIp != null && MqttService().isConnected == false){
-                    MqttService().startService(settings.fireSettings!.connectedDeviceIp);
-                }
-
                 ImageProvider profileImage;
 
                 if (!isLoading && userLoggedIn && image.isNotEmpty == true) {
@@ -827,8 +823,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           settings.isBaseStationConnected != true
                               ? "No Connection"
                               : settings.fireSettings == null
-                              ? "Loading ..."
-                              : settings.fireSettings!.connectedDevice,
+                                ? "Loading ..."
+                                : settings.fireSettings!.connectedDevice,
                           style: const TextStyle(
                             fontSize: 12,
                             color: Colors.blueGrey,

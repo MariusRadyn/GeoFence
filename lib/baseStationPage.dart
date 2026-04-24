@@ -22,12 +22,10 @@ class BaseStationPage extends StatefulWidget {
 }
 
 class _BaseStationState extends State<BaseStationPage> with TickerProviderStateMixin{
-  final mqttService = MqttService();
   bool Debug = false;
   bool isLoading = true;
   TabController? _tabController;
   int _selectedIndex = 0;
-  late  BaseStationData baseSelected;
   Timer? _timeoutTimer;
 
   final Map<String, TextEditingController> _controllersName = {};
@@ -47,7 +45,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
   List<ScanResult> lstAvailableDevices = [];
   ScanResult? selectedAvailableDevice;
-  late StreamSubscription<String> _mqttSubscription;
+  StreamSubscription<String>? _mqttSubscription;
 
   BluetoothDevice? pairedDevice;
   BluetoothDevice? selectedDevice;
@@ -68,7 +66,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   void initState() {
     super.initState();
     _getBluetoothDevices();
-    _startMqttListener();
+    _mqttStartListener();
     _initTts();
 
     _focusNodeName = FocusNode();
@@ -82,7 +80,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<BaseStationService>().load();
+      //context.read<BaseStationService>().load();
     });
   }
 
@@ -104,15 +102,27 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
     _flutterTts.stop();
     _tabController?.dispose();
-    _mqttSubscription.cancel();
+    _mqttSubscription?.cancel();
 
     FlutterBluePlus.stopScan();
     super.dispose();
   }
 
+  // Timer
+  void _startTimeout(int sec) {
+    _timeoutTimer?.cancel();
+    if(_tabController == null) return;
+
+    _timeoutTimer = Timer(Duration(seconds: sec), () async {
+      if ( !context.read<BaseStationService>().lstBaseStations[_tabController!.index].isConnected) {
+        MyGlobalMessage.show("Connection Timeout", "Base Station not found", MyMessageType.warning);
+      }
+    });
+  }
+
   // MQTT
-  void _startMqttListener() {
-    _mqttSubscription = mqttService.messageStream.listen((msg) {
+  void _mqttStartListener() {
+    _mqttSubscription = MqttService().messageStream.listen((msg) {
       if(!mounted) return;
 
       debugPrint('MQTT RX: $msg');
@@ -126,40 +136,62 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
         _timeoutTimer!.cancel();
 
         // Pass
-        setState(() {
-          context.read<SettingsService>().updateFireSettingsFields({
-            settingConnectedDevice : baseSelected.baseName,
-            settingConnectedDeviceIp : baseSelected.ipAddress
-          });
+        var base = context.read<BaseStationService>().lstBaseStations[_tabController!.index];
+        //var base = context.read<BaseStationService>().lstBaseStations.firstWhere((b) => b.bluetoothName == fromId);
+        if(fromId != base.bluetoothName){
+          MyGlobalMessage.show("Warning", "Expected Base Station: ${base.bluetoothName}\nFound: $fromId", MyMessageType.warning);
+          return;
+        }
+
+        context.read<SettingsService>().updateFireSettingsFields({
+          settingConnectedDevice : base.baseName,
+          settingConnectedDeviceIp : base.ipAddress,
+          settingConnectedDeviceId: base.bluetoothName
         });
 
+        context.read<SettingsService>().setIsBaseConnected(true);
+
         setState(() {
-          baseSelected.isConnected = true;
+          base.isConnected = true;
         });
       }
     });
   }
+  Future<bool> _mqttConnectBase (BaseStationData base) async {
+    await _mqttSubscription?.cancel();
+    _mqttSubscription = null;
 
-  void _startTimeout(int sec) {
-    _timeoutTimer?.cancel();
+    bool isReady = await MqttService().restartService(base.ipAddress);
 
-    _timeoutTimer = Timer(Duration(seconds: sec), () async {
-      if ( !baseSelected.isConnected) {
-        MyGlobalMessage.show("Connection Timeout", "Base Station not found", MyMessageType.warning);
-      }
+    if(isReady) {
+      _mqttStartListener();
+      _startTimeout(5);
+
+      MqttService().tx(base.bluetoothName, mqttCmdPing, {} ,mqttTopicFromAndroid);
+      return true;
+    }
+
+    // Failed
+    MyGlobalMessage.show("Warning", "Wifi connection FAILED", MyMessageType.warning);
+    setState(() {
+      base.isConnected = false;
     });
+
+    return false;
   }
 
   // Methods
   void _handleFocusChange(FocusNode node, String field) {
     if (!node.hasFocus) {
-      setState(() {
-        if (field == 'name') baseSelected.baseName = _controllerName.text;
-        if (field == 'desc') baseSelected.baseDesc = _controllerDesc.text;
-        if (field == 'ip') baseSelected.ipAddress = _controllerIpAddress.text;
+      var base = context.read<BaseStationService>().lstBaseStations[_tabController!.index];
 
-        if(oldBaseName == baseSelected.baseName && oldBaseDesc == baseSelected.baseDesc && oldBaseIp == baseSelected.ipAddress) return;
-        _saveBase(baseSelected);
+      setState(() {
+        if (field == 'name') base.baseName = _controllerName.text;
+        if (field == 'desc') base.baseDesc = _controllerDesc.text;
+        if (field == 'ip') base.ipAddress = _controllerIpAddress.text;
+
+        if(oldBaseName == base.baseName && oldBaseDesc == base.baseDesc && oldBaseIp == base.ipAddress) return;
+        _saveBase(base);
       });
     }
   }
@@ -195,15 +227,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
     BaseStationService baseService = context.read<BaseStationService>();
     final docId = await baseService.addNew();
-
-    if(docId.isNotEmpty){
-      if (_tabController != null &&  baseService.lstBaseStations.isNotEmpty) {
-        final newIndex = baseService.lstBaseStations.indexWhere((d) => d.docId == docId);
-        if (newIndex != -1) {
-          _tabController!.animateTo(newIndex);
-        }
-      }
-    }
   }
   void _deleteBaseDialog() async {
     int index = _tabController!.index;
@@ -534,12 +557,12 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                   child: TabBarView(
                     controller: _tabController,
                     children:  List.generate(baseService.lstBaseStations.length, (index){ //_baseService.lstBaseStations.map((base)  {
-                      baseSelected = baseService.lstBaseStations[index];
+                      var currentBase = baseService.lstBaseStations[index];
 
-                      _controllerName = _getControllerName(baseSelected);
-                      _controllerDesc = _getControllerDesc(baseSelected);
-                      _controllerIpAddress = _getControllerIpAdr(baseSelected);
-                      _controllerBluetooth = _getControllerBluetooth(baseSelected);
+                      _controllerName = _getControllerName(currentBase);
+                      _controllerDesc = _getControllerDesc(currentBase);
+                      _controllerIpAddress = _getControllerIpAdr(currentBase);
+                      _controllerBluetooth = _getControllerBluetooth(currentBase);
 
                       oldBaseName = _controllerName.text;
                       oldBaseDesc = _controllerDesc.text;
@@ -600,9 +623,9 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   labelText: "Description",
                                   onFieldSubmitted: (value){
                                     setState(() {
-                                      baseSelected.baseDesc = value;
+                                      currentBase.baseDesc = value;
                                       //baseService.setIpAddress(baseSelected, value);
-                                      _saveBase(baseSelected);
+                                      _saveBase(currentBase);
                                     });
                                   },
                                 ),
@@ -640,7 +663,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                           ),
                                         ),
                                         onPressed: (){
-                                          _showBluetoothDevicesPopup(baseSelected);
+                                          _showBluetoothDevicesPopup(currentBase);
                                         }
                                     )
                                   ],
@@ -675,7 +698,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   ),
 
                                   onTap: () async {
-                                    final bluetoothName = baseSelected.bluetoothName;
+                                    final bluetoothName = currentBase.bluetoothName;
 
                                     if(bluetoothName == ""){
                                       MyGlobalMessage.show("Warning", "No Identification Selected", MyMessageType.warning);
@@ -702,12 +725,13 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                     MyGlobalSnackBar.show('IP Address: $ipAdr');
 
                                     setState(() {
-                                      baseSelected.ipAddress = ipAdr;
-                                      _saveBase(baseSelected);
+                                      currentBase.ipAddress = ipAdr;
+                                      _saveBase(currentBase);
 
                                       settingsService.updateFireSettingsFields({
-                                        settingConnectedDevice : baseSelected.baseName,
-                                        settingConnectedDeviceIp : ipAdr
+                                        settingConnectedDevice : currentBase.baseName,
+                                        settingConnectedDeviceIp : ipAdr,
+                                        settingConnectedDeviceId: currentBase.bluetoothName
                                       });
                                     });
                                   },
@@ -719,42 +743,29 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                 children: [
                                   InkWell(
                                       onTap: () async {
-
-                                        if(baseSelected.ipAddress == ""){
+                                        if(currentBase.ipAddress == ""){
                                           MyGlobalMessage.show("Warning", "No IP Address", MyMessageType.warning);
                                           return;
                                         }
 
-                                        // Connect MQTT
-                                        if(baseSelected.isConnected == false){
-                                          if(await mqttService.startService(baseSelected.ipAddress)) {
-                                            mqttService.tx(baseSelected.bluetoothName, mqttCmdPing, {} ,mqttTopicFromAndroid);
-                                            _startTimeout(3);
-                                          } else {
-
-                                            // Failed
-                                            MyGlobalMessage.show("Warning", "Wifi connection FAILED", MyMessageType.warning);
-                                            setState(() {
-                                              //mqttService.disconnect();
-                                              baseSelected.isConnected = false;
-                                            });
-                                            return;
-                                          }
+                                        if(currentBase.isConnected == false){
+                                          // Connect MQTT
+                                          _mqttConnectBase(currentBase);
                                         }
                                         else {
                                           // Disconnect
-                                          mqttService.client!.disconnect();
-
                                           setState(() {
-                                            baseSelected.isConnected = false;
+                                            currentBase.isConnected = false;
                                           });
+
+                                          settingsService.setIsBaseConnected(false);
                                         }
                                       },
                                       child: Row(children: [
                                         Icon(
                                           Icons.connected_tv,
                                           size: 50,
-                                          color: baseSelected.isConnected == true
+                                          color: currentBase.isConnected == true
                                               ? Colors.lightGreenAccent
                                               : Colors.grey ,
                                         ),

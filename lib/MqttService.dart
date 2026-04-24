@@ -28,7 +28,6 @@ class MqttService {
   final _messageStreamController = StreamController<String>.broadcast();
   Stream<String> get messageStream => _messageStreamController.stream;
 
-
   void dispose() {
     _messageStreamController.close();
   }
@@ -44,6 +43,32 @@ class MqttService {
     if(ok && !_listenerStarted) _startListener();
 
     return ok;
+  }
+  Future<bool> restartService(String ip) async {
+    try {
+      autoReconnect = false;
+
+      await _updatesSubscription?.cancel();
+      _updatesSubscription = null;
+
+      _disconnect();
+
+      _topicCallbacks.clear();
+      _subscribedTopics.clear();
+
+      bool ok = true;
+      ok = await _init(ip);
+      ok = await _connect();
+
+      _listenerStarted = false;
+      _startListener();
+
+      return ok;
+
+    } catch (e) {
+      MyGlobalMessage.show('Error', '$e', MyMessageType.debug);
+      return false;
+    }
   }
   Future<bool> _init(String ip) async {
 
@@ -83,8 +108,7 @@ class MqttService {
   }
   void _startListener() {
     if (!_listenerStarted) {
-      //_listenerStarted = true inside _rxStreamListener();
-      //baseService.setConnectedByIp(ip, true);
+      //Set _listenerStarted inside _rxStreamListener();
 
       _rxStreamListener();
       printMsg("MQTT Listener Started");
@@ -120,21 +144,7 @@ class MqttService {
     }
     return false;
   }
-  Future<bool> reconnect(String ip) async {
-    try {
-      isConnected = false;
-      _initialized = false;
-      _listenerStarted = false;
-      _updatesSubscription!.cancel();
 
-      _disconnect();
-      return await startService(ip);
-
-    } catch (e) {
-      print("Error connecting: $e");
-      return false;
-    }
-  }
   Future<void> stopMessageListener() async {
     await _updatesSubscription?.cancel();
     _updatesSubscription = null;
@@ -151,33 +161,23 @@ class MqttService {
     client!.subscribe(_topic, MqttQos.atLeastOnce);
     printMsg("Subscribing: $topic");
   }
-  void _disconnect() {
-    if(client != null) return;
+  void _disconnect() async {
+    if (client == null) return;
 
-    // Disconnect if connected
     if (_initialized && client!.connectionStatus?.state == MqttConnectionState.connected) {
       client!.disconnect();
-      _initialized = false;
     }
+    client = null;
 
-    // // Cancel the updates listener
-    // await _updatesSubscription?.cancel();
-    // _updatesSubscription = null;
-    //
-    // // Clear topic callbacks
-    // _topicCallbacks.clear();
-    // _subscribedTopics.clear();
-    //
-    // // Optional: unsubscribe from all topics
-    // for (final topic in _subscribedTopics) {
-    //   client.unsubscribe(topic);
-    // }
-    //
-    // // Disconnect the client
-    // _reconnectTimer?.cancel();
+    // Cancel the updates listener
+    //await _updatesSubscription?.cancel();
+    //_updatesSubscription = null;
+
+     // Disconnect the client
+     _reconnectTimer?.cancel();
     // client.disconnect();
     //
-    // isConnected = false;
+    isConnected = false;
   }
 
   // -----------------------------------------------------------
@@ -193,8 +193,7 @@ class MqttService {
   }
   void _onDisconnected() {
     isConnected = false;
-    print("MQTT Disconnected");
-    dispose();
+    printMsg("MQTT Disconnected");
     if(autoReconnect) _scheduleReconnect(); // auto schedule reconnect manually
   }
   void _onAutoReconnect() {

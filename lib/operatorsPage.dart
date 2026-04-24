@@ -136,7 +136,6 @@ class _OperatorsPageState extends State<OperatorsPage> {
 
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Consumer<OperatorService>(

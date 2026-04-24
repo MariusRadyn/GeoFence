@@ -24,7 +24,6 @@ import 'MqttService.dart';
 const APP_VERSION = "V1.0.1";
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-bool isDebug = true;
 String debugLog = '';
 bool disableDebugMsg = false;
 
@@ -114,6 +113,7 @@ const settingRebateValue = 'rebateValuePerLiter';
 const settingDieselPrice = 'dieselPrice';
 const settingConnectedDevice = 'connectedDevice';
 const settingConnectedDeviceIp = 'connectedDeviceIp';
+const settingConnectedDeviceId = 'connectedDeviceId';
 const settingServerData = 'serverData';
 const double settingMonDefaultTicksPerM = 20; // Default value when new Monitor is created
 
@@ -124,11 +124,15 @@ const String profileTypeOperator = "operator";
 const String profileTypeUser = "user";
 
 // Operator Types
-const String userTypeOperator = "Operator";
-const String userTypeSupervisor = "Supervisor";
+const String operatorTypeOperator = "Operator";
+const String operatorTypeSupervisor = "Supervisor";
+const String operatorDocId = "docId";
+const String operatorTagId = "tagId";
+const String operatorName = "name";
+const String operatorSurname = "surname";
 const List<String> settingOperatorTypeList = [
-  userTypeOperator,
-  userTypeSupervisor
+  operatorTypeOperator,
+  operatorTypeSupervisor
 ];
 
 // Monitor Types
@@ -212,6 +216,7 @@ const mqttCmdConnectMonitor = "#CONNECT_MONITOR";
 const mqttCmdDisconnectMonitor = "#DISCONNECT_MONITOR";
 const mqttCmdAck = "#ACK";
 const mqttCmdPing = "#PING";
+const mqttCmdConnectBase = "#CONNECT_BASE";
 const mqttCmdLiveMonitorData = "#MONITOR_DATA";
 const mqttCmdTagRequest = "#TAG_REQ";
 const mqttCmdTagData = "#TAG_DATA";
@@ -264,7 +269,9 @@ Future<List<BluetoothDevice>> getBluetoothDevices() async {
 
 //--Methods---------------------------------------------------------------------
 void printMsg(String msg) {
-  if (isDebug) print(msg);
+  if (kDebugMode) {
+    debugPrint(msg);
+  }
 }
 void writeLog(var text) {
   debugLog += text +'\r';
@@ -324,172 +331,6 @@ Position latLngToPosition(LatLng latLng) {
     floor: null,
     isMocked: false,
   );
-}
-
-class MyDialogWidget extends StatelessWidget {
-  final String message;
-  final String header;
-  final String but1Text;
-  final String but2Text;
-  final VoidCallback? onPressedBut1;
-  final VoidCallback? onPressedBut2;
-  final String image;
-
-  const MyDialogWidget({
-    super.key,
-    required this.message,
-    required this.header,
-    required this.but1Text,
-    required this.but2Text,
-    this.onPressedBut1,
-    this.onPressedBut2,
-    this.image = iconWarning,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return CupertinoAlertDialog(
-      title: Row(
-        children: [
-          Expanded(flex: 1, child: Image.asset(image, height: 30, width: 30)),
-          SizedBox(width: 20),
-
-          // Header
-          Expanded(flex: 4, child: MyText(
-            text: header,
-            fontsize: 18,
-            color: Colors.white
-            ),
-          ),
-        ],
-      ),
-
-      // Message
-      content: MyText(
-        text: message,
-        fontsize: 14,
-        color: Colors.grey,
-      ),
-      actions: <Widget>[
-        TextButton(
-          style: TextButton.styleFrom(
-            textStyle: Theme.of(context).textTheme.labelLarge,
-          ),
-          onPressed: onPressedBut1,
-          child: MyText(
-            text: but1Text,
-            fontsize: 20,
-            color: Colors.blueAccent,
-          ),
-        ),
-        TextButton(
-          style: TextButton.styleFrom(
-            textStyle: Theme.of(context).textTheme.labelLarge,
-          ),
-          onPressed: onPressedBut2,
-          child: MyText(
-            text: but2Text,
-            fontsize: 20,
-            color: Colors.blueAccent,
-          ),
-        ),
-      ],
-    );
-  }
-}
-class Grabber extends StatelessWidget {
-  /// A draggable widget that accepts vertical drag gestures
-  /// and this is only visible on desktop and web platforms.
-  const Grabber({super.key, required this.onVerticalDragUpdate, required this.isOnDesktopAndWeb});
-
-  final ValueChanged<DragUpdateDetails> onVerticalDragUpdate;
-  final bool isOnDesktopAndWeb;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!isOnDesktopAndWeb) {
-      return const SizedBox.shrink();
-    }
-    final ColorScheme colorScheme = Theme.of(context).colorScheme;
-
-    return GestureDetector(
-      onVerticalDragUpdate: onVerticalDragUpdate,
-      child: Container(
-        width: double.infinity,
-        color: colorScheme.onSurface,
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 8.0),
-            width: 32.0,
-            height: 4.0,
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-//--Global Messages ------------------------------------------------------------
-class MyGlobalMessage {
-
-  static void show(String header, String message, MyMessageType msgType) {
-    if(msgType == MyMessageType.debug && disableDebugMsg ) return;
-
-    final context = navigatorKey.currentState?.overlay?.context;
-    if (context == null) return;
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: const BorderSide(
-            color: Colors.blue, // Border color
-            width: 2, // Border width
-          ),
-        ),
-        backgroundColor: colorAppTitle,
-        shadowColor: Colors.black,
-        title: MyText(
-            text: header,
-            color: Colors.white
-        ),
-        content: MyText(
-          text: message,
-          color: Colors.grey,
-          fontsize: 18,
-        ),
-        actions: [
-          MyTextButton(
-              text: "OK",
-              onPressed: () async {
-                Navigator.pop(context);
-              }
-          ),
-        ],
-      ),
-    );
-  }
-}
-class MyGlobalSnackBar {
-  static void show(String message) {
-    final context = navigatorKey.currentState?.overlay?.context;
-    if (context == null) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: MyText(
-            text: message
-        ),
-        backgroundColor: Colors.blueGrey,
-      ),
-    );
-  }
 }
 
 //--Class-----------------------------------------------------------------------
@@ -1255,7 +1096,7 @@ class MyOperatorTile extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     MyText(text: '${operator.name} ${operator.surname}'),
-                    MyText(text: 'Tag: ${operator.tagId}', fontsize: 14,color: Colors.grey),
+                    MyText(text: '${operator.tagId}', fontsize: 14,color: Colors.grey),
                   ],
                 ),
               ),
@@ -1589,63 +1430,6 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
     );
   }
 }
-Future<T?> MyQuestionAlertBox<T> ({
-  required BuildContext context,
-  required String header,
-  required String message,
-  VoidCallback? onPress,
-}) {
-    return showDialog(
-        context: context,
-        builder: (context){
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(
-                color: Colors.blue, // Border color
-                width: 2, // Border width
-              ),
-            ),
-            backgroundColor: colorAppTitle,
-            shadowColor: Colors.black,
-            title: MyText(
-                text: header,
-                color: Colors.white,
-              fontsize: 18,
-            ),
-            content: MyText(
-              text: message,
-              color: Colors.grey,
-              fontsize: 16,
-            ),
-            actions: [
-              TextButton(
-                child: const MyText(
-                  text: 'No',
-                  fontsize: 20,
-                  color: Colors.blue,
-                ),
-                onPressed: () => Navigator.pop(context),
-              ),
-              TextButton(
-                  child: const MyText(
-                    text: 'Yes',
-                    color:  Colors.blue,
-                    fontsize: 20,
-                  ),
-
-                  onPressed: () {
-                    if(onPress != null){
-                      onPress();
-                    }
-                    Navigator.pop(context);
-                  }
-              ),
-            ],
-          );
-        }
-    );
-}
 class ClientIdManager {
   static const _key = "mqtt_client_id";
 
@@ -1734,6 +1518,133 @@ class MyBottomNavItem extends BottomNavigationBarItem {
     ),
     label: label,
   );
+}
+class MyDialogWidget extends StatelessWidget {
+  final String message;
+  final String header;
+  final String but1Text;
+  final String but2Text;
+  final VoidCallback? onPressedBut1;
+  final VoidCallback? onPressedBut2;
+  final String image;
+
+  const MyDialogWidget({
+    super.key,
+    required this.message,
+    required this.header,
+    required this.but1Text,
+    required this.but2Text,
+    this.onPressedBut1,
+    this.onPressedBut2,
+    this.image = iconWarning,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoAlertDialog(
+      title: Row(
+        children: [
+          Expanded(flex: 1, child: Image.asset(image, height: 30, width: 30)),
+          SizedBox(width: 20),
+
+          // Header
+          Expanded(flex: 4, child: MyText(
+              text: header,
+              fontsize: 18,
+              color: Colors.white
+          ),
+          ),
+        ],
+      ),
+
+      // Message
+      content: MyText(
+        text: message,
+        fontsize: 14,
+        color: Colors.grey,
+      ),
+      actions: <Widget>[
+        TextButton(
+          style: TextButton.styleFrom(
+            textStyle: Theme.of(context).textTheme.labelLarge,
+          ),
+          onPressed: onPressedBut1,
+          child: MyText(
+            text: but1Text,
+            fontsize: 20,
+            color: Colors.blueAccent,
+          ),
+        ),
+        TextButton(
+          style: TextButton.styleFrom(
+            textStyle: Theme.of(context).textTheme.labelLarge,
+          ),
+          onPressed: onPressedBut2,
+          child: MyText(
+            text: but2Text,
+            fontsize: 20,
+            color: Colors.blueAccent,
+          ),
+        ),
+      ],
+    );
+  }
+}
+class MyGlobalMessage {
+
+  static void show(String header, String message, MyMessageType msgType) {
+    if(msgType == MyMessageType.debug && disableDebugMsg ) return;
+
+    final context = navigatorKey.currentState?.overlay?.context;
+    if (context == null) return;
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(
+            color: Colors.blue, // Border color
+            width: 2, // Border width
+          ),
+        ),
+        backgroundColor: colorAppTitle,
+        shadowColor: Colors.black,
+        title: MyText(
+            text: header,
+            color: Colors.white
+        ),
+        content: MyText(
+          text: message,
+          color: Colors.grey,
+          fontsize: 18,
+        ),
+        actions: [
+          MyTextButton(
+              text: "OK",
+              onPressed: () async {
+                Navigator.pop(context);
+              }
+          ),
+        ],
+      ),
+    );
+  }
+}
+class MyGlobalSnackBar {
+  static void show(String message) {
+    final context = navigatorKey.currentState?.overlay?.context;
+    if (context == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: MyText(
+            text: message
+        ),
+        backgroundColor: Colors.blueGrey,
+      ),
+    );
+  }
 }
 
 //--Services--------------------------------------------------------------------
@@ -1978,6 +1889,7 @@ class FireSettings{
   double dieselPrice;
   String connectedDevice;
   String connectedDeviceIp;
+  String connectedDeviceId;
   List<ServerData>? serverData;
 
   FireSettings({
@@ -1987,6 +1899,7 @@ class FireSettings{
     required this.rebateValuePerLiter,
     this.connectedDevice = "",
     this.connectedDeviceIp = "",
+    this.connectedDeviceId = "",
     this.serverData
   });
 
@@ -1998,6 +1911,7 @@ class FireSettings{
       rebateValuePerLiter: map[settingRebateValue] ?? 2.6,
       connectedDevice: map[settingConnectedDevice] ?? "",
       connectedDeviceIp: map[settingConnectedDeviceIp] ?? "",
+      connectedDeviceId: map[settingConnectedDeviceId] ?? "",
       serverData: map[settingServerData] != null
         ? List<ServerData>.from(
         (map[settingServerData] as List)
@@ -2014,6 +1928,7 @@ class FireSettings{
       settingRebateValue : rebateValuePerLiter,
       settingConnectedDevice : connectedDevice,
       settingConnectedDeviceIp : connectedDeviceIp,
+      settingConnectedDeviceId : connectedDeviceId,
       settingServerData : serverData?.map((e) => e.toMap()).toList(),
     };
   }
@@ -2025,6 +1940,7 @@ class FireSettings{
     double? dieselPrice,
     String? connectedDevice,
     String? connectedDeviceIp,
+    String? connectedDeviceId,
     List<ServerData>? serverData,
   }){
     return FireSettings(
@@ -2034,6 +1950,7 @@ class FireSettings{
       rebateValuePerLiter: rebateValuePerLiter ?? this.rebateValuePerLiter,
       connectedDevice: connectedDevice ?? this.connectedDevice,
       connectedDeviceIp: connectedDeviceIp ?? this.connectedDeviceIp,
+      connectedDeviceId: connectedDeviceId ?? this.connectedDeviceId,
       serverData: serverData ?? this.serverData,
     );
   }
@@ -2050,6 +1967,7 @@ class SettingsService extends ChangeNotifier {
   bool monitorWheelSignal = false;
   String? lastConnectionError = "";
   final _db = FirebaseFirestore.instance;
+  String? _lastMqttIp;
 
   Future<void> load() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -2089,33 +2007,30 @@ class SettingsService extends ChangeNotifier {
   }
   Future<void> updateFireSettingsFields(Map<String, dynamic> updates) async {
     try {
-      // final current = _settings;
-      // if (current == null) return;
-      //
-      // final updated = current.copyWith(
-      //   isVoicePromptOn: updates[SettingIsVoicePromptOn] ?? current.isVoicePromptOn,
-      //   logPointPerMeter: updates[SettingLogPointPerMeter] ?? current.logPointPerMeter,
-      //   rebateValuePerLiter: updates[SettingRebateValue] ?? current.rebateValuePerLiter,
-      //   dieselPrice: updates[SettingDieselPrice] ?? current.dieselPrice,
-      //   connectedDevice: updates[SettingConnectedDevice] ?? current.connectedDevice,
-      //   connectedDeviceIp: updates[SettingConnectedDeviceIp] ?? current.connectedDeviceIp,
-      //   serverData: updates['serverData'] ?? current.serverData,
-      // );
-      //
-      // _settings = updated;
-
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
+      if (uid == null || _settings == null) return;
 
+      final current = _settings!;
+
+      final updated = current.copyWith(
+        isVoicePromptOn: updates[settingIsVoicePromptOn] ?? current.isVoicePromptOn,
+        logPointPerMeter: updates[settingLogPointPerMeter] ?? current.logPointPerMeter,
+        rebateValuePerLiter: updates[settingRebateValue] ?? current.rebateValuePerLiter,
+        dieselPrice: updates[settingDieselPrice] ?? current.dieselPrice,
+        connectedDevice: updates[settingConnectedDevice] ?? current.connectedDevice,
+        connectedDeviceIp: updates[settingConnectedDeviceIp] ?? current.connectedDeviceIp,
+        connectedDeviceId: updates[settingConnectedDeviceId] ?? current.connectedDeviceId,
+        //serverData: updates['serverData'] ?? current.serverData,
+      );
+
+      _settings = updated;
+
+      // Concatenate Firestore Field 'settings' to each key to store at users/settings
       final Map<String, dynamic> nestedUpdates = {};
-      // updated.toMap().forEach((key, value) {
-      //   if (updates.containsKey(key)) {
-      //     nestedUpdates['$FieldsSettings.$key'] = value;
-      //   }
-      // });
-
-      updates.forEach((key, value) {
-        nestedUpdates['$fieldsSettings.$key'] = value;
+      updated.toMap().forEach((key, value) {
+        if (updates.containsKey(key)) {
+          nestedUpdates['$fieldsSettings.$key'] = value;
+        }
       });
 
       await _db.collection(collectionUsers)
@@ -2128,40 +2043,10 @@ class SettingsService extends ChangeNotifier {
       MyGlobalMessage.show('Error:', '$e', MyMessageType.error);
     }
   }
-  void notify() => notifyListeners();
-
-  // Future<bool> mqttConnect(String ip) async {
-  //   if (isConnecting) return true;
-  //   if (isBaseStationConnected) return true;
-  //
-  //   isConnecting = true;
-  //   notifyListeners();
-  //
-  //   try {
-  //     if(await _mqttConnect(ip)){
-  //       isBaseStationConnected = true;
-  //       lastConnectionError = '';
-  //     }
-  //   } catch (e) {
-  //     lastConnectionError = e.toString();
-  //   } finally {
-  //     isConnecting = false;
-  //     notifyListeners();
-  //   }
-  //
-  //   if(!isBaseStationConnected){
-  //     return false;
-  //   }
-  //   else {
-  //     return true;
-  //   }
-  // }
-  // Future<void> mqttDisconnect()async{
-  //   await _mqttDisconnect();
-  //   isBaseStationConnected = false;
-  //   notifyListeners();
-  // }
-
+  void setIsBaseConnected(bool value) {
+    isBaseStationConnected = value;
+    notifyListeners();
+  }
   void update({
     bool? isBaseStationConnected,
   }) {
@@ -2529,7 +2414,6 @@ class BaseStationData {
     this.docId = ""
   });
 
-
   // From Firebase
   factory BaseStationData.fromMap(Map<String, dynamic> map, String docId) {
     return BaseStationData(
@@ -2586,8 +2470,8 @@ class BaseStationService extends ChangeNotifier {
     } catch (e) {
       print(e);
     } finally {
-      isLoading = false;   // ✅ CLEAR HERE
-      notifyListeners();   // ✅ NOTIFY HERE
+      isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -2662,27 +2546,6 @@ class BaseStationService extends ChangeNotifier {
     } catch (e) {
       MyGlobalSnackBar.show('Delete Failed: $e');
     }
-  }
-
-  // void removeBaseStations(String id) {
-  //   _base.removeWhere((m) => m.docId == id);
-  //   if (_selected?.docId == id) _selected = null;
-  //   notifyListeners();
-  // }
-  // void selectMonitor(String id) {
-  //   _selected = _base.firstWhere((m) => m.docId == id);
-  //   notifyListeners();
-  // }
-  void setConnectedByIp(String ip, bool value) {
-    final base = lstBaseStations.firstWhereOrNull((b) => b.ipAddress == ip);
-    if (base == null) return;
-
-    base.isConnected = value;
-    notifyListeners();
-  }
-  void setIpAddress(BaseStationData base, String value) {
-     base.ipAddress = value;
-     notifyListeners();
   }
 }
 
@@ -2764,10 +2627,10 @@ class OperatorService extends ChangeNotifier {
 
   final newOperator = OperatorData(
       docId: '',
-      name: 'none',
-      surname: 'none',
+      name: 'New',
+      surname: 'Operator',
       tagId: 'none',
-      accessLevel: userTypeOperator
+      accessLevel: operatorTypeOperator
   );
 
   void setOperators(List<OperatorData> list) {
@@ -3040,6 +2903,63 @@ Widget MyCenterMsg(String msg){
     child: Center(
       child: MyText(text: msg),
     ),
+  );
+}
+Future<T?> MyQuestionAlertBox<T> ({
+  required BuildContext context,
+  required String header,
+  required String message,
+  VoidCallback? onPress,
+}) {
+  return showDialog(
+      context: context,
+      builder: (context){
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(
+              color: Colors.blue, // Border color
+              width: 2, // Border width
+            ),
+          ),
+          backgroundColor: colorAppTitle,
+          shadowColor: Colors.black,
+          title: MyText(
+            text: header,
+            color: Colors.white,
+            fontsize: 18,
+          ),
+          content: MyText(
+            text: message,
+            color: Colors.grey,
+            fontsize: 16,
+          ),
+          actions: [
+            TextButton(
+              child: const MyText(
+                text: 'No',
+                fontsize: 20,
+                color: Colors.blue,
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+            TextButton(
+                child: const MyText(
+                  text: 'Yes',
+                  color:  Colors.blue,
+                  fontsize: 20,
+                ),
+
+                onPressed: () {
+                  if(onPress != null){
+                    onPress();
+                  }
+                  Navigator.pop(context);
+                }
+            ),
+          ],
+        );
+      }
   );
 }
 
