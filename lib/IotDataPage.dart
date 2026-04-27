@@ -174,11 +174,11 @@ class _IotDataPageState extends State<IotDataPage> {
                           num lines = 0;
 
                           iotData.forEach((doc) {
-                            distance += doc.get(monitorLogDistance) ?? 0.0;
-                            lines += doc.get(monitorLogLines) ?? 0;
+                            distance += doc.get(fireMonitorLogDistance) ?? 0.0;
+                            lines += doc.get(fireMonitorLogLines) ?? 0;
                           });
 
-                          String iotName = monitorData[monitorLogName];
+                          String iotName = monitorData[fireMonitorLogName];
                           String nrOfItems = iotData.length.toString();
                           String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[fireMonitorLastLogTimestamp].toDate());
                           String dist = distance.toStringAsFixed(2);

@@ -22,7 +22,7 @@ class BaseStationPage extends StatefulWidget {
 }
 
 class _BaseStationState extends State<BaseStationPage> with TickerProviderStateMixin{
-  bool Debug = false;
+  bool debug = false;
   bool isLoading = true;
   TabController? _tabController;
   int _selectedIndex = 0;
@@ -32,10 +32,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   final Map<String, TextEditingController> _controllersDesc = {};
   final Map<String, TextEditingController> _controllersBluetooth = {};
   final Map<String, TextEditingController> _controllersIpAddress = {};
-  late TextEditingController _controllerName;
-  late TextEditingController _controllerDesc;
-  late TextEditingController _controllerBluetooth;
-  late TextEditingController _controllerIpAddress;
 
   final FlutterTts _flutterTts = FlutterTts();
   String? bluetoothValue;
@@ -49,14 +45,16 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
   BluetoothDevice? pairedDevice;
   BluetoothDevice? selectedDevice;
-  List<BluetoothDevice> lstPairedDevices = [
+  BluetoothDevice? newDevice;
+  List<BluetoothDevice> lstPairedBtDevices = [
     BluetoothDevice.fromId("00:11:22:33:44:55"),
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
 
-  late String oldBaseName;
-  late String oldBaseDesc;
-  late String oldBaseIp;
+  String? oldBaseName;
+  String? oldBaseDesc;
+  String? oldBaseIp;
+  String? oldBaseBluetoothId;
 
   late FocusNode _focusNodeName;
   late FocusNode _focusNodeDesc;
@@ -73,7 +71,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     _focusNodeDesc = FocusNode();
     _focusNodeIP = FocusNode();
 
-    // 2. Add listeners to trigger save on focus loss
     _focusNodeName.addListener(() => _handleFocusChange(_focusNodeName, 'name'));
     _focusNodeDesc.addListener(() => _handleFocusChange(_focusNodeDesc, 'desc'));
     _focusNodeIP.addListener(() => _handleFocusChange(_focusNodeIP, 'ip'));
@@ -131,8 +128,8 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
       final cmd = jsonData[mqttJsonCmd];
       final fromId = jsonData[mqttJsonFromDeviceId];
 
-      // Tag Data (from any IOT)
-      if (cmd == mqttCmdPing) {
+      // PING (Connected to Base)
+      if (cmd == mqttCmdConnectBase) {
         _timeoutTimer!.cancel();
 
         // Pass
@@ -154,6 +151,8 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
         setState(() {
           base.isConnected = true;
         });
+
+        MyGlobalSnackBar.show("Connected: ${base.ipAddress}");
       }
     });
   }
@@ -167,7 +166,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
       _mqttStartListener();
       _startTimeout(5);
 
-      MqttService().tx(base.bluetoothName, mqttCmdPing, {} ,mqttTopicFromAndroid);
+      MqttService().tx(base.bluetoothName, mqttCmdConnectBase, {fireUid: FirebaseAuth.instance.currentUser!.uid} ,mqttTopicFromAndroid);
       return true;
     }
 
@@ -182,18 +181,29 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
   // Methods
   void _handleFocusChange(FocusNode node, String field) {
+    var base = context.read<BaseStationService>().lstBaseStations[_tabController!.index];
+
+    if (field == 'name') base.baseName = _getControllerName(base).text;
+    if (field == 'desc') base.baseDesc = _getControllerDesc(base).text;
+    if (field == 'ip') base.ipAddress = _getControllerIpAdr(base).text;
+
     if (!node.hasFocus) {
-      var base = context.read<BaseStationService>().lstBaseStations[_tabController!.index];
+      bool hasChanged =
+          (oldBaseName ?? '') != base.baseName ||
+          (oldBaseDesc ?? '') != base.baseDesc ||
+          (oldBaseIp ?? '') != base.ipAddress;
 
-      setState(() {
-        if (field == 'name') base.baseName = _controllerName.text;
-        if (field == 'desc') base.baseDesc = _controllerDesc.text;
-        if (field == 'ip') base.ipAddress = _controllerIpAddress.text;
+      if(!hasChanged)  {
+        return;
+      }
 
-        if(oldBaseName == base.baseName && oldBaseDesc == base.baseDesc && oldBaseIp == base.ipAddress) return;
-        _saveBase(base);
-      });
+      _saveBase(base);
     }
+     if(node.hasFocus){
+       if (field == 'name') oldBaseName = _getControllerName(base).text;
+       if (field == 'desc') oldBaseDesc = _getControllerDesc(base).text;
+       if (field == 'ip') oldBaseIp = _getControllerIpAdr(base).text;
+     }
   }
   Future<void> updateSettingFields(Map<String, dynamic> updates) async {
     SettingsService settingsService = context.read<SettingsService>();
@@ -209,24 +219,42 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
   }
-  void _saveBase(BaseStationData base) async {
-    if (_tabController == null) return;
-    BaseStationService baseService = context.read<BaseStationService>();
+  Future<bool> _checkDuplicate(String bluetoothName, String docId) async {
+    if (_tabController == null) return false;
 
-    await baseService.save(base);
+    // CHeck Tag duplication
+    final uid = FirebaseAuth.instance.currentUser?.uid;
 
-    if (_tabController != null &&  baseService.lstBaseStations.isNotEmpty) {
-      final newIndex = baseService.lstBaseStations.indexWhere((d) => d.docId == base.docId);
-      if (newIndex != -1) {
-        _tabController!.animateTo(newIndex);
+    final snapshot = await FirebaseFirestore.instance
+        .collection(collectionUsers)
+        .doc(uid!)
+        .collection(collectionBaseStations)
+        .where(fireBaseId, isEqualTo: bluetoothName)
+        .limit(1)
+        .get();
+
+    if(snapshot.docs.isNotEmpty){
+      final existingDoc = snapshot.docs.first;
+
+      if (existingDoc.id != docId) {
+        final Map<String, dynamic> data = existingDoc.data();
+        String name = data[fireBaseName] ?? 'Unknown';
+
+        MyGlobalMessage.show(
+            "Duplicate",
+            "Bluetooth ID already use for '$name'",
+            MyMessageType.warning
+        );
+        return false;
       }
     }
+    return true;
   }
   void _addBase() async {
     if (!mounted) return;
 
     BaseStationService baseService = context.read<BaseStationService>();
-    final docId = await baseService.addNew();
+    await baseService.addNew();
   }
   void _deleteBaseDialog() async {
     int index = _tabController!.index;
@@ -280,6 +308,19 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
         }
     );
   }
+  void _saveBase(BaseStationData base) async {
+    if (_tabController == null) return;
+    BaseStationService baseService = context.read<BaseStationService>();
+
+    await baseService.save(base);
+
+    if (_tabController != null &&  baseService.lstBaseStations.isNotEmpty) {
+      final newIndex = baseService.lstBaseStations.indexWhere((d) => d.docId == base.docId);
+      if (newIndex != -1) {
+        _tabController!.animateTo(newIndex);
+      }
+    }
+  }
   Future<void> _deleteBase(BaseStationData base) async {
     BaseStationService baseService = context.read<BaseStationService>();
     await baseService.delete(base);
@@ -313,10 +354,10 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
     });
   }
   Future<void> _getBluetoothDevices() async {
-      lstPairedDevices = await getBluetoothDevices();
+      lstPairedBtDevices = await getBluetoothDevices();
 
-      if(Debug){
-        lstPairedDevices = [
+      if(debug){
+        lstPairedBtDevices = [
           BluetoothDevice(
             remoteId: DeviceIdentifier("00:11:22:33:44:55"),
           ),
@@ -340,7 +381,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
-            child: lstPairedDevices.isEmpty
+            child: lstPairedBtDevices.isEmpty
                 ? const Center(
               child: MyText(
                 text: 'No Bluetooth devices found',
@@ -349,9 +390,9 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
             )
                 : ListView.builder(
               padding: const EdgeInsets.all(10),
-              itemCount: lstPairedDevices.length,
+              itemCount: lstPairedBtDevices.length,
               itemBuilder: (context, index) {
-                final device = lstPairedDevices[index];
+                final device = lstPairedBtDevices[index];
 
                 return Card(
                   shape: RoundedRectangleBorder(
@@ -374,34 +415,45 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                       text: device.remoteId.str
                     ),
                     trailing: ElevatedButton(
-                      child: const Text('Select',
-                        style: TextStyle(
-                            color: Colors.white
-                        ),
-                      ),
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                         backgroundColor: Colors.blue
                       ),
-                      onPressed: () {
-                        setState(() {
-                            selectedDevice = device;
+                      onPressed: () async {
+                        final baseService = context.read<BaseStationService>();
+                        final String newName = device.platformName.isNotEmpty ? device.platformName : 'Unknown';
+                        final String newMac = device.remoteId.str;
+                        final String originalName = base.bluetoothName;
 
-                            base.bluetoothName = selectedDevice?.platformName ?? '';
-                            base.bluetoothMac = selectedDevice?.remoteId.toString() ?? '';
-                            _saveBase(base);
-
-                          //mapBaseStationsData[docId]?[SettingBaseBlueDeviceName] = selectedDevice?.platformName;
-                            //mapBaseStationsData[docId]?[SettingBaseBlueMac] = selectedDevice?.remoteId.toString();
-                            //_saveCurrentBaseStation();
-                        });
-
-                        print('Selected: ${device.platformName}');
                         Navigator.of(context).pop();
-                      },
 
+                        bool isUnique = await _checkDuplicate(newName, base.docId);
+                        if (isUnique) {
+                          // SUCCESS
+                          setState(() {
+                            base.bluetoothName = newName;
+                            base.bluetoothMac = newMac;
+                            _controllersBluetooth[base.docId]?.text = newName;
+                          });
+
+                          await baseService.save(base);
+
+                        } else {
+                          // DUPLICATE FOUND
+                          // Roll back
+                          setState(() {
+                            base.bluetoothName = originalName;
+                            _controllersBluetooth[base.docId]?.text = originalName;
+                          });
+                        }
+                      },
+                      child: const Text('Select',
+                        style: TextStyle(
+                            color: Colors.white
+                        ),
+                      ),
                     ),
                   ),
                 );
@@ -412,7 +464,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
       ),
     );
   }
-  Future<void> sendTextToDevice(BluetoothDevice device, String message) async {
+  Future<void> _sendTextToDevice(BluetoothDevice device, String message) async {
     List<BluetoothService> services = await device.discoverServices();
     for (BluetoothService service in services) {
       if (service.uuid.str.toLowerCase() == bluetoothServiceUuid) {
@@ -425,17 +477,17 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
       }
     }
   }
-  void connectBluetoothDevice(String mac) async {
+  void _connectBluetoothDevice(String mac) async {
     FlutterBluePlus.startScan(timeout: Duration(seconds: 4));
     print("Connecting... Bluetooth $mac");
 
-    for(BluetoothDevice bt in lstPairedDevices ){
+    for(BluetoothDevice bt in lstPairedBtDevices ){
       if(bt.remoteId.str == mac){
         String btNname = bt.platformName;
         await FlutterBluePlus.stopScan();
         await bt.connect();
         print("Connected $btNname");
-        await sendTextToDevice(bt, "Hello Raspberry Pi!");
+        await _sendTextToDevice(bt, "Hello Raspberry Pi!");
         break;
       }
     }
@@ -559,18 +611,14 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                     children:  List.generate(baseService.lstBaseStations.length, (index){ //_baseService.lstBaseStations.map((base)  {
                       var currentBase = baseService.lstBaseStations[index];
 
-                      _controllerName = _getControllerName(currentBase);
-                      _controllerDesc = _getControllerDesc(currentBase);
-                      _controllerIpAddress = _getControllerIpAdr(currentBase);
-                      _controllerBluetooth = _getControllerBluetooth(currentBase);
+                      final controllerName = _getControllerName(currentBase);
+                      final controllerDesc = _getControllerDesc(currentBase);
+                      final controllerIpAddress = _getControllerIpAdr(currentBase);
+                      final controllerBluetooth = _getControllerBluetooth(currentBase);
 
-                      oldBaseName = _controllerName.text;
-                      oldBaseDesc = _controllerDesc.text;
-                      oldBaseIp = _controllerIpAddress.text;
-
-                      if(selectedDevice != null){
-                        _controllerBluetooth.text = selectedDevice?.platformName ?? '';
-                      }
+                      //if(selectedDevice != null){
+                      //  _controllerBluetooth.text = selectedDevice?.platformName ?? '';
+                      //}
 
                       return SingleChildScrollView(
                         padding: const EdgeInsets.all(5),
@@ -599,7 +647,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   isReadOnly: false,
                                   backgroundColor: colorAppBackground,
                                   foregroundColor: Colors.white,
-                                  controller: _controllerName,
+                                  controller: controllerName,
                                   hintText: "Base Station Name",
                                   labelText: "Name",
                                   onFieldSubmitted: (value){
@@ -618,13 +666,12 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   focusNode: _focusNodeDesc,
                                   backgroundColor: colorAppBackground,
                                   foregroundColor: Colors.white,
-                                  controller: _controllerDesc,
+                                  controller: controllerDesc,
                                   hintText: "Enter value here",
                                   labelText: "Description",
                                   onFieldSubmitted: (value){
                                     setState(() {
                                       currentBase.baseDesc = value;
-                                      //baseService.setIpAddress(baseSelected, value);
                                       _saveBase(currentBase);
                                     });
                                   },
@@ -641,7 +688,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                         isReadOnly: true,
                                         backgroundColor: colorAppBackground,
                                         foregroundColor: Colors.white,
-                                        controller: _controllerBluetooth,
+                                        controller: controllerBluetooth,
                                         hintText: "Bluetooth Identification",
                                         labelText: "Identification",
 
@@ -655,7 +702,6 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
 
                                     // Bluetooth Button
                                     OutlinedButton(
-                                        child: Icon(Icons.bluetooth,color: Colors.lightBlueAccent),
                                         style: OutlinedButton.styleFrom(
                                           side: BorderSide(color: Colors.blue, width: 2),
                                           shape: RoundedRectangleBorder(
@@ -663,8 +709,13 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                           ),
                                         ),
                                         onPressed: (){
+                                          oldBaseBluetoothId = currentBase.bluetoothName;
                                           _showBluetoothDevicesPopup(currentBase);
-                                        }
+                                        },
+                                      child: Icon(
+                                        Icons.bluetooth,color:
+                                        Colors.lightBlueAccent
+                                      ),
                                     )
                                   ],
                                 ),
@@ -678,7 +729,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                   isReadOnly: false,
                                   backgroundColor: colorAppBackground,
                                   foregroundColor: Colors.white,
-                                  controller: _controllerIpAddress,
+                                  controller: controllerIpAddress,
                                   hintText: "none",
                                   labelText: "IP Address",
 

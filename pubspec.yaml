@@ -63,6 +63,7 @@ dependencies:
   shared_preferences: ^2.5.3
   flutter_launcher_icons: ^0.13.1
   image: ^4.1.7
+  flutter_slidable: ^3.1.2
 
   #lan_scanner: ^4.0.0
   #network_info_plus: ^6.0.0

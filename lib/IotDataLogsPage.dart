@@ -205,11 +205,11 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                     itemBuilder: (context, index) {
                       var monitorData = docs[index];
 
-                      String operator = monitorData[monitorLogOperator];
-                      String sup = monitorData[monitorLogSupervisor];
-                      num nrOfItems = monitorData[monitorLogLines];
+                      String operator = monitorData[fireMonitorLogOperator];
+                      String sup = monitorData[fireMonitorLogSupervisor];
+                      num nrOfItems = monitorData[fireMonitorLogLines];
                       String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[fireMonitorTimestamp].toDate());
-                      String dist = monitorData[monitorLogDistance].toStringAsFixed(2);
+                      String dist = monitorData[fireMonitorLogDistance].toStringAsFixed(2);
 
                       String image;
                       String img = widget.image;

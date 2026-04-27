@@ -96,7 +96,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
 
   // MQTT
   void _mqttStartListener() {
-    _mqttSubscription?.cancel();
+    if(_mqttSubscription != null) _mqttSubscription?.cancel();
 
     _mqttSubscription = MqttService().messageStream.listen((msg) {
       if(!mounted) return;
@@ -138,11 +138,57 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
         if(tagRequested){
           _requestTag();
         }
+
+        var ip = context.read<SettingsService>().fireSettings!.connectedDeviceIp;
+        var base = context.read<BaseStationService>().lstBaseStations.firstWhere((x) => x.ipAddress == ip);
+        base.isConnected = true;
+
+        MyGlobalSnackBar.show("Connected: $ip");
       }
 
     });
   }
+  Future<bool> _mqttConnectBase () async {
+    String? ip = context.read<SettingsService>().fireSettings?.connectedDeviceIp;
+    String? deviceId = context.read<SettingsService>().fireSettings?.connectedDeviceId;
 
+    if(ip == null || deviceId == null) {
+      MyGlobalMessage.show(
+          'Base Stations',
+          'No previously connected base stations. Please set one in Base Stations page',
+          MyMessageType.info
+      );
+      return false;
+    }
+
+    if(context.read<BaseStationService>().lstBaseStations.isEmpty){
+      MyGlobalMessage.show(
+          'Base Stations',
+          'No Base Stations found. Please set one in Base Stations page',
+          MyMessageType.info
+      );
+      return false;
+    }
+
+    BaseStationData base = context.read<BaseStationService>().lstBaseStations.firstWhere((x)  => x.bluetoothName == deviceId);
+    bool isReady = await MqttService().restartService(ip);
+
+    if(isReady) {
+      _mqttStartListener();
+      _startTimeout(5);
+
+      MqttService().tx(base.bluetoothName, mqttCmdConnectBase, {} ,mqttTopicFromAndroid);
+      return true;
+    }
+
+    // Failed
+    MyGlobalMessage.show("Warning", "Wifi connection FAILED", MyMessageType.warning);
+    setState(() {
+      base.isConnected = false;
+    });
+
+    return false;
+  }
 
 // Methods
   void _handleFocusChange(FocusNode node, String field) {
@@ -209,47 +255,57 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     context.read<OperatorService>().save(widget.operatorData!);
     debugPrint("Tag: $tagId");
   }
-  Future<bool> _mqttConnectBase () async {
-    String? ip = context.read<SettingsService>().fireSettings?.connectedDeviceIp;
-    String? deviceId = context.read<SettingsService>().fireSettings?.connectedDeviceId;
+  void _deleteTagDialog(OperatorData operator) async {
+    showDialog(
+        context: context,
+        builder: (context){
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: const BorderSide(
+                color: Colors.blue, // Border color
+                width: 2, // Border width
+              ),
+            ),
+            backgroundColor: colorAppTitle,
+            shadowColor: Colors.black,
+            title: const MyText(
+                text: "Delete",
+                color: Colors.white
+            ),
+            content: MyText(
+              text: "${operator.tagId} \nAre you sure?",
+              color: Colors.grey,
+              fontsize: 18,
+            ),
+            actions: [
+              TextButton(
+                child: const MyText(
+                  text: 'No',
+                  fontsize: 20,
+                ),
+                onPressed: () => Navigator.pop(context),
+              ),
+              TextButton(
+                  child: const MyText(
+                    text: 'Yes',
+                    color:  Colors.white,
+                    fontsize: 20,
+                  ),
 
-    if(ip == null || deviceId == null) {
-      MyGlobalMessage.show(
-          'Base Stations',
-          'No previously connected base stations. Please set one in Base Stations page',
-          MyMessageType.info
-      );
-        return false;
-    }
+                  onPressed: () async {
+                    widget.operatorData!.tagId = "";
+                    context.read<OperatorService>().save(widget.operatorData!);
+                    _controllerTag!.text = "";
 
-    if(context.read<BaseStationService>().lstBaseStations.isEmpty){
-      MyGlobalMessage.show(
-          'Base Stations',
-          'No Base Stations found. Please set one in Base Stations page',
-          MyMessageType.info
-      );
-      return false;
-    }
-
-    BaseStationData base = context.read<BaseStationService>().lstBaseStations.firstWhere((x)  => x.bluetoothName == deviceId);
-    bool isReady = await MqttService().restartService(ip);
-
-        if(isReady) {
-          _mqttStartListener();
-          _startTimeout(5);
-
-          MqttService().tx(base.bluetoothName, mqttCmdConnectBase, {} ,mqttTopicFromAndroid);
-          return true;
+                    Navigator.pop(context);
+                  }
+              ),
+            ],
+          );
         }
-
-        // Failed
-        MyGlobalMessage.show("Warning", "Wifi connection FAILED", MyMessageType.warning);
-        setState(() {
-          base.isConnected = false;
-        });
-
-        return false;
-    }
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -401,6 +457,30 @@ return Consumer<BaseStationService>(
                                 onFieldSubmitted: (value){},
                               ),
                             ),
+                          ),
+
+                          SizedBox(width: 15),
+
+                          // Delete Button
+                          InkWell(
+                              onTap: () async {
+                                _deleteTagDialog(widget.operatorData!);
+                              },
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.delete_outline,
+                                    size: 30,
+                                    color: Colors.redAccent,
+                                  ),
+                                  SizedBox(width: 10),
+                                   Text("Delete",
+                                     style: TextStyle(
+                                         color: Colors.white
+                                   ),
+                                  )
+                                ],
+                              )
                           ),
 
                           SizedBox(width: 15),

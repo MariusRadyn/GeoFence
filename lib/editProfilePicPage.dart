@@ -81,9 +81,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
     }
   }
   Future<String> _fireUploadImage({required File image,required String docId}) async {
-    setState(() {
-      isLoading = true;
-    });
+
 
     final String name ='Image_${DateTime.now().millisecondsSinceEpoch}.jpg';
     profilePicData.imageFilename = name;
@@ -103,10 +101,6 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
 
     // ✅ Get download URL
     final downloadUrl = await storageRef.getDownloadURL();
-
-    setState(() {
-      isLoading = false;
-    });
     return downloadUrl;
   }
   Uint8List createThumbnail(Uint8List originalBytes) {
@@ -123,16 +117,21 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
     );
   }
   Future<void> _updateImage(File file) async {
-      if(oldImgFilename!= null && oldImgFilename!.isNotEmpty) {
-        await _fireDeleteImage(filename: oldImgFilename!, docId: widget.docId);
-      }
-      final imgURL = await _fireUploadImage(image: file, docId: widget.docId);
+    setState(() {
+      isLoading = true;
+    });
 
-      setState(()  {
-        widget.imageURL = imgURL;
-        oldImgFilename = profilePicData.imageFilename;
-        profilePicData.imageURL = imgURL;
-      });
+    if(oldImgFilename!= null && oldImgFilename!.isNotEmpty) {
+      await _fireDeleteImage(filename: oldImgFilename!, docId: widget.docId);
+    }
+    final imgURL = await _fireUploadImage(image: file, docId: widget.docId);
+
+    setState(()  {
+      widget.imageURL = imgURL;
+      oldImgFilename = profilePicData.imageFilename;
+      profilePicData.imageURL = imgURL;
+      isLoading = false;
+    });
   }
 
   @override

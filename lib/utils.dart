@@ -10,6 +10,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -117,8 +118,6 @@ const settingConnectedDeviceId = 'connectedDeviceId';
 const settingServerData = 'serverData';
 const double settingMonDefaultTicksPerM = 20; // Default value when new Monitor is created
 
-// Monitor Types
-
 // Profile Types
 const String profileTypeOperator = "operator";
 const String profileTypeUser = "user";
@@ -147,21 +146,13 @@ const List<String> settingMonitorTypeList = [
   monitorTypeWheel,
 ];
 
-// Monitor Log Data
-const monitorLogDocId = 'monDocId';
-const monitorLogUserDocId = 'userDocId';
-const monitorLogType = 'iotType';
-const monitorLogName = 'name';
-const monitorLogDistance = 'distance';
-const monitorLogLines = 'lines';
-const monitorLogOperator = 'operator';
-const monitorLogSupervisor = 'supervisor';
-const monitorLogTimestamp = 'timestamp';
-
 // Monitor Debug
-const debugMonitorConnected = 'debugConnected';
-const debugMonitorWheelDistance = 'debugWheelDistance';
-const debugMonitorWheelSignal = 'debugWheelSignal';
+//const debugMonitorConnected = 'debugConnected';
+//const debugMonitorWheelDistance = 'debugWheelDistance';
+//const debugMonitorWheelSignal = 'debugWheelSignal';
+
+// FIREBASE ---------------------------------------------------------------------
+const fireUid = 'userId';
 
 // Firebase - GEO Fence Settings
 const fireGeoCreateDate = 'createdAt';
@@ -190,6 +181,17 @@ const fireMonitorId = 'monitorId';
 const fireMonitorTicksPerM = 'ticksPerM';
 const fireMonitorTimestamp = 'timestamp';
 const fireMonitorLastLogTimestamp = 'lastLogTimestamp';
+
+// firebase - Monitor Log Data
+const fireMonitorLogDocId = 'monDocId';
+const fireMonitorLogUserDocId = 'userDocId';
+const fireMonitorLogType = 'iotType';
+const fireMonitorLogName = 'name';
+const fireMonitorLogDistance = 'distance';
+const fireMonitorLogLines = 'lines';
+const fireMonitorLogOperator = 'operator';
+const fireMonitorLogSupervisor = 'supervisor';
+const fireMonitorLogTimestamp = 'timestamp';
 
 // Firebase - Tracking settings
 const fireTrackingDistanceInside = 'distance_inside';
@@ -1057,57 +1059,80 @@ class MyOperatorTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        if(onTapTile != null) {
-          onTapTile!();
-        }
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: colorAppBar,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              GestureDetector(
-                onTap:  () => onTapTile!(),
-                child: CircleAvatar(
-                  radius: 30,
-                  backgroundColor: Colors.white,
+    return Slidable(
+      key: ValueKey(operator.docId),
+
+      // This defines the actions that appear when swiping from right to left
+      endActionPane: ActionPane(
+        motion: const ScrollMotion(),
+        extentRatio: 0.25,
+        children: [
+          CustomSlidableAction(
+            onPressed: (context) => onTapDelete?.call(),
+            backgroundColor: Colors.redAccent,
+            foregroundColor: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            child: Icon(
+              Icons.delete_outline,
+              color: Colors.white,
+              size: 30,
+            ),
+          ),
+        ],
+      ),
+
+      child: GestureDetector(
+        onTap: () {
+          if(onTapTile != null) {
+            onTapTile!();
+          }
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: colorAppBar,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  onTap:  () => onTapTile!(),
                   child: CircleAvatar(
-                    radius: 28,
-                    backgroundImage: operator.imageURL != null &&  operator.imageURL!.isNotEmpty
-                        ? CachedNetworkImageProvider(operator.imageURL!)
-                        : AssetImage(imageProfile) as ImageProvider,
+                    radius: 30,
+                    backgroundColor: Colors.white,
+                    child: CircleAvatar(
+                      radius: 28,
+                      backgroundImage: operator.imageURL != null &&  operator.imageURL!.isNotEmpty
+                          ? CachedNetworkImageProvider(operator.imageURL!)
+                          : AssetImage(imageProfile) as ImageProvider,
+                    ),
                   ),
                 ),
-              ),
 
-              SizedBox(width: 8),
+                SizedBox(width: 8),
 
-              // Operator name
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    MyText(text: '${operator.name} ${operator.surname}'),
-                    MyText(text: '${operator.tagId}', fontsize: 14,color: Colors.grey),
-                  ],
+                // Operator name
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      MyText(text: '${operator.name} ${operator.surname}'),
+                      MyText(text: '${operator.tagId}', fontsize: 14,color: Colors.grey),
+                    ],
+                  ),
                 ),
-              ),
 
-              IconButton(
-                icon: Icon(Icons.delete_forever),
-                iconSize: 30,
-                color: Colors.redAccent,
-                onPressed:  () => onTapDelete!(),
-              ),
-            ],
+                // IconButton(
+                //   icon: Icon(Icons.delete_forever),
+                //   iconSize: 30,
+                //   color: Colors.redAccent,
+                //   onPressed:  () => onTapDelete!(),
+                // ),
+              ],
+            ),
           ),
         ),
       ),
@@ -2278,7 +2303,7 @@ class MonitorSettingsService extends ChangeNotifier {
   }
 }
 
-class MonitorData {
+class MonitorCloudData {
   // General
   String monDocId;
   String userDocId;
@@ -2302,7 +2327,7 @@ class MonitorData {
   // Local-only (NOT saved)
   bool isLoading = false;
 
-  MonitorData({
+  MonitorCloudData({
     required this.monDocId,
     required this.userDocId,
     required this.monitorName,
@@ -2324,34 +2349,34 @@ class MonitorData {
   });
 
   // From Firebase
-  factory MonitorData.fromDoc(DocumentSnapshot doc) {
+  factory MonitorCloudData.fromDoc(DocumentSnapshot doc) {
     final map = doc.data() as Map<String, dynamic>;
 
-    return MonitorData(
-      monDocId: map[monitorLogDocId],
-      userDocId: map[monitorLogUserDocId],
-      monitorType: map[monitorLogType],
-      monitorName: map[monitorLogName],
-      operator: map[monitorLogOperator] ?? '',
-      supervisor: map[monitorLogSupervisor] ?? '',
-      distance: (map[monitorLogDistance] as num?)?.toDouble() ?? 0,
-      lines: (map[monitorLogLines] as num?)?.toInt() ?? 0,
-      timestamp: map[monitorLogTimestamp],
+    return MonitorCloudData(
+      monDocId: map[fireMonitorLogDocId],
+      userDocId: map[fireMonitorLogUserDocId],
+      monitorType: map[fireMonitorLogType],
+      monitorName: map[fireMonitorLogName],
+      operator: map[fireMonitorLogOperator] ?? '',
+      supervisor: map[fireMonitorLogSupervisor] ?? '',
+      distance: (map[fireMonitorLogDistance] as num?)?.toDouble() ?? 0,
+      lines: (map[fireMonitorLogLines] as num?)?.toInt() ?? 0,
+      timestamp: map[fireMonitorLogTimestamp],
     );
   }
 }
-class MonitorDataService extends ChangeNotifier {
+class MonitorCloudDataService extends ChangeNotifier {
   String monDocId;
   String? monitorType;
   String monitorName;
   String image;
   String reg;
-  List<MonitorData> lstMonitorData = [];
+  List<MonitorCloudData> lstMonitorData = [];
 
   // Local
   bool isLoading = true;
 
-  MonitorDataService({
+  MonitorCloudDataService({
     required this.monDocId,
     required this.monitorType,
     required this.monitorName,
@@ -2360,7 +2385,7 @@ class MonitorDataService extends ChangeNotifier {
     required this.lstMonitorData
   });
 
-  Future<MonitorDataService> fromSnapshot( DocumentSnapshot monitorSnapshot) async {
+  Future<MonitorCloudDataService> fromSnapshot( DocumentSnapshot monitorSnapshot) async {
     isLoading = true;
     final map = monitorSnapshot.data() as Map<String, dynamic>;
 
@@ -2370,12 +2395,12 @@ class MonitorDataService extends ChangeNotifier {
         .get();
 
     final dataList = dataSnapshot.docs
-        .map((doc) => MonitorData.fromDoc(doc))
+        .map((doc) => MonitorCloudData.fromDoc(doc))
         .toList();
 
     isLoading = false;
 
-    return MonitorDataService(
+    return MonitorCloudDataService(
       monDocId : monitorSnapshot.id,
       monitorType: map[fireMonitorType] ?? '',
       monitorName: map[fireMonitorBtName] ?? '',
