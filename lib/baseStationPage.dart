@@ -545,7 +545,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
   Widget build(BuildContext context){
 
       return Consumer2<BaseStationService, SettingsService>(
-        builder: (_ , baseService , settingsService, __){
+        builder: (_ , baseService , settings, __){
           if (baseService.isLoading) {
             return MyProgressCircle();
           }
@@ -555,7 +555,13 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
             appBar: AppBar(
               backgroundColor: colorAppBar,
               foregroundColor: Colors.white,
-              title: MyAppbarTitle('Base Stations'),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  MyAppbarTitle("Base Stations"),
+                  MyConnectionStatus(settings),
+                ],
+              ),
             ),
             backgroundColor: colorAppBackground,
             bottomNavigationBar: BottomNavigationBar(
@@ -779,7 +785,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                       currentBase.ipAddress = ipAdr;
                                       _saveBase(currentBase);
 
-                                      settingsService.updateFireSettingsFields({
+                                      settings.updateFireSettingsFields({
                                         settingConnectedDevice : currentBase.baseName,
                                         settingConnectedDeviceIp : ipAdr,
                                         settingConnectedDeviceId: currentBase.bluetoothName
@@ -809,7 +815,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                                             currentBase.isConnected = false;
                                           });
 
-                                          settingsService.setIsBaseConnected(false);
+                                          settings.setIsBaseConnected(false);
                                         }
                                       },
                                       child: Row(children: [

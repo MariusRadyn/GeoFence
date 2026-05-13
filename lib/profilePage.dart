@@ -174,7 +174,7 @@ class _profilePageState extends State<profilePage> {
                       child: CircleAvatar(
                         backgroundImage:  user.userdata?.imageURL != null &&  user.userdata!.imageURL!.isNotEmpty
                             ? CachedNetworkImageProvider(user.userdata!.imageURL!) as ImageProvider
-                            : AssetImage(imageProfile),
+                            : AssetImage(iconProfile),
                         radius: 50,
                       ),
                     ),

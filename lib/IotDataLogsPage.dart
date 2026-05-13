@@ -213,7 +213,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
 
                       String image;
                       String img = widget.image;
-                      img.isEmpty ? image = imageWheel : image = img;
+                      img.isEmpty ? image = iconWheel : image = img;
 
                       return Column(
                         children: [

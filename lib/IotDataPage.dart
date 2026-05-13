@@ -170,22 +170,25 @@ class _IotDataPageState extends State<IotDataPage> {
                           final iotData = iotSnapshot.data!.docs;
 
                           // Get Summary
-                          double distance = 0;
-                          num lines = 0;
+                          double total = 0;
+                          //double distance = 0;
+                          num totalLines = 0;
 
                           iotData.forEach((doc) {
-                            distance += doc.get(fireMonitorLogDistance) ?? 0.0;
-                            lines += doc.get(fireMonitorLogLines) ?? 0;
+                            double dist = doc.get(fireMonitorLogDistance) ?? 0.0;
+                            num lines = doc.get(fireMonitorLogLines) ?? 0;
+
+                            total += dist * lines;
+                            totalLines += lines;
                           });
 
                           String iotName = monitorData[fireMonitorLogName];
                           String nrOfItems = iotData.length.toString();
                           String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[fireMonitorLastLogTimestamp].toDate());
-                          String dist = distance.toStringAsFixed(2);
 
                           String image;
                           String img = monitorData[fireMonitorImage];
-                          img.isEmpty ? image = imageWheel : image = img;
+                          img.isEmpty ? image = iconWheel : image = img;
 
                           return Column(
                             children: [
@@ -194,11 +197,10 @@ class _IotDataPageState extends State<IotDataPage> {
                               MyTextTileWithEditDelete(
                                 image: image,
                                 header: '$iotName',
-                                subtext: 'Logs: $nrOfItems\nDistance: $dist m\nLines: $lines',
+                                subtext: 'Logs: $nrOfItems\nLines: $totalLines\nTotal: ${total.toInt()} m',
                                 headerColor: Colors.white,
-                                textColor: Colors.white,
+                                textColor: Colors.grey,
                                 gradient: LinearGradient(colors: [Colors.blueGrey,Colors.grey]),
-                                height: 150,
 
                                 onTapTile: (){
                                   Navigator.push(

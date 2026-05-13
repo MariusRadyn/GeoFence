@@ -81,8 +81,6 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
     }
   }
   Future<String> _fireUploadImage({required File image,required String docId}) async {
-
-
     final String name ='Image_${DateTime.now().millisecondsSinceEpoch}.jpg';
     profilePicData.imageFilename = name;
     profilePicData.update = true;
@@ -134,6 +132,38 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
     });
   }
 
+  Future<void> _deleteImage() async {
+    if (oldImgFilename == null || oldImgFilename!.isEmpty) return;
+
+    setState(() {
+      isLoading = true;
+    });
+    try{
+      await _fireDeleteImage(
+          filename: oldImgFilename!,
+          docId: widget.docId
+      );
+
+      setState(() {
+        widget.imageURL = null;
+        oldImgFilename = null;
+
+        profilePicData.imageURL = "";
+        profilePicData.imageFilename = "";
+        profilePicData.update = true; // ✅ Tell the previous screen to update DB
+        isLoading = false;
+      });
+
+    } catch (e) {
+      MyGlobalMessage.show('Delete Image: ','$e', MyMessageType.error);
+      setState(()  {
+        isLoading = false;
+      });
+    }
+
+
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -165,7 +195,6 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
                await _updateImage(file);
               }
             },
-
             child: Icon(Icons.camera_alt_outlined),
           ),
 
@@ -185,6 +214,21 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
 
             child: Icon(Icons.image),
           ),
+
+          SizedBox(height: 10),
+
+          // Delete
+          FloatingActionButton(
+            heroTag: "heroDelete",
+            backgroundColor: colorOrange,
+            foregroundColor: Colors.white,
+            onPressed: () async {
+              _deleteImage();
+            },
+
+            child: Icon(Icons.delete_outline,size: 30,),
+          ),
+
         ],
       ),
       body: isLoading ?  MyProgressCircle(): Center(
@@ -194,7 +238,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
           Image(
             image: widget.imageURL != null && widget.imageURL!.isNotEmpty
                 ? CachedNetworkImageProvider(widget.imageURL!) as ImageProvider
-                : AssetImage(imageProfile) as ImageProvider,
+                : AssetImage(iconProfile) as ImageProvider,
             fit: BoxFit.contain, // ✅ shows entire image
           ),
 

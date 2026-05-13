@@ -15,6 +15,7 @@ import 'package:geofence/firebase.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,23 +41,26 @@ enum MyMessageType {
 
 // keytool -keystore C:\Users\mradyn\.android\debug.keystore -list
 // PW android
+// Get PVT key for Firestore
 
 //-- Constants Images ----------------------------------------------------------
-const String imageWheel = "assets/distanceWheel.jpg";
-const String imageVehicle = "assets/red_pickup2.png";
-const String imageMobileMachine = "'assets/tractor.jpg'";
-const String imageStationaryMachine = "assets/generator.jpg";
-const String imageNoImage = 'assets/noImage.jpg';
-const String imageProfile = 'assets/profile.png';
+const String iconWheel = "assets/distance_wheel_icon.png";
+const String iconVehicle = "assets/vehicle_icon.png";
+const String iconMachine = "assets/generator_icon.png";
+const String iconNoImage = 'assets/noImage.jpg';
+const String iconProfile = 'assets/profile.png';
+const String iconFleet = 'assets/fleet_track_icon.png';
+const String iconTrailer = 'assets/trailer_icon.png';
 
 const String iconWarning = "assets/warning.png";
 const String iconGoogle = 'assets/google_icon.png';
 const String iconFacebook = 'assets/facebook_icon.png';
-const String iconTrack = 'assets/track.jpg';
-const String iconGeoFence = 'assets/geofence.jpg';
-const String iconIot = 'assets/iot.png';
-const String iconBase = 'assets/base_station.png';
-const String iconReport = 'assets/report.png';
+
+const String iconGeoFence = 'assets/geofence_icon.png';
+const String iconIot = 'assets/iot_monitor_icon.png';
+const String iconBase = 'assets/base_station_icon.png';
+const String iconReport = 'assets/track_history_icon.png';
+
 const String iconLimitlessLogo = 'assets/limitless_logo.png';
 const String iconLimitlessWord = 'assets/limitlessIotWord.png';
 
@@ -64,6 +68,7 @@ const String iconLimitlessWord = 'assets/limitlessIotWord.png';
 const colorIceBlue = Color.fromARGB(202, 139, 229, 245);
 const colorBlue = Color.fromARGB(255, 4, 145, 246);
 const colorDarkBlue = Color.fromARGB(255, 1, 57, 86);
+const colorTile = Color(0xff132235);
 const colorDarkHeader = Colors.white;
 const colorDarkText = Colors.white;
 const colorBlack = Color(0xFF14140F);
@@ -104,7 +109,6 @@ const collectionOperators = 'operators';
 
 const fieldsSettings = 'settings';
 const fieldsUserData = 'userdata';
-
 const docAppSettings = 'app_settings';
 
 // General Settings
@@ -129,22 +133,24 @@ const String operatorDocId = "docId";
 const String operatorTagId = "tagId";
 const String operatorName = "name";
 const String operatorSurname = "surname";
+const String operatorVersion = "operatorsVer";
 const List<String> settingOperatorTypeList = [
   operatorTypeOperator,
   operatorTypeSupervisor
 ];
 
 // Monitor Types
-const String monitorTypeVehicle = "Vehicle";
-const String monitorTypeMobileMachineMon = "Mobile Machine";
-const String monitorTypeStationaryMachineMon = "Stationary Machine";
+const String monitorTypeVehicle = "Vehicle Track";
+const String monitorTypeFleet = "Fleet Track";
+const String monitorTypeMachine = "Machine";
 const String monitorTypeWheel = "Distance Wheel";
-const List<String> settingMonitorTypeList = [
-  monitorTypeVehicle,
-  monitorTypeMobileMachineMon,
-  monitorTypeStationaryMachineMon,
-  monitorTypeWheel,
-];
+const String monitorTypeTrailer = "Trailer Wiring";
+// const List<String> settingMonitorTypeList = [
+//   monitorTypeVehicle,
+//   monitorTypeMobileMachine,
+//   monitorTypeStationaryMachine,
+//   monitorTypeWheel,
+//];
 
 // Monitor Debug
 //const debugMonitorConnected = 'debugConnected';
@@ -504,12 +510,14 @@ class MyCustomTileWithPic extends StatelessWidget {
   final String header;
   final String description;
   final Widget widget;
+  final VoidCallback? onTap;
 
   const MyCustomTileWithPic({
     required this.imagePath,
     required this.header,
     this.description = "",
     required this.widget,
+    this.onTap,
     super.key
   });
 
@@ -522,6 +530,11 @@ class MyCustomTileWithPic extends StatelessWidget {
       child: Center(
         child: GestureDetector(
           onTap: (){
+            if (onTap != null) {
+              onTap!();
+              return;
+            }
+
             if(user.isUserLoggedIn == true){
               Navigator.push(
                 context,
@@ -533,70 +546,68 @@ class MyCustomTileWithPic extends StatelessWidget {
           },
           child: Container(
             width: MediaQuery.of(context).size.width * 0.9,
-            height: 100,
+            height: 90,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                stops: [
-                  0.1,
-                  0.9
-                ],
-                colors: [
-                  colorBlue,
-                  Colors.black,
-                ],
-              ),
+              color: colorTile,
+              boxShadow:[ BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 10,
+                spreadRadius: 5,
+                offset: const Offset(2, 4), // Positions the shadow below the tile
+                )
+              ],
               borderRadius:const BorderRadius.all(
                 Radius.circular(20),
               ),
               border: Border.all(
                 color: Colors.grey,
-                width: 2,
+                width: 0.5,
               )
             ),
             child:
               Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Image
                   ClipRRect(
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(20),
                       bottomLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                      bottomRight: Radius.circular(20),
                     ),
                     child: Image.asset (
                         imagePath,
-                        width: 100,
-                        height: 100,
+                        width: 90,
+                        height: 90,
                         fit: BoxFit.cover
                     ),
                   ),
 
-                  const SizedBox(width: 10),
-
                   // Heading Text
                   Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        //const SizedBox(height: 5),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 15, top: 5, right: 5,bottom: 5),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          //const SizedBox(height: 5),
 
-                        Text(
-                          header,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.normal,
-                              fontFamily: 'Poppins'
+                          Text(
+                            header,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Poppins'
+                            ),
+                            softWrap: true,
                           ),
-                          softWrap: true,
-                        ),
 
-                        Padding(
-                          padding: EdgeInsets.only(right: 10),
-                          child: Text(
+                          Text(
                             description,
                             style: const TextStyle(
                                 color: Colors.grey,
@@ -605,15 +616,14 @@ class MyCustomTileWithPic extends StatelessWidget {
                                 fontFamily: 'Poppins'
                             ),
                             softWrap: true,
-                            overflow: TextOverflow.ellipsis,
+                            overflow: TextOverflow.visible,
                             maxLines: 3,
                             textAlign: TextAlign.start,
                           ),
 
-                        ),
-
-                        const SizedBox(height: 5),
-                      ],
+                         // const SizedBox(height: 5),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -936,7 +946,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
 
-    double imgHeight = height == null ? 30 : height! - 30;
+    double imgHeight = height == null ? 80 : height! - 30;
 
     return GestureDetector(
       onTap: () {
@@ -945,19 +955,19 @@ class MyTextTileWithEditDelete extends StatelessWidget {
         }
       },
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20,0,20,0),
+        padding: const EdgeInsets.fromLTRB(10,0,10,0),
         child: Container(
           height: height,
           decoration: BoxDecoration(
-            color: backgroundColor,
+            color: colorTile,
             borderRadius: BorderRadius.circular(30),
-            gradient: gradient,
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(30,0,10,0),
+            padding: const EdgeInsets.fromLTRB(25,5,0,5),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
                 // Text
@@ -971,7 +981,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
                       MyText(
                         text: header,
                         color: headerColor,
-                        fontsize: 18,
+                        fontsize: 16,
                       ),
 
                       SizedBox(height: 1),
@@ -980,7 +990,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
                       MyText(
                         text: subtext,
                         color: textColor,
-                        fontsize: 14,
+                        fontsize: 12,
                       ),
                     ],
                   ),
@@ -990,6 +1000,8 @@ class MyTextTileWithEditDelete extends StatelessWidget {
                 image == null
                     ? SizedBox()
                     : Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Container(
                       height: imgHeight,
@@ -1106,7 +1118,7 @@ class MyOperatorTile extends StatelessWidget {
                       radius: 28,
                       backgroundImage: operator.imageURL != null &&  operator.imageURL!.isNotEmpty
                           ? CachedNetworkImageProvider(operator.imageURL!)
-                          : AssetImage(imageProfile) as ImageProvider,
+                          : AssetImage(iconProfile) as ImageProvider,
                     ),
                   ),
                 ),
@@ -2708,6 +2720,8 @@ class OperatorService extends ChangeNotifier {
       final docRef = ref.doc();
       final newOp = newOperator.copyWith(docID: docRef.id);
       await docRef.set(newOp.toMap());
+
+      setNewOperatorVersion();
       await load();
 
       return newOp;
@@ -2730,6 +2744,7 @@ class OperatorService extends ChangeNotifier {
           .doc(uid)
           .collection(collectionOperators);
 
+      // Insert / Update
       if(operator.docId.isNotEmpty){
 
         // Update
@@ -2750,7 +2765,9 @@ class OperatorService extends ChangeNotifier {
         );
       }
 
+      setNewOperatorVersion();
       await load();
+
       MyGlobalSnackBar.show('Saved');
     }
     catch (e){
@@ -2773,6 +2790,7 @@ class OperatorService extends ChangeNotifier {
       _lstOps.removeWhere((c) => c.docId == operator.docId);
       notifyListeners();
 
+      setNewOperatorVersion();
       await load();
 
       if(operator.imageFilename != null && operator.imageFilename!.isNotEmpty){
@@ -2783,6 +2801,18 @@ class OperatorService extends ChangeNotifier {
     } catch (e) {
       MyGlobalSnackBar.show('Delete Failed: $e');
     }
+  }
+  void setNewOperatorVersion() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    // Change Operator Version
+    String newVersion =  DateTime.now().toUtc().millisecondsSinceEpoch.toString();
+    FirebaseFirestore.instance
+        .collection(collectionUsers)
+        .doc(uid).set({
+      operatorVersion: newVersion
+    },SetOptions(merge: true));
   }
 }
 
@@ -2872,14 +2902,15 @@ Widget MyAppbarTitle(String text){
       mainAxisAlignment: MainAxisAlignment.start,
       children: [
         Text(
-            text,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
             fontFamily: 'Poppins',
-            fontWeight: FontWeight.normal,
-            fontSize: 22,
-            color: Colors.white
-            ),
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+            color: Colors.white,
+            letterSpacing: 0.5
+          ),
         ),
       ],
     ),
@@ -2915,11 +2946,18 @@ LinearGradient MyTileGradientBlue() {
     ],
   );
 }
-Widget MyProgressCircle() {
+Widget MyProgressCircle({double size = 40, double strokeWidth = 5}) {
   return Center(
+    child: SizedBox(
+      width: size,
+      height: size,
       child: CircularProgressIndicator(
-          color: colorProgressCircle
-      )
+        color: colorProgressCircle,
+        backgroundColor: colorProgressCircle.withValues(alpha: 0.3),
+        strokeWidth: strokeWidth,
+        strokeCap: StrokeCap.round,
+      ),
+    ),
   );
 }
 Widget MyCenterMsg(String msg){
@@ -2985,6 +3023,45 @@ Future<T?> MyQuestionAlertBox<T> ({
           ],
         );
       }
+  );
+}
+Widget MyConnectionStatus(SettingsService settings){
+  return  Row(
+    children: [
+
+      // Connection status (Icon)
+      Icon(
+        settings.isBaseStationConnected != true
+            ? Icons
+            .link_off // No Connection icon
+            : settings.fireSettings == null
+            ? Icons.sync // Loading icon
+            : Icons.link, // Connected icon
+        size: 14,
+        color: settings
+            .isBaseStationConnected != true
+            ? Colors.redAccent
+            : Colors.greenAccent,
+      ),
+
+      const SizedBox(width: 5),
+
+      // Connection Status
+      Text(
+        settings.isBaseStationConnected !=
+            true
+            ? "No Connection"
+            : settings.fireSettings == null
+            ? "Loading ..."
+            : settings.fireSettings!.connectedDevice,
+        style: TextStyle(
+          fontSize: 12,
+          color: settings.isBaseStationConnected != true
+              ? Colors.grey.withValues(alpha: 0.8)
+              : Colors.blueGrey,
+        ),
+      ),
+    ],
   );
 }
 

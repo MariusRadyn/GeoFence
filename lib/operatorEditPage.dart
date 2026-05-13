@@ -217,7 +217,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
     }
   }
   Future<void> _processTag(String tagId) async {
-    // CHeck Tag duplication
+    // Check Tag duplication
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
     final snapshot = await FirebaseFirestore.instance
@@ -364,7 +364,7 @@ return Consumer<BaseStationService>(
                         child: CircleAvatar(
                           backgroundImage:  widget.operatorData?.imageURL != null &&  widget.operatorData!.imageURL!.isNotEmpty
                               ? CachedNetworkImageProvider(widget.operatorData!.imageURL!) as ImageProvider
-                              : AssetImage(imageProfile),
+                              : AssetImage(iconProfile),
                           radius: 50,
                         ),
                       ),

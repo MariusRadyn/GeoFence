@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:geofence/iotListPage.dart';
 import 'package:geofence/iotMonitorsTypes.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
@@ -167,23 +168,26 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     if (monitor.imageURL == null || monitor.imageURL!.isEmpty ) {
       switch (monitor.monitorType) {
         case monitorTypeVehicle:
-          return AssetImage(imageVehicle);
+          return AssetImage(iconVehicle);
 
         case monitorTypeWheel:
-          return AssetImage(imageWheel);
+          return AssetImage(iconWheel);
 
-        case monitorTypeMobileMachineMon:
-          return AssetImage(imageMobileMachine);
+        case monitorTypeMachine:
+          return AssetImage(iconMachine);
 
-        case monitorTypeStationaryMachineMon:
-          return AssetImage(imageStationaryMachine);
+        case monitorTypeFleet:
+          return AssetImage(iconFleet);
+
+        case monitorTypeTrailer:
+          return AssetImage(iconTrailer);
 
         default:
-          return AssetImage(imageNoImage);
+          return AssetImage(iconNoImage);
       }
     }
     else {
-      return AssetImage(imageNoImage);
+      return AssetImage(iconNoImage);
     }
   }
   void _updateTabs(int length) {
@@ -601,19 +605,19 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Consumer3<MonitorSettingsService, SettingsService, BaseStationService>(
-      builder: (context, monitorService, settingsService, baseService,_){
-        if (monitorService.isLoading || baseService.isLoading || settingsService.isLoading || settingsService.isConnecting) {
+      builder: (context, monitors, settings, base,_){
+        if (monitors.isLoading || base.isLoading || settings.isLoading || settings.isConnecting) {
           return MyProgressCircle();
         }
         
-        if (_tabController != null && monitorService.lstMonitors[_tabController!.index].isConnectedToIot && !_hasScrolled) {
+        if (_tabController != null && monitors.lstMonitors[_tabController!.index].isConnectedToIot && !_hasScrolled) {
           _hasScrolled = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _scrollToBottomOnce(_scrollControllers[_tabController!.index]);
           });
         }
 
-        _updateTabs(monitorService.lstMonitors.length);
+        _updateTabs(monitors.lstMonitors.length);
 
         return Scaffold(
           appBar: AppBar(
@@ -622,36 +626,18 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('iOT Monitors' ,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.normal,
-                    fontFamily: 'Poppins',
-                    color: Colors.white,
-                  ),
-                ),
-
-                Text(
-                  settingsService.isBaseStationConnected != true
-                      ? "No Connection"
-                      : settingsService.fireSettings == null
-                      ? "Loading ..."
-                      : settingsService.fireSettings!.connectedDevice,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.blueGrey,
-                  ),
-                ),
+                MyAppbarTitle("iOT Monitors"),
+                MyConnectionStatus(settings),
               ],
             ),
-            bottom: monitorService.lstMonitors.isNotEmpty
+            bottom: monitors.lstMonitors.isNotEmpty
                 ? TabBar(
               controller: _tabController,
               isScrollable: true,
               indicatorColor: Colors.blueAccent,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.grey,
-              tabs: monitorService.lstMonitors
+              tabs: monitors.lstMonitors
                   .map((doc) => Tab(text: doc.monitorName ?? "New Item"))
                   .toList(),
             )
@@ -663,7 +649,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               unselectedItemColor: Colors.white,
               selectedItemColor: Colors.white,
               onTap: (index) {
-                onBotNavBarTap(index, monitorService);
+                onBotNavBarTap(index, monitors);
               },
               items: [
                 // Add Button
@@ -679,7 +665,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                 BottomNavigationBarItem(
                   icon: Icon(
                     Icons.delete_forever,
-                    color: monitorService.lstMonitors.isEmpty
+                    color: monitors.lstMonitors.isEmpty
                         ? Colors.grey
                         : Colors.white,
                   ),
@@ -688,46 +674,26 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               ]
           ),
 
-          body: monitorService.lstMonitors.isEmpty
+          body: monitors.lstMonitors.isEmpty
             ?  MyCenterMsg('No iOT Monitors')
               :Container(
             color: colorAppBackground,
             child: TabBarView(
               controller: _tabController,
-              children: List.generate(monitorService.lstMonitors.length, (index){
-                //final _docId = monitorService.lstMonitors[index].monDocId;
-                final monitor = monitorService.lstMonitors[index];
-
-                // return FutureBuilder<ImageProvider<Object>>(
-                //     future: _getMonitorImageProvider(context, _docId, monitor),
-                //     builder: (context, imgSnapshot) {
-                //
-                //       if (imgSnapshot.connectionState == ConnectionState.waiting) {
-                //         return MyProgressCircle();
-                //       }
-                //
-                //       if (imgSnapshot.hasError) {
-                //         return const Center(child: Icon(Icons.error));
-                //       }
-                //
-                //       final ImageProvider<Object> imageProvider =
-                           //imgSnapshot.data ?? const AssetImage(IMAGE_NO_IMAGE);
+              children: List.generate(monitors.lstMonitors.length, (index){
+                final monitor = monitors.lstMonitors[index];
 
                       return ListView(
                         controller: _scrollControllers[index],
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 20, horizontal: 0),
+                        padding: const EdgeInsets.symmetric( vertical: 20, horizontal: 0),
                         children: [
 
                           // Picture header Container
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12.0, vertical: 8.0),
+                          Center(
                             child: Container(
                               decoration: BoxDecoration(
                                 color: Colors.transparent,
-                                border: Border.all(
-                                    color: Colors.transparent, width: 1),
+                                border: Border.all( color: Colors.transparent, width: 1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: ClipRRect(
@@ -738,10 +704,9 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                     // iOT Monitor Picture
                                     Center(
                                       child: Container(
-                                        padding: const EdgeInsets.all(4), // border thickness
+                                        padding: const EdgeInsets.all(1), // border thickness
                                         decoration: BoxDecoration(
-                                          color:
-                                          Colors.blue, // border color
+                                          color: Colors.blue, // border color
                                           shape: BoxShape.circle,
                                         ),
                                         child:GestureDetector(
@@ -767,12 +732,13 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                           },
                                           child: CircleAvatar(
                                             radius: 55,
-                                            backgroundColor: Colors.white,
+                                            backgroundColor: Colors.transparent,
                                             child: CircleAvatar(
+                                              radius: 55,
                                               backgroundImage:  monitor.imageURL != null &&  monitor.imageURL!.isNotEmpty
                                                   ? CachedNetworkImageProvider(monitor.imageURL!) as ImageProvider
                                                   : _getMonitorImage(monitor),
-                                              radius: 50,
+
                                             ),
                                           ),
                                         ),
@@ -784,38 +750,46 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                             ),
                           ),
 
-                          SizedBox(height: 5),
+                          SizedBox(height: 15),
 
-                          // Progress Bar
-                          _isUploading
-                              ? Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 100),
-                            child: LinearProgressIndicator(
-                              value: _uploadProgress,
-                              minHeight: 6,
-                              valueColor:
-                              const AlwaysStoppedAnimation<Color>(
-                                  Colors.blue),
+                          // Select Monitor Type
+                          GestureDetector(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                MyText(text: monitor.monitorType!, fontsize: 20),
+
+                                Icon(
+                                  Icons.arrow_drop_down,
+                                  color: Colors.white,
+                                  size: 30,
+                                ),
+                              ],
                             ),
-                          )
-                              : SizedBox(height: 5),
+                            onTap: () async {
+                              final selectedType = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                builder: (context) => iotListPage()
+                                ),
+                              );
 
-                          // Monitor Type Dropdown
+                              // 2. Only update if the user actually picked something
+                              // (prevents errors if they hit the back button)
+                              if (selectedType != null && selectedType is String) {
+                                setState(() {
+                                  monitor.monitorType = selectedType;
+
+                                  // Optional: Save the change to your service/database immediately
+                                  context.read<MonitorSettingsService>().save(monitor);
+                                });
+                              }
+                            },
+                          ),
+
                           Padding(
-                              padding:
-                              const EdgeInsets.fromLTRB(10, 0, 10, 20),
-                              child: MyDropdown(
-                                label: 'Monitor Type',
-                                value: monitor.monitorType!,
-                                lstDropdownValues: settingMonitorTypeList,
-                                onChange: (value) {
-                                  setState(() {
-                                    monitor.monitorType = value;
-                                    _saveMonitor(monitor);
-                                  });
-                                },
-                              )
+                            padding: const EdgeInsets.only(left: 10, right: 10, bottom: 10),
+                            child: Divider(color: Colors.blue,thickness: 1,),
                           ),
 
                           //--------------------------------------------------------------

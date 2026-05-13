@@ -101,26 +101,27 @@ flutter:
   assets:
     - assets/track.jpg
     - assets/geofence.jpg
+    - assets/iot.png
+    - assets/distance_wheel_icon.png
+
+    - assets/vehicle_icon.png
+    - assets/fleet_track_icon.png
+    - assets/geofence_icon.png
+    - assets/iot_monitor_icon.png
+    - assets/base_station_icon.png
+    - assets/track_history_icon.png
+    - assets/generator_icon.png
+    - assets/trailer_icon.png
+
     - assets/profile.png
     - assets/google_icon.png
     - assets/facebook_icon.png
     - assets/sync.png
     - assets/warning.png
     - assets/settings.png
-    - assets/bakkie.jpg
-    - assets/fuelGuage.jpg
-    - assets/report.png
     - assets/appicon_blue.png
-    - assets/red_pickup2.png
-    - assets/iot.png
-    - assets/base_station.png
-    - assets/distanceWheel.jpg
     - assets/noImage.jpg
-    - assets/tractor.jpg
-    - assets/generator.jpg
     - assets/limitless_logo.png
-    #- assets/limitless_iot.png
-    #- assets/limitless_iot2.png
     - assets/limitlessIotWord.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
