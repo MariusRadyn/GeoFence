@@ -71,7 +71,6 @@ class MqttService {
     }
   }
   Future<bool> _init(String ip) async {
-
     try{
       ipAdr = ip;
       autoReconnect = true;
@@ -89,8 +88,9 @@ class MqttService {
         ..onDisconnected = _onDisconnected
         ..onAutoReconnected = _onAutoReconnected
         ..onAutoReconnect = _onAutoReconnect
-        ..onSubscribed = (t) => printMsg("Subscribed to $t");
+        ..onSubscribed = _onSuscribed;
 
+      //..onSubscribed = (t) => printMsg("Subscribed to $t");
       client!.setProtocolV311();
 
       client!.connectTimeoutPeriod = 4000;
@@ -191,6 +191,9 @@ class MqttService {
     print("MQTT Connected");
     _reconnectTimer?.cancel(); // stop reconnection attempts
   }
+  void _onSuscribed(String topic) {
+    printMsg("Subscribed to $topic");
+  }
   void _onDisconnected() {
     isConnected = false;
     printMsg("MQTT Disconnected");
@@ -208,10 +211,10 @@ class MqttService {
       return;
     }
 
-    printMsg("MQTT RX Stream Started");
+    //printMsg("MQTT RX Stream Started");
     try{
       _updatesSubscription = client!.updates!.listen((List<MqttReceivedMessage<MqttMessage>> messages) {
-        _listenerStarted = true;
+      _listenerStarted = true;
 
         for (final recMsg in messages) {
           try {
@@ -233,7 +236,7 @@ class MqttService {
 
             // Dispatch to callbacks
             _dispatchMessage(topic, payload);
-            printMsg('MQTT message received on $topic: $payload');
+            //printMsg('MQTT RX Stream: $topic: $payload');
           }
           catch (e) {
             printMsg('MQTT Rx Stream: $e');

@@ -79,8 +79,252 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     super.dispose();
   }
 
+
+
+  // Timers
+  void _startTimeout(int sec) {
+    _timeout?.cancel();
+
+    _timeout = Timer(Duration(seconds: sec), () {
+      if (!mounted) return;
+      MyGlobalMessage.show("Timeout", "No Reply From Base Station", MyMessageType.warning);
+    });
+  }
+
+  // MQTT
+  void _mqttStartListener() {
+    if(_mqttSubscription != null) _mqttSubscription?.cancel();
+
+    _mqttSubscription = MqttService().messageStream.listen((msg) {
+      debugPrint('MQTT RX(IOT): $msg');
+
+      final jsonData = jsonDecode(msg);
+      final cmd = jsonData[mqttJsonCmd];
+      final fromId = jsonData[mqttJsonFromDeviceId];
+
+      if(!mounted) return;
+      final monitorService = context.read<MonitorSettingsService>();
+
+      // Pair - Set Device ID
+      if (cmd == mqttCmdDiscover) {
+        scanBusy = false;
+        final monitor = monitorService.lstMonitors[_tabController!.index];
+
+        MonitorSettings? monitorOld;
+        for (final m in monitorService.lstMonitors) {
+          if (m.monitorId == fromId) {
+            monitorOld = m;
+            break;
+          }
+        }
+
+        if (monitorOld != null && monitorOld.monitorId != fromId) {
+          MyQuestionAlertBox(
+            context: context,
+            header: "Monitor Alert",
+            message:
+            "$fromId exists in Monitor: '${monitorOld.monitorName}'.\n"
+                "Do you want to change the monitor to this one?\n"
+                "The other monitor will be disconnected",
+            onPress: () {
+              setState(() {
+                monitor.monitorId = fromId;
+                monitorOld!.monitorId = "none";
+              });
+              _saveMonitor(monitor);
+              _saveMonitor(monitorOld!);
+            },
+          );
+        }
+
+        if(monitorOld != null && monitorOld.monitorId == fromId){
+          // Nothing changed
+          MyGlobalMessage.show("Device found", fromId, MyMessageType.info);
+        } else {
+
+          // New Monitor
+          setState(() {
+            monitor.monitorId = fromId;
+          });
+          _saveMonitor(monitor);
+          MyGlobalMessage.show("Device Found", fromId, MyMessageType.info);
+        }
+
+        final payload =  {
+          mqttJsonUserDocId: context.read<UserDataService>().userdata!.userID,
+          mqttJsonMonitorDocId: monitorService.lstMonitors[_selectedIndex].monDocId,
+          mqttJsonIotName: monitorService.lstMonitors[_selectedIndex].monitorName,
+          mqttJsonIotType: monitorService.lstMonitors[_selectedIndex].monitorType,
+          mqttJsonTicksPerM: monitorService.lstMonitors[_selectedIndex].ticksPerM,
+        };
+
+        // Reply - Found Monitor
+        MqttService().tx(
+          monitor.monitorId,
+          mqttCmdFoundMonitor,
+          payload,
+          mqttTopicFromAndroid,
+        );
+      }
+
+      // Connecting to IOT Monitor
+      if(cmd == mqttCmdConnectMonitor){
+        final monitor = monitorService.lstMonitors[_tabController!.index];
+        monitorService.setConnectedToIot(monitor.monitorId, true);
+        debugPrint('IOT Connected');
+      }
+
+      // DisConnecting from IOT Monitor
+      if(cmd == mqttCmdDisconnectMonitor){
+        final monitor = monitorService.lstMonitors[_tabController!.index];
+        monitorService.setConnectedToIot(monitor.monitorId, false);
+        debugPrint('IOT Connected');
+      }
+
+      // IOT Monitor Data
+      if(cmd == mqttCmdLiveMonitorData){
+        final monitor = monitorService.lstMonitors[_tabController!.index];
+        final payload = jsonData[mqttJsonPayload];
+        final value = payload[mqttJsonWheelDistance];
+
+        if(value is num) _updateWheelDistance(value.toDouble());
+        debugPrint('Wheel distance: ${monitor.wheelDistance}');
+      }
+
+      // Connect Base (from Base)
+      if (cmd == mqttCmdConnectBase) {
+        _timeout?.cancel();
+        context.read<SettingsService>().setIsBaseConnected(true);
+        var ip = context.read<SettingsService>().fireSettings!.connectedDeviceIp;
+
+        if(_pairRequest){
+          _pairRequest = false;
+          _pairMonitor(ip);
+        }
+
+        if(_connectRequest){
+          _connectRequest = false;
+          _connectIot(ip, monitorService.lstMonitors[_tabController!.index]);
+        }
+
+        var base = context.read<BaseStationService>().lstBaseStations.firstWhere((x) => x.ipAddress == ip);
+        base.isConnected = true;
+
+        MyGlobalSnackBar.show("Connected: $ip");
+      }
+    });
+  }
+  Future<bool> _mqttConnectBase () async {
+    String? ip = context.read<SettingsService>().fireSettings?.connectedDeviceIp;
+    String? deviceId = context.read<SettingsService>().fireSettings?.connectedDeviceId;
+
+    if(ip == null || deviceId == null) {
+      MyGlobalMessage.show(
+          'Base Stations',
+          'No previously connected base stations. Please set one in Base Stations page',
+          MyMessageType.info
+      );
+      return false;
+    }
+
+    if(context.read<BaseStationService>().lstBaseStations.isEmpty){
+      MyGlobalMessage.show(
+          'Base Stations',
+          'No Base Stations found. Please set one in Base Stations page',
+          MyMessageType.info
+      );
+      return false;
+    }
+
+    BaseStationData base = context.read<BaseStationService>().lstBaseStations.firstWhere((x)  => x.bluetoothName == deviceId);
+    bool isReady = await MqttService().restartService(ip);
+
+    if(isReady) {
+      _mqttStartListener();
+      _startTimeout(5);
+
+      MqttService().tx(base.bluetoothName, mqttCmdConnectBase, {} ,mqttTopicFromAndroid);
+      return true;
+    }
+
+    // Failed
+    MyGlobalMessage.show("Warning", "Wifi connection FAILED", MyMessageType.warning);
+    setState(() {
+      base.isConnected = false;
+    });
+
+    return false;
+  }
+
+  // Methods
+  Future<bool> _pairMonitor(String ip)async{
+    final settingsService = context.read<SettingsService>();
+    final monitorService = context.read<MonitorSettingsService>();
+
+    if(settingsService.isBaseStationConnected == false){
+      MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
+      return false;
+    }
+
+    final payload =  {
+      mqttJsonIotType: monitorService.lstMonitors[_selectedIndex].monitorType,
+    };
+
+    if(MqttService().isConnected){
+      MqttService().tx("", mqttCmdDiscover, payload, mqttTopicFromAndroid);
+    }
+    return true;
+  }
+  Future<bool> _connectIot(String ip, MonitorSettings monitor)async{
+    final settingService = context.read<SettingsService>();
+    if(settingService.isBaseStationConnected == false){
+      MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
+      return false;
+    }
+
+    final payload = {
+      mqttJsonIotType: monitor.monitorType,
+      mqttJsonTicksPerM: monitor.ticksPerM,
+    };
+
+    if(MqttService().isConnected){
+      MqttService().tx(monitor.monitorId, mqttCmdConnectMonitor, payload ,mqttTopicFromAndroid);
+    }
+    return true;
+  }
+  Future<bool> _disconnectIot(MonitorSettings monitor)async{
+    final settingService = context.read<SettingsService>();
+    if(settingService.isBaseStationConnected == false){
+      MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
+      return false;
+    }
+
+    if(MqttService().isConnected){
+      MqttService().tx(monitor.monitorId, mqttCmdDisconnectMonitor, '' ,mqttTopicFromAndroid);
+    }
+    return true;
+  }
+  void _onBotNavBarTap(int index, MonitorSettingsService monService) {
+    // Add
+    if(index == 0)_addMonitor();
+
+    // Delete
+    if(index == 1) {
+      if (monService.lstMonitors.isEmpty) return;
+      final mon = monService.lstMonitors[ _tabController!.index];
+
+      MyQuestionAlertBox(
+          context: context,
+          header: "Delete",
+          message: "${mon.monitorName}\n${mon.reg}\n\nAre you sure?",
+          onPress: (){
+            _deleteMonitor(mon);
+          }
+      );
+    }
+  }
   Future<void> _getBluetoothDevices() async {
-      lstPairedDevices = await getBluetoothDevices();
+    lstPairedDevices = await getBluetoothDevices();
   }
   void _saveMonitor(MonitorSettings monitor) async {
     if (_tabController == null) return;
@@ -236,246 +480,31 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     _tabKeys[_tabController!.index].currentState?.updateDistance(distance);
   }
 
-  // Timers
-  void _startTimeout(int sec) {
-    _timeout?.cancel();
+  // MUST STILL IMPLEMENT - DO IMAGES AS WELL
+  Future<void> _updateMonitorNameInIotData(String monitorId, String newName) async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
 
-    _timeout = Timer(Duration(seconds: sec), () {
-      if (!mounted) return;
-      MyGlobalMessage.show("Timeout", "No Reply From Base Station", MyMessageType.warning);
-    });
-  }
+    // 1. Find all logs in the sub-collection for THIS monitor
+    var logsQuery = await FirebaseFirestore.instance
+        .collection(collectionUsers)
+        .doc(userId)
+        .collection(collectionMonitors)
+        .doc(monitorId)
+        .collection(collectionIotData)
+        .get();
 
-  // MQTT
-  void _mqttStartListener() {
-    if(_mqttSubscription != null) _mqttSubscription?.cancel();
+    if (logsQuery.docs.isEmpty) return;
 
-    _mqttSubscription = MqttService().messageStream.listen((msg) {
-      debugPrint('MQTT RX: $msg');
+    // 2. Create a WriteBatch
+    WriteBatch batch = FirebaseFirestore.instance.batch();
 
-      final jsonData = jsonDecode(msg);
-      final cmd = jsonData[mqttJsonCmd];
-      final fromId = jsonData[mqttJsonFromDeviceId];
-
-      if(!mounted) return;
-      final monitorService = context.read<MonitorSettingsService>();
-
-      // Pair - Set Device ID
-      if (cmd == mqttCmdDiscover) {
-        scanBusy = false;
-        final monitor = monitorService.lstMonitors[_tabController!.index];
-
-        MonitorSettings? monitorOld;
-        for (final m in monitorService.lstMonitors) {
-          if (m.monitorId == fromId) {
-            monitorOld = m;
-            break;
-          }
-        }
-
-        if (monitorOld != null && monitorOld.monitorId != fromId) {
-          MyQuestionAlertBox(
-            context: context,
-            header: "Monitor Alert",
-            message:
-            "$fromId exists in Monitor: '${monitorOld.monitorName}'.\n"
-                "Do you want to change the monitor to this one?\n"
-                "The other monitor will be disconnected",
-            onPress: () {
-              setState(() {
-                monitor.monitorId = fromId;
-                monitorOld!.monitorId = "none";
-              });
-              _saveMonitor(monitor);
-              _saveMonitor(monitorOld!);
-            },
-          );
-        } if(monitorOld != null && monitorOld.monitorId == fromId){
-
-          // Nothing changed
-          MyGlobalMessage.show("Device found", fromId, MyMessageType.info);
-        } else {
-
-          // New Monitor
-          setState(() {
-            monitor.monitorId = fromId;
-          });
-          _saveMonitor(monitor);
-          MyGlobalMessage.show("Device Found", fromId, MyMessageType.info);
-        }
-
-        final payload =  {
-          mqttJsonUserDocId: context.read<UserDataService>().userdata!.userID,
-          mqttJsonMonitorDocId: monitorService.lstMonitors[_selectedIndex].monDocId,
-          mqttJsonIotName: monitorService.lstMonitors[_selectedIndex].monitorName,
-          mqttJsonIotType: monitorService.lstMonitors[_selectedIndex].monitorType,
-          mqttJsonTicksPerM: monitorService.lstMonitors[_selectedIndex].ticksPerM,
-        };
-
-        // Reply - Found Monitor
-        MqttService().tx(
-          monitor.monitorId,
-          mqttCmdFoundMonitor,
-          payload,
-          mqttTopicFromAndroid,
-        );
-      }
-
-      // Connecting to IOT Monitor
-      if(cmd == mqttCmdConnectMonitor){
-        final monitor = monitorService.lstMonitors[_tabController!.index];
-        monitorService.setConnectedToIot(monitor.monitorId, true);
-        debugPrint('IOT Connected');
-      }
-
-      // DisConnecting from IOT Monitor
-      if(cmd == mqttCmdDisconnectMonitor){
-        final monitor = monitorService.lstMonitors[_tabController!.index];
-        monitorService.setConnectedToIot(monitor.monitorId, false);
-        debugPrint('IOT Connected');
-      }
-
-      // IOT Monitor Data
-      if(cmd == mqttCmdLiveMonitorData){
-        final monitor = monitorService.lstMonitors[_tabController!.index];
-        final payload = jsonData[mqttJsonPayload];
-        final value = payload[mqttJsonWheelDistance];
-
-        if(value is num) _updateWheelDistance(value.toDouble());
-        debugPrint('Wheel distance: ${monitor.wheelDistance}');
-      }
-
-      // Connect Base (from Base)
-      if (cmd == mqttCmdConnectBase) {
-        _timeout?.cancel();
-        context.read<SettingsService>().setIsBaseConnected(true);
-        var ip = context.read<SettingsService>().fireSettings!.connectedDeviceIp;
-
-        if(_pairRequest){
-          _pairRequest = false;
-          _scanMonitor(ip);
-        }
-
-        if(_connectRequest){
-          _connectRequest = false;
-          _connectIot(ip, monitorService.lstMonitors[_tabController!.index]);
-        }
-
-        var base = context.read<BaseStationService>().lstBaseStations.firstWhere((x) => x.ipAddress == ip);
-        base.isConnected = true;
-
-        MyGlobalSnackBar.show("Connected: $ip");
-      }
-    });
-  }
-  Future<bool> _mqttConnectBase () async {
-    String? ip = context.read<SettingsService>().fireSettings?.connectedDeviceIp;
-    String? deviceId = context.read<SettingsService>().fireSettings?.connectedDeviceId;
-
-    if(ip == null || deviceId == null) {
-      MyGlobalMessage.show(
-          'Base Stations',
-          'No previously connected base stations. Please set one in Base Stations page',
-          MyMessageType.info
-      );
-      return false;
+    for (var doc in logsQuery.docs) {
+      batch.update(doc.reference, {fireIotMonImageFile  : newName});
     }
 
-    if(context.read<BaseStationService>().lstBaseStations.isEmpty){
-      MyGlobalMessage.show(
-          'Base Stations',
-          'No Base Stations found. Please set one in Base Stations page',
-          MyMessageType.info
-      );
-      return false;
-    }
-
-    BaseStationData base = context.read<BaseStationService>().lstBaseStations.firstWhere((x)  => x.bluetoothName == deviceId);
-    bool isReady = await MqttService().restartService(ip);
-
-    if(isReady) {
-      _mqttStartListener();
-      _startTimeout(5);
-
-      MqttService().tx(base.bluetoothName, mqttCmdConnectBase, {} ,mqttTopicFromAndroid);
-      return true;
-    }
-
-    // Failed
-    MyGlobalMessage.show("Warning", "Wifi connection FAILED", MyMessageType.warning);
-    setState(() {
-      base.isConnected = false;
-    });
-
-    return false;
-  }
-
-  // Methods
-  Future<bool> _scanMonitor(String ip)async{
-    final settingsService = context.read<SettingsService>();
-    final monitorService = context.read<MonitorSettingsService>();
-
-    if(settingsService.isBaseStationConnected == false){
-      MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
-      return false;
-    }
-
-    final payload =  {
-      mqttJsonIotType: monitorService.lstMonitors[_selectedIndex].monitorType,
-    };
-
-    if(MqttService().isConnected){
-      MqttService().tx("", mqttCmdDiscover, payload, mqttTopicFromAndroid);
-    }
-    return true;
-  }
-  Future<bool> _connectIot(String ip, MonitorSettings monitor)async{
-    final settingService = context.read<SettingsService>();
-    if(settingService.isBaseStationConnected == false){
-      MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
-      return false;
-    }
-
-    final payload = {
-      mqttJsonIotType: monitor.monitorType,
-      mqttJsonTicksPerM: monitor.ticksPerM,
-    };
-
-    if(MqttService().isConnected){
-      MqttService().tx(monitor.monitorId, mqttCmdConnectMonitor, payload ,mqttTopicFromAndroid);
-    }
-    return true;
-  }
-  Future<bool> _disconnectIot(MonitorSettings monitor)async{
-    final settingService = context.read<SettingsService>();
-    if(settingService.isBaseStationConnected == false){
-      MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
-      return false;
-    }
-
-    if(MqttService().isConnected){
-      MqttService().tx(monitor.monitorId, mqttCmdDisconnectMonitor, '' ,mqttTopicFromAndroid);
-    }
-    return true;
-  }
-  void onBotNavBarTap(int index, MonitorSettingsService monService) {
-    // Add
-    if(index == 0)_addMonitor();
-
-    // Delete
-    if(index == 1) {
-      if (monService.lstMonitors.isEmpty) return;
-      final mon = monService.lstMonitors[ _tabController!.index];
-
-      MyQuestionAlertBox(
-          context: context,
-          header: "Delete",
-          message: "${mon.monitorName}\n${mon.reg}\n\nAre you sure?",
-          onPress: (){
-            _deleteMonitor(mon);
-          }
-      );
-    }
+    // 3. Commit the batch (Up to 500 docs at once)
+    await batch.commit();
   }
 
   Widget _buildBody(MonitorSettings monitor, Key key) {
@@ -553,15 +582,10 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               });
             },
 
-            // Scan Monitor ID
+            // Pair Monitor
             onTapScan: () async{
-              if(settingService.isBaseStationConnected ){
-                scanBusy = true;
-                _scanMonitor(settingService.fireSettings!.connectedDeviceIp);
-                MyGlobalSnackBar.show("Scanning for monitors: " + settingService.fireSettings!.connectedDeviceIp);
-              } else {
+              if (await _mqttConnectBase()) {
                 _pairRequest = true;
-                await _mqttConnectBase();
               }
             },
 
@@ -649,7 +673,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               unselectedItemColor: Colors.white,
               selectedItemColor: Colors.white,
               onTap: (index) {
-                onBotNavBarTap(index, monitors);
+                _onBotNavBarTap(index, monitors);
               },
               items: [
                 // Add Button

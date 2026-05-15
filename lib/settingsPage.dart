@@ -253,24 +253,17 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   @override
   Widget build(BuildContext context){
     return Consumer<SettingsService>(
-      builder: (context , _settings, _){
-        if (_settings.isLoading || isLoading) {
-          return Scaffold(
-            appBar: AppBar(
-              backgroundColor: colorAppBar,
-              foregroundColor: Colors.white,
-              title: MyAppbarTitle('Settings'),
-            ),
-            body: Center(child: CircularProgressIndicator()),
-          );
+      builder: (context , settings, _){
+        if (settings.isLoading || isLoading) {
+          return MyProgressCircle();
         }
 
-        if(_settings.fireSettings != null) {
+        if(settings.fireSettings != null) {
           _controllerRebateValue.text =
-              _settings.fireSettings!.rebateValuePerLiter.toString();
+              settings.fireSettings!.rebateValuePerLiter.toString();
 
           _controllerLogPointPerM.text =
-              _settings.fireSettings!.logPointPerMeter.toString();
+              settings.fireSettings!.logPointPerMeter.toString();
         }
         return DefaultTabController(
           length: 3,
@@ -289,7 +282,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                       size: 30
                   ),
                   onPressed: () {
-                    _settings.updateFireSettingsFields({
+                    settings.updateFireSettingsFields({
                       settingLogPointPerMeter: int.parse(
                           _controllerLogPointPerM.text),
 
@@ -308,7 +301,8 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                     Tab(text: "General"),
                     Tab(text: "Servers"),
                     Tab(text: "Monitors",)
-                  ]),
+                  ]
+              ),
             ),
             body: TabBarView(
               children: [
@@ -340,7 +334,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
 
                     // isVoicePromptOn
                     MyToggleOption(
-                        value: _settings.fireSettings!.isVoicePromptOn,
+                        value: settings.fireSettings!.isVoicePromptOn,
                         label: 'Voice Prompt',
                         subtitle: 'Allow me to give you vocal feedback',
                         onChanged: (bool value) =>
@@ -348,7 +342,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
                           //setState(() {
                           //  _isVoicePromptOn = value;
                           //}),
-                          _settings.updateFireSettingsFields({
+                          settings.updateFireSettingsFields({
                             settingIsVoicePromptOn: value
                           }),
 

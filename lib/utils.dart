@@ -102,7 +102,7 @@ const collectionGeoFences = 'geoFences';
 const collectionTrackingSessions = 'trackingSessions';
 const collectionLocations = 'locations';
 const collectionMonitors = 'monitors';
-const collectionMonitorData = 'iotData';
+const collectionIotData = 'iotData';
 const collectionBaseStations = 'baseStations';
 const collectionClients = 'clients';
 const collectionOperators = 'operators';
@@ -188,16 +188,19 @@ const fireMonitorTicksPerM = 'ticksPerM';
 const fireMonitorTimestamp = 'timestamp';
 const fireMonitorLastLogTimestamp = 'lastLogTimestamp';
 
-// firebase - Monitor Log Data
-const fireMonitorLogDocId = 'monDocId';
-const fireMonitorLogUserDocId = 'userDocId';
-const fireMonitorLogType = 'iotType';
-const fireMonitorLogName = 'name';
-const fireMonitorLogDistance = 'distance';
-const fireMonitorLogLines = 'lines';
-const fireMonitorLogOperator = 'operator';
-const fireMonitorLogSupervisor = 'supervisor';
-const fireMonitorLogTimestamp = 'timestamp';
+// firebase - Iot Data
+const fireIotDocId = 'monDocId';
+const fireIotUserDocId = 'userDocId';
+const fireIotType = 'type';
+const fireIotMonName = 'iotName';
+const fireIotMonImageUrl = 'imageUrl';
+const fireIotMonImageFile = 'imageFilename';
+const fireIotDistance = 'distance';
+const fireIotLines = 'lines';
+const fireIotOperator = 'operator';
+const fireIotSupervisor = 'supervisor';
+const fireIotTimestamp = 'timestamp';
+const fireIotImg = 'image';
 
 // Firebase - Tracking settings
 const fireTrackingDistanceInside = 'distance_inside';
@@ -218,7 +221,7 @@ const mqttTopicFromAndroid = "mqtt/from/android";
 const mqttTopicLastWill = "mqtt/will";
 
 // MQTT Commands
-const mqttCmdDiscover = "#REQ_MONITOR";
+const mqttCmdDiscover = "#DISCOVER";
 const mqttCmdFoundMonitor = "#FOUND_MONITOR";
 const mqttCmdConnectMonitor = "#CONNECT_MONITOR";
 const mqttCmdDisconnectMonitor = "#DISCONNECT_MONITOR";
@@ -2365,15 +2368,15 @@ class MonitorCloudData {
     final map = doc.data() as Map<String, dynamic>;
 
     return MonitorCloudData(
-      monDocId: map[fireMonitorLogDocId],
-      userDocId: map[fireMonitorLogUserDocId],
-      monitorType: map[fireMonitorLogType],
-      monitorName: map[fireMonitorLogName],
-      operator: map[fireMonitorLogOperator] ?? '',
-      supervisor: map[fireMonitorLogSupervisor] ?? '',
-      distance: (map[fireMonitorLogDistance] as num?)?.toDouble() ?? 0,
-      lines: (map[fireMonitorLogLines] as num?)?.toInt() ?? 0,
-      timestamp: map[fireMonitorLogTimestamp],
+      monDocId: map[fireIotDocId],
+      userDocId: map[fireIotUserDocId],
+      monitorType: map[fireIotType],
+      monitorName: map[fireIotMonName],
+      operator: map[fireIotOperator] ?? '',
+      supervisor: map[fireIotSupervisor] ?? '',
+      distance: (map[fireIotDistance] as num?)?.toDouble() ?? 0,
+      lines: (map[fireIotLines] as num?)?.toInt() ?? 0,
+      timestamp: map[fireIotTimestamp],
     );
   }
 }
@@ -2403,7 +2406,7 @@ class MonitorCloudDataService extends ChangeNotifier {
 
     // IOT Data - subcollection
     final dataSnapshot = await monitorSnapshot.reference
-        .collection(collectionMonitorData)
+        .collection(collectionIotData)
         .get();
 
     final dataList = dataSnapshot.docs

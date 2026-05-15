@@ -101,7 +101,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                   .doc(userDocId)
                   .collection(collectionMonitors)
                   .doc(monDocId)
-                  .collection(collectionMonitorData)
+                  .collection(collectionIotData)
                   .doc(iotDocId)
                   .delete();
 
@@ -128,7 +128,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
           stream: _firestore
             .collection(collectionUsers).doc(FirebaseAuth.instance.currentUser?.uid)
             .collection(collectionMonitors).doc(widget.monDocId)
-            .collection(collectionMonitorData)
+            .collection(collectionIotData)
             .snapshots(),
 
           builder: (context, monitorSnapshot) {
@@ -205,11 +205,11 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                     itemBuilder: (context, index) {
                       var monitorData = docs[index];
 
-                      String operator = monitorData[fireMonitorLogOperator];
-                      String sup = monitorData[fireMonitorLogSupervisor];
-                      num nrOfItems = monitorData[fireMonitorLogLines];
+                      String operator = monitorData[fireIotOperator];
+                      String sup = monitorData[fireIotSupervisor];
+                      num nrOfItems = monitorData[fireIotLines];
                       String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[fireMonitorTimestamp].toDate());
-                      String dist = monitorData[fireMonitorLogDistance].toStringAsFixed(2);
+                      String dist = monitorData[fireIotDistance].toStringAsFixed(2);
 
                       String image;
                       String img = widget.image;
