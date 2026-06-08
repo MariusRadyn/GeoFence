@@ -1,22 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui' as ui;
+//import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:collection/collection.dart';
+//import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/iotListPage.dart';
 import 'package:geofence/iotMonitorsTypes.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:http/http.dart' as http;
-import 'dart:io';
+//import 'package:google_maps_flutter/google_maps_flutter.dart';
+//import 'package:http/http.dart' as http;
+//import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+//import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geofence/utils.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+//import 'package:path_provider/path_provider.dart';
+//import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import 'MqttService.dart';
@@ -32,19 +32,19 @@ class IotMonitorsPage extends StatefulWidget {
 class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderStateMixin {
   StreamSubscription<String>? _mqttSubscription;
   TabController? _tabController;
-  late List<ScrollController> _scrollControllers;
+  List<ScrollController> _scrollControllers = [];
   late final List<GlobalKey<IotDistanceWheelTypeState>> _tabKeys;
 
   VoidCallback? _baseListener;
-  final Map<String, Future<DocumentSnapshot<Map<String, dynamic>>>> _docFutures = {};
+  //final Map<String, Future<DocumentSnapshot<Map<String, dynamic>>>> _docFutures = {};
   final int _selectedIndex = 0;
   bool scanBusy = false;
   bool _hasScrolled = false;
-  final ImagePicker _imagePicker = ImagePicker();
+  //final ImagePicker _imagePicker = ImagePicker();
   bool _pairRequest = false;
   bool _connectRequest = false;
-  bool _isUploading = false;
-  double _uploadProgress = 0.0;
+  //bool _isUploading = false;
+  //double _uploadProgress = 0.0;
   List<BluetoothDevice> lstPairedDevices = [
     BluetoothDevice.fromId("00:11:22:33:44:55"),
     BluetoothDevice.fromId("11:11:22:33:44:55"),
@@ -76,6 +76,9 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
     _mqttSubscription?.cancel();
     _tabController?.dispose();
+    for (var controller in _scrollControllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -167,6 +170,13 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
         );
       }
 
+      // Calibration Mode
+      if(cmd == mqttCmdCalibrate){
+        final monitor = monitorService.lstMonitors[_tabController!.index];
+        monitorService.setConnectedToIot(monitor.monitorId, true);
+        debugPrint('IOT in Calibration Mode');
+      }
+
       // Connecting to IOT Monitor
       if(cmd == mqttCmdConnectMonitor){
         final monitor = monitorService.lstMonitors[_tabController!.index];
@@ -181,13 +191,14 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
         debugPrint('IOT Connected');
       }
 
-      // IOT Monitor Data
+      // IOT Monitor Live Data
       if(cmd == mqttCmdLiveMonitorData){
         final monitor = monitorService.lstMonitors[_tabController!.index];
         final payload = jsonData[mqttJsonPayload];
-        final value = payload[mqttJsonWheelDistance];
+        final dist = payload[mqttJsonWheelDistance];
+        final ticks = payload[mqttJsonWheelTicks];
 
-        if(value is num) _updateWheelDistance(value.toDouble());
+        if(dist is num && ticks is num) _updateWheelDistance(dist.toDouble(), ticks.toInt());
         debugPrint('Wheel distance: ${monitor.wheelDistance}');
       }
 
@@ -237,6 +248,21 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
 
     BaseStationData base = context.read<BaseStationService>().lstBaseStations.firstWhere((x)  => x.bluetoothName == deviceId);
+
+    if (!await MqttService().isBrokerReachable(ip)) {
+      if (!mounted) return false;
+      MyGlobalMessage.show(
+        "Base Station Offline",
+        "Check that the base station is powered on and on the same Wi‑Fi network.",
+        MyMessageType.warning,
+      );
+      setState(() {
+        base.isConnected = false;
+      });
+      context.read<SettingsService>().setIsBaseConnected(false);
+      return false;
+    }
+
     bool isReady = await MqttService().restartService(ip);
 
     if(isReady) {
@@ -257,6 +283,23 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
   }
 
   // Methods
+  Future<bool> _calibrateIot(String ip, MonitorSettings monitor) async {
+    final settingService = context.read<SettingsService>();
+    if(settingService.isBaseStationConnected == false){
+      MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
+      return false;
+    }
+
+    final payload = {
+      mqttJsonIotType: monitor.monitorType,
+      mqttJsonTicksPerM: monitor.ticksPerM,
+    };
+
+    if(MqttService().isConnected){
+      MqttService().tx(monitor.monitorId, mqttCmdCalibrate, payload ,mqttTopicFromAndroid);
+    }
+    return true;
+  }
   Future<bool> _pairMonitor(String ip)async{
     final settingsService = context.read<SettingsService>();
     final monitorService = context.read<MonitorSettingsService>();
@@ -408,34 +451,17 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       );
     }
   }
-  ImageProvider<Object> _getMonitorImage(MonitorSettings monitor) {
-    if (monitor.imageURL == null || monitor.imageURL!.isEmpty ) {
-      switch (monitor.monitorType) {
-        case monitorTypeVehicle:
-          return AssetImage(iconVehicle);
 
-        case monitorTypeWheel:
-          return AssetImage(iconWheel);
-
-        case monitorTypeMachine:
-          return AssetImage(iconMachine);
-
-        case monitorTypeFleet:
-          return AssetImage(iconFleet);
-
-        case monitorTypeTrailer:
-          return AssetImage(iconTrailer);
-
-        default:
-          return AssetImage(iconNoImage);
-      }
-    }
-    else {
-      return AssetImage(iconNoImage);
-    }
-  }
   void _updateTabs(int length) {
-    if (length == 0) return;
+    if (length == 0) {
+      if (_scrollControllers.isNotEmpty) {
+        for (var c in _scrollControllers) {
+          c.dispose();
+        }
+        _scrollControllers = [];
+      }
+      return;
+    }
 
     if (_tabController == null || _tabController!.length != length) {
       final oldIndex = _tabController?.index ?? 0;
@@ -455,9 +481,20 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       );
     }
 
-    final monitorService = context.read<MonitorSettingsService>();
-    _scrollControllers=List.generate(monitorService.lstMonitors.length, (_) => ScrollController());;
-
+    // Manage scroll controllers
+    if (_scrollControllers.length != length) {
+      if (_scrollControllers.length < length) {
+        // Add new ones
+        final toAdd = length - _scrollControllers.length;
+        _scrollControllers.addAll(List.generate(toAdd, (_) => ScrollController()));
+      } else {
+        // Remove extra ones
+        while (_scrollControllers.length > length) {
+          _scrollControllers.last.dispose();
+          _scrollControllers.removeLast();
+        }
+      }
+    }
   }
   void _scrollToBottomOnce(ScrollController _scrollController) {
     Future.delayed(Duration.zero, () {
@@ -473,38 +510,12 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       });
     });
   }
-  void _updateWheelDistance(double distance) {
+  void _updateWheelDistance(double distance, int ticks) {
     if(_tabController == null) return;
     if (_tabController!.index < 0 || _tabController!.index >= _tabKeys.length) return;
 
     _tabKeys[_tabController!.index].currentState?.updateDistance(distance);
-  }
-
-  // MUST STILL IMPLEMENT - DO IMAGES AS WELL
-  Future<void> _updateMonitorNameInIotData(String monitorId, String newName) async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return;
-
-    // 1. Find all logs in the sub-collection for THIS monitor
-    var logsQuery = await FirebaseFirestore.instance
-        .collection(collectionUsers)
-        .doc(userId)
-        .collection(collectionMonitors)
-        .doc(monitorId)
-        .collection(collectionIotData)
-        .get();
-
-    if (logsQuery.docs.isEmpty) return;
-
-    // 2. Create a WriteBatch
-    WriteBatch batch = FirebaseFirestore.instance.batch();
-
-    for (var doc in logsQuery.docs) {
-      batch.update(doc.reference, {fireIotMonImageFile  : newName});
-    }
-
-    // 3. Commit the batch (Up to 500 docs at once)
-    await batch.commit();
+    _tabKeys[_tabController!.index].currentState?.updateTicks(ticks);
   }
 
   Widget _buildBody(MonitorSettings monitor, Key key) {
@@ -551,6 +562,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             },
           );
 
+        
         case monitorTypeWheel:
           return IotDistanceWheelType(
             key: key,
@@ -574,7 +586,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               });
             },
 
-            // Ticker per Meter
+            // Ticks per Meter
             onChangedTicksPerM: (value){
               setState(() {
                 monitor.ticksPerM = double.parse(value);
@@ -582,11 +594,34 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               });
             },
 
+            // Ticks
+            onChangedTicks: (value){
+              setState(() {
+                monitor.ticks = int.parse(value);
+                //_saveMonitor(monitor);
+              });
+            },
+
             // Pair Monitor
-            onTapScan: () async{
+            onTapPair: () async{
               if (await _mqttConnectBase()) {
                 _pairRequest = true;
               }
+            },
+
+            // Calibrate Monitor
+            onTapCalibrate: () async {
+              if(monitor.monitorId.isEmpty){
+                MyGlobalMessage.show("Monitor Not Found", "No monitor ID found. Please press 'Pair' button", MyMessageType.info);
+                return;
+              }
+
+              if(!context.read<SettingsService>().isBaseStationConnected) {
+                _connectRequest = true;
+                if(!await _mqttConnectBase()) return;
+              }
+
+              await _calibrateIot(settingService.fireSettings!.connectedDeviceIp, monitor);
             },
 
             // Connect Monitor
@@ -651,7 +686,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 MyAppbarTitle("iOT Monitors"),
-                MyConnectionStatus(settings),
+                MyConnectionStatus(settings: settings),
               ],
             ),
             bottom: monitors.lstMonitors.isNotEmpty
@@ -750,6 +785,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                               setState(() {
                                                 monitor.imageURL = profilePic.imageURL;
                                                 monitor.imageFilename = profilePic.imageFilename;
+
                                               });
                                               context.read<MonitorSettingsService>().save(monitor);
                                             }
@@ -761,7 +797,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                               radius: 55,
                                               backgroundImage:  monitor.imageURL != null &&  monitor.imageURL!.isNotEmpty
                                                   ? CachedNetworkImageProvider(monitor.imageURL!) as ImageProvider
-                                                  : _getMonitorImage(monitor),
+                                                  : getMonitorImage(monitor),
 
                                             ),
                                           ),
@@ -798,7 +834,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                                 ),
                               );
 
-                              // 2. Only update if the user actually picked something
+                              // Only update if the user actually picked something
                               // (prevents errors if they hit the back button)
                               if (selectedType != null && selectedType is String) {
                                 setState(() {

@@ -1,5 +1,6 @@
 
 import 'dart:convert';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -9,17 +10,19 @@ import 'package:provider/provider.dart';
 
 class IotDataLogsPage extends StatefulWidget {
   final String? userDocId;
-  final String? monDocId;
-  final String monitorName;
-  final String image;
+  //final String? monDocId;
+  //final String monitorName;
+  //final String image;
+  final MonitorSettings monitor;
   final List<QueryDocumentSnapshot<Object?>> snapshot;
 
   const IotDataLogsPage({
     required this.userDocId,
-    required this.monDocId,
-    required this.monitorName,
-    required this.image,
+    //required this.monDocId,
+    //required this.monitorName,
+    //required this.image,
     required this.snapshot,
+    required this.monitor,
     super.key
   });
 
@@ -118,16 +121,53 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: MyText(text: "iOT Log Data", fontsize: 18,),
+        title: MyText(text: widget.monitor.monitorName, fontsize: 18,),
         backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
+        actions: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Profile Pic
+              Padding(
+                padding: const EdgeInsets.only( right: 10, top: 2, bottom: 2),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: Colors.white,
+                        width: 0.5),
+                    // Clean white border
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black
+                            .withValues(alpha: 0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: CircleAvatar(
+                    radius: 18,
+                    // Total size remains ~20 with the border
+                    backgroundColor: colorIceBlue,
+                    backgroundImage: widget.monitor.imageURL != null
+                        ? CachedNetworkImageProvider(widget.monitor.imageURL!)
+                        : getMonitorImage(widget.monitor),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Container(
         color: colorAppBackground,
         child:  StreamBuilder<QuerySnapshot>(
           stream: _firestore
             .collection(collectionUsers).doc(FirebaseAuth.instance.currentUser?.uid)
-            .collection(collectionMonitors).doc(widget.monDocId)
+            .collection(collectionMonitors).doc(widget.monitor.monDocId)
             .collection(collectionIotData)
             .snapshots(),
 
@@ -139,65 +179,65 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
 
             return Column(
               children: [
-                Stack(
-                  children: [
-                    // Backdrop
-                    Container(
-                      alignment: Alignment.topCenter,
-                      height: 170,
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          stops: [0.3, 0.9],
-                          colors: [Colors.blueGrey, colorAppBackground],
-                        ),
-                        borderRadius: BorderRadius.only(
-                          bottomLeft: Radius.circular(100),
-                          bottomRight: Radius.circular(100),
-                        ),
-                      ),
-                    ),
-
-                    // Avatar
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            GestureDetector(
-                              onTap: () {
-                                // Navigation logic could go here
-                              },
-                              child: CircleAvatar(
-                                radius: 55,
-                                backgroundColor: Colors.white,
-                                child: CircleAvatar(
-                                  backgroundImage: AssetImage(widget.image),
-                                  radius: 50,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Heading
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.only(top: 120),
-                        child: MyText(
-                          text:widget.monitorName,
-                          fontsize: 25,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                // Stack(
+                //   children: [
+                //     // Backdrop
+                //     Container(
+                //       alignment: Alignment.topCenter,
+                //       height: 120,
+                //       decoration: const BoxDecoration(
+                //         gradient: LinearGradient(
+                //           begin: Alignment.topLeft,
+                //           end: Alignment.bottomRight,
+                //           stops: [0.3, 0.9],
+                //           colors: [Colors.blueGrey, colorAppBackground],
+                //         ),
+                //         borderRadius: BorderRadius.only(
+                //           bottomLeft: Radius.circular(100),
+                //           bottomRight: Radius.circular(100),
+                //         ),
+                //       ),
+                //     ),
+                //
+                //     // Avatar
+                //     Padding(
+                //       padding: const EdgeInsets.only(top: 8.0),
+                //       child: Center(
+                //         child: Column(
+                //           mainAxisAlignment: MainAxisAlignment.center,
+                //           crossAxisAlignment: CrossAxisAlignment.center,
+                //           children: [
+                //             GestureDetector(
+                //               onTap: () {
+                //                 // Navigation logic could go here
+                //               },
+                //               child: CircleAvatar(
+                //                 radius: 35,
+                //                 backgroundColor: Colors.white,
+                //                 child: CircleAvatar(
+                //                   backgroundImage: AssetImage(widget.image),
+                //                   radius: 34,
+                //                 ),
+                //               ),
+                //             ),
+                //           ],
+                //         ),
+                //       ),
+                //     ),
+                //
+                //     // Heading
+                //     Center(
+                //       child: Container(
+                //         padding: const EdgeInsets.only(top: 80),
+                //         child: MyText(
+                //           text:widget.monitorName,
+                //           fontsize: 20,
+                //           color: Colors.grey,
+                //         ),
+                //       ),
+                //     ),
+                //   ],
+                // ),
 
                 Expanded(
                   child: ListView.builder(
@@ -212,7 +252,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                       String dist = monitorData[fireIotDistance].toStringAsFixed(2);
 
                       String image;
-                      String img = widget.image;
+                      String img = widget.monitor.imageURL ?? '';
                       img.isEmpty ? image = iconWheel : image = img;
 
                       return Column(
@@ -228,7 +268,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                             height: 130,
 
                             onTapDelete: (){
-                               _delete('${widget.monitorName}\n$date', widget.userDocId, widget.monDocId, monitorData.id);
+                               _delete('${widget.monitor.monitorName}\n$date', widget.userDocId, widget.monitor.monDocId, monitorData.id);
                             },
                           ),
 

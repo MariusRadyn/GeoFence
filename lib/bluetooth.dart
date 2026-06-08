@@ -81,13 +81,13 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
   }
   Future<void> _connectToDevice(BluetoothDevice device) async {
     try {
-      await device.connect();
+      await device.connect(license: License.free);
       setState(() {
         connectedDevice = device;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Connected to ${device.name}')),
+        SnackBar(content: Text('Connected to ${device.platformName}')),
       );
 
       // Discover services after connection
@@ -201,7 +201,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
                       if (isConnected)
                         Chip(
                           label: Text('Connected'),
-                          backgroundColor: Colors.green.withOpacity(0.2),
+                          backgroundColor: Colors.green.withValues(alpha: 0.2),
                           labelStyle: TextStyle(color: Colors.green),
                         ),
                       SizedBox(width: 8),
@@ -284,7 +284,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
               final result = scanResults[index];
               final device = result.device;
               final isConnected = connectedDevice == device;
-              final isPaired = pairedDevices.any((d) => d.id == device.id);
+              final isPaired = pairedDevices.any((d) => d.remoteId == device.remoteId);
 
               return Card(
                 margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -412,7 +412,7 @@ class _BluetoothInteractionState extends State<BluetoothInteraction> {
     try {
       await characteristic.setNotifyValue(true);
 
-      characteristic.value.listen((value) {
+      characteristic.lastValueStream.listen((value) {
         print('Notification received: $value');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Notification: ${value.toString()}')),

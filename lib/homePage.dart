@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:geofence/IotDataPage.dart';
 import 'package:geofence/MqttService.dart';
 import 'package:geofence/firebase.dart';
+import 'package:geofence/loginPage.dart';
 import 'package:geofence/operatorsPage.dart';
 import 'package:geofence/TrackingPage.dart';
 import 'package:geofence/baseStationPage.dart';
@@ -119,664 +120,529 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }
 
     if (!isLoading && !userLoggedIn) {
-      await _loginScreen();
+      if(mounted){
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => LoginPage(),
+          ),
+        );
+      }
+
+      //await _loginScreen();
       await user.load();
     };
   }
-  void _signUpScreen (){
-    double width = MediaQuery.of(context).size.width * 0.8;
-    double height = MediaQuery.of(context).size.height * 0.6;
 
-    _emailController.text = "";
-    _pwController.text = "";
-    _pwController2.text = "";
-    _userController.text = "";
-
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-            backgroundColor: Colors.transparent,
-            //shape: RoundedRectangleBorder(
-            //  borderRadius: BorderRadius.circular(15),
-            //),
-            child: SizedBox(
-              width: width > 500 ? 500 : width, // Custom width
-              height: height > 600 ? 600 : height, // Custom height
-
-              child: Container(
-                decoration: BoxDecoration(
-                    gradient: MyTileGradient(),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: Colors.blue,
-                        width: 2
-                    )
-                ),
-                child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-
-                      // Heading
-                      const MyText(
-                        text: "Sign Up",
-                        fontsize: 20,
-                      ),
-
-                      SizedBox(height: 10),
-
-                      // Username
-                      Padding(
-                        padding: const EdgeInsets.only(left: 20, right: 20),
-                        child: MyTextFormField(
-                          controller: _userController,
-                          hintText: "Enter Username",
-                          backgroundColor: colorAppBackground,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-
-                      SizedBox(height: 20),
-
-                      // Email
-                      Padding(
-                        padding: EdgeInsets.only(left: 20, right: 20),
-                        child: MyTextFormField(
-                          controller: _emailController,
-                          hintText: "Enter Email Address",
-                          backgroundColor: colorAppBackground,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-
-                      SizedBox(height: 20),
-
-                      // Password 1
-                      Padding(
-                        padding: EdgeInsets.only(left: 20, right: 20),
-                        child: MyTextFormField(
-                          controller: _pwController,
-                          hintText: "Password",
-                          backgroundColor: colorAppBackground,
-                          foregroundColor: Colors.white,
-                          isPasswordField: true,
-                        ),
-                      ),
-
-                      SizedBox(height: 20),
-
-                      // Password 2
-                      Padding(
-                        padding: EdgeInsets.only(left: 20, right: 20),
-                        child: MyTextFormField(
-                          controller: _pwController2,
-                          hintText: "Confirm Password",
-                          backgroundColor: colorAppBackground,
-                          foregroundColor: Colors.white,
-                          isPasswordField: true,
-                        ),
-                      ),
-
-                      SizedBox(height: 30),
-
-                      // Buttons Cancel / OK
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-
-                          // Cancel Button
-                          MyTextButton(
-                            text: 'Cancel',
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                          ),
-
-                          SizedBox(width: 10),
-
-                          // OK Button
-                          MyTextButton(
-                            text:'OK',
-                            onPressed: () async {
-                              final user = await _signUp();
-
-                              if (user != null) {
-                                if(mounted){
-                                  Navigator.of(context).pop(); // close current dialog FIRST
-                                  await _sendValidateEmail();
-                                  _showEmailVerificationDialog(context);
-                                }
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ]),
-              ),
-            ));
-      },
-    );
-  }
-  Future<User?> _signUp() async {
-    UserDataService userService = context.read<UserDataService>();
-    AuthResult result = AuthResult();
-
-    if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
-      MyGlobalMessage.show("Info", 'Please enter email and password.', MyMessageType.info);
-      return null;
-    }
-    if (!_emailController.text.contains('@')) {
-      MyGlobalMessage.show("Info", 'Please enter valid email address.', MyMessageType.info);
-      return null;
-    }
-    if (_userController.text.isEmpty) {
-      MyGlobalMessage.show("Info", 'Please enter username.', MyMessageType.info);
-      return null;
-    }
-    if (_pwController.text != _pwController2.text) {
-      MyGlobalMessage.show("Info", 'Passwords dont match.', MyMessageType.info);
-      return null;
-    }
-
-    try {
-      result = await firebaseAuthService.fireAuthCreateUserWithEmail(
-          context,
-          _emailController.text,
-          _pwController.text
-      );
-
-      if (result.isSuccess && result.user != null) {
-        final doc = await FirebaseFirestore.instance
-            .collection(collectionUsers)
-            .doc(result.user!.uid)
-            .get();
-
-        // Create user ONLY if it does not exist
-        if (!doc.exists) {
-          userService.create(
-              UserData(
-                displayName: _userController.text ?? "",
-                email: _emailController.text ?? "",
-                emailValidated: result.user!.emailVerified ?? false,
-              ),
-              uid: result.user!.uid
-          );
-
-          print('User Created');
-        }
-
-        return result.user;
-
-      } else {
-        if(result.code != null){
-          MyGlobalMessage.show("Login", result.code!, MyMessageType.warning);
-        } else {
-          MyGlobalMessage.show("Login", result.exception.toString(), MyMessageType.warning);
-        }
-
-        userService.logout();
-      }
-    } catch (e) {
-      MyGlobalMessage.show("Error", result.exception.toString(), MyMessageType.error);
-    }
-    return null;
-  }
-  Widget _buildSocialLoginButton({
-    required BuildContext context,
-    required VoidCallback onPressed,
-    required String iconPath,
-  }) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: CircleAvatar(
-        radius: 25,
-        backgroundColor: Colors.white,
-        child: CircleAvatar(
-          radius: 18,
-          backgroundImage: AssetImage(iconPath),
-        ),
-      ),
-    );
-  }
-  Future<bool> _loginWithEmail() async {
-    UserDataService userService = context.read<UserDataService>();
-    userService.errorMsg = "";
-    userService.firebaseError = false;
-
-    if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
-      MyGlobalMessage.show("Login", 'Please enter email and password.', MyMessageType.info);
-      return false;
-    }
-    if (!_emailController.text.contains('@')) {
-      MyGlobalMessage.show("Login", 'Please enter a valid email address.', MyMessageType.info);
-      return false;
-    }
-
-    try {
-      setState(() {
-        busyLoggingIn = true;
-      });
-
-      AuthResult result = await firebaseAuthService.fireAuthSignInWithEmail(
-        context,
-        _emailController.text,
-        _pwController.text,
-      );
-
-      await userService.load();
-
-      setState(() {
-        busyLoggingIn = false;
-      });
-
-      // Logged In
-      if (result.isSuccess) {
-        if(userService.userdata != null){
-          userService.isUserLoggedIn = true;
-        }
-      } else {
-        // Logged ERROR
-        if(userService.userdata != null){
-          userService.isUserLoggedIn = false;
-        }
-
-        if(result.code != null){
-          MyGlobalMessage.show("Login", result.code!, MyMessageType.warning);
-        } else {
-          MyGlobalMessage.show("Login", result.exception.toString(), MyMessageType.warning);
-        }
-          return false;
-      }
-    } catch (e) {
-      MyGlobalMessage.show("Error(LoginWithEmail):", '$e', MyMessageType.debug);
-      return false;
-    }
-    return true;
-  }
-  Future<bool> _loginWithGoogle(BuildContext context) async {
-    UserDataService userService = context.read<UserDataService>();
-    userService.errorMsg = "";
-    userService.firebaseError = false;
-
-    try {
-      setState(() {
-        busyLoggingIn = true;
-      });
-
-      AuthResult result = await firebaseAuthService.signInWithGoogle();
-      await userService.load();
-
-      if(result.isSuccess){
-        final doc = await FirebaseFirestore.instance
-            .collection(collectionUsers)
-            .doc(result.user!.uid)
-            .get();
-
-
-        // Create user ONLY if it does not exist
-        if (!doc.exists) {
-          if (result.user != null) {
-            userService.create(
-                UserData(
-                  displayName:  result.user?.displayName ?? "",
-                  email: result.user?.email ?? "",
-                  emailValidated: true,
-                  imageURL: result.user?.photoURL ?? "",
-                ),
-                uid: result.user!.uid
-            );
-
-            setState(() {
-              userService.isUserLoggedIn = true;
-              busyLoggingIn = true;
-            });
-
-          } else {
-            if(!result.user!.emailVerified){
-              MyGlobalMessage.show("Warning", "Email address not verified", MyMessageType.warning);
-              return false;
-            }
-            else {
-
-              MyGlobalMessage.show("Warning", "User Credentials not found", MyMessageType.warning);
-              return false;
-            }
-          }
-        }
-      }
-      else{
-        if(result.code != null){
-          MyGlobalMessage.show("Error", result.code!, MyMessageType.error);
-        } else {
-          MyGlobalMessage.show("Error", result.exception.toString(), MyMessageType.error);
-        }
-      }
-      setState(() {
-        busyLoggingIn = false;
-      });
-
-    } catch (e) {
-      setState(() {
-        busyLoggingIn = false;
-      });
-
-      MyGlobalMessage.show("Error(LoginWithGoogle)", '$e', MyMessageType.debug);
-      return false;
-    }
-
-    return true;
-  }
-  Future<bool> _resetPasswordWithEmail() async {
-    UserDataService userService = context.read<UserDataService>();
-
-    if (_emailController.text.isEmpty) {
-      MyGlobalMessage.show("Info", 'Please enter email address.', MyMessageType.info);
-      return false;
-    }
-    if (!_emailController.text.contains('@')) {
-      MyGlobalMessage.show("Info", 'Please enter a valid email address.', MyMessageType.info);
-      return false;
-    }
-
-    try {
-      if(await firebaseAuthService.fireAuthResetPassword(context, _emailController.text)) {
-        if(userService.userdata != null){
-          userService.isUserLoggedIn = false;
-        }
-        printMsg('Password Reset');
-        return true;
-      }
-      else {
-        MyGlobalMessage.show("Error", 'Failed to reset password', MyMessageType.error);
-        return false;
-      }
-
-    } catch (e) {
-      MyGlobalMessage.show("Error", '$e', MyMessageType.error);
-      return false;
-    }
-  }
-  Future<void> _loginScreen () async{
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return
-          Dialog(
-            backgroundColor: Colors.transparent,
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Container(
-                decoration: BoxDecoration(
-                    gradient: MyTileGradient(),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: Colors.blue,
-                        width: 2
-                    )
-                ),
-
-                margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
-                width: MediaQuery.of(context).size.width * 0.8,
-                child: SafeArea(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(height: 20),
-
-                        // Heading
-                        const MyText(
-                          text:  "Login",
-                          fontsize: 20,
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        // Email
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: MyTextFormField(
-                            inputType: TextInputType.emailAddress,
-                            backgroundColor: colorAppBackground,
-                            foregroundColor: Colors.white,
-                            controller: _emailController,
-                            //hintText: "Enter Email Address",
-                            labelText: "Email",
-                            valueFontSize: 12,
-
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Password
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: MyTextFormField(
-                            foregroundColor: Colors.white,
-                            backgroundColor: colorAppBackground,
-                            controller: _pwController,
-                            //hintText: "Enter Password",
-                            labelText: "Password",
-                            isPasswordField: true,
-                            valueFontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Reset Password
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const MyText(
-                              text: "Forgot Password?",
-                              color: Colors.grey,
-                              fontsize: 14,
-                            ),
-
-                            const SizedBox(width: 10),
-
-                            GestureDetector(
-                              onTap: () async {
-                                if(await _resetPasswordWithEmail()){
-                                  MyGlobalMessage.show("Check email", "Please check your email and follow the instructions", MyMessageType.info);
-                                }
-                                //Navigator.of(context).pop();
-                              },
-                              child: const Text(
-                                "Reset",
-                                style: TextStyle(color: colorOrange),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        // Sign up
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const MyText(
-                              text: "Don't have an account?",
-                              color: Colors.grey,
-                              fontsize: 14,
-                            ),
-
-                            const SizedBox(width: 10),
-
-                            GestureDetector(
-                              onTap: () {
-                                _signUpScreen();
-                              },
-                              child: const Text(
-                                "Sign up",
-                                style: TextStyle(color: colorOrange),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        // Google / Facebook
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-
-                            // Sign In with Google
-                            _buildSocialLoginButton(
-                              context: context,
-                              onPressed: () async {
-                                Navigator.of(context).pop();
-                                await _loginWithGoogle(context);
-                              },
-                              iconPath: iconGoogle,
-                            ),
-
-                            const SizedBox(width: 20),
-
-                            // Sign In with facebook
-                            _buildSocialLoginButton(
-                              context: context,
-                              onPressed: () {
-                                // loginWithFacebook implementation would go here
-                                Navigator.of(context).pop();
-                              },
-                              iconPath: iconFacebook,
-                            ),
-                          ],
-                        ),
-
-                        SizedBox(height: 20),
-
-                        // Buttons Cancel / OK
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-
-                            // Cancel Button
-                            MyTextButton(
-                              text: 'Cancel',
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                              },
-                            ),
-
-                            const SizedBox(width: 10),
-
-                            // OK Button
-                            MyTextButton(
-                              text: 'OK',
-                              onPressed: () async {
-                                bool loggedIn = await _loginWithEmail();
-                                if(!mounted) return;
-
-                                if(loggedIn){
-                                  Navigator.of(context).pop();
-                                }
-                              },
-                            )
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-      },
-    );
-  }
+  // void _signUpScreen (){
+  //   double width = MediaQuery.of(context).size.width * 0.8;
+  //   double height = MediaQuery.of(context).size.height * 0.6;
+  //
+  //   _emailController.text = "";
+  //   _pwController.text = "";
+  //   _pwController2.text = "";
+  //   _userController.text = "";
+  //
+  //   showDialog<void>(
+  //     context: context,
+  //     builder: (BuildContext context) {
+  //       return Dialog(
+  //           backgroundColor: Colors.transparent,
+  //           //shape: RoundedRectangleBorder(
+  //           //  borderRadius: BorderRadius.circular(15),
+  //           //),
+  //           child: SizedBox(
+  //             width: width > 500 ? 500 : width, // Custom width
+  //             height: height > 600 ? 600 : height, // Custom height
+  //
+  //             child: Container(
+  //               decoration: BoxDecoration(
+  //                   gradient: MyTileGradient(),
+  //                   borderRadius: BorderRadius.circular(10),
+  //                   border: Border.all(
+  //                       color: Colors.blue,
+  //                       width: 2
+  //                   )
+  //               ),
+  //               child: Column(
+  //                   mainAxisAlignment: MainAxisAlignment.center,
+  //                   mainAxisSize: MainAxisSize.min,
+  //                   children: [
+  //
+  //                     // Heading
+  //                     const MyText(
+  //                       text: "Sign Up",
+  //                       fontsize: 20,
+  //                     ),
+  //
+  //                     SizedBox(height: 10),
+  //
+  //                     // Username
+  //                     Padding(
+  //                       padding: const EdgeInsets.only(left: 20, right: 20),
+  //                       child: MyTextFormField(
+  //                         controller: _userController,
+  //                         hintText: "Enter Username",
+  //                         backgroundColor: colorAppBackground,
+  //                         foregroundColor: Colors.white,
+  //                       ),
+  //                     ),
+  //
+  //                     SizedBox(height: 20),
+  //
+  //                     // Email
+  //                     Padding(
+  //                       padding: EdgeInsets.only(left: 20, right: 20),
+  //                       child: MyTextFormField(
+  //                         controller: _emailController,
+  //                         hintText: "Enter Email Address",
+  //                         backgroundColor: colorAppBackground,
+  //                         foregroundColor: Colors.white,
+  //                       ),
+  //                     ),
+  //
+  //                     SizedBox(height: 20),
+  //
+  //                     // Password 1
+  //                     Padding(
+  //                       padding: EdgeInsets.only(left: 20, right: 20),
+  //                       child: MyTextFormField(
+  //                         controller: _pwController,
+  //                         hintText: "Password",
+  //                         backgroundColor: colorAppBackground,
+  //                         foregroundColor: Colors.white,
+  //                         isPasswordField: true,
+  //                       ),
+  //                     ),
+  //
+  //                     SizedBox(height: 20),
+  //
+  //                     // Password 2
+  //                     Padding(
+  //                       padding: EdgeInsets.only(left: 20, right: 20),
+  //                       child: MyTextFormField(
+  //                         controller: _pwController2,
+  //                         hintText: "Confirm Password",
+  //                         backgroundColor: colorAppBackground,
+  //                         foregroundColor: Colors.white,
+  //                         isPasswordField: true,
+  //                       ),
+  //                     ),
+  //
+  //                     SizedBox(height: 30),
+  //
+  //                     // Buttons Cancel / OK
+  //                     Row(
+  //                       mainAxisAlignment: MainAxisAlignment.center,
+  //                       children: [
+  //
+  //                         // Cancel Button
+  //                         MyTextButton(
+  //                           text: 'Cancel',
+  //                           onPressed: () {
+  //                             Navigator.of(context).pop();
+  //                           },
+  //                         ),
+  //
+  //                         SizedBox(width: 10),
+  //
+  //                         // OK Button
+  //                         MyTextButton(
+  //                           text:'OK',
+  //                           onPressed: () async {
+  //                             final user = await _signUp();
+  //
+  //                             if (user != null) {
+  //                               if(mounted){
+  //                                 Navigator.of(context).pop(); // close current dialog FIRST
+  //                                 await _sendValidateEmail();
+  //                                 _showEmailVerificationDialog(context);
+  //                               }
+  //                             }
+  //                           },
+  //                         ),
+  //                       ],
+  //                     ),
+  //                   ]),
+  //             ),
+  //           ));
+  //     },
+  //   );
+  // }
+  // Future<User?> _signUp() async {
+  //   UserDataService userService = context.read<UserDataService>();
+  //   AuthResult result = AuthResult();
+  //
+  //   if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
+  //     MyGlobalMessage.show("Info", 'Please enter email and password.', MyMessageType.info);
+  //     return null;
+  //   }
+  //   if (!_emailController.text.contains('@')) {
+  //     MyGlobalMessage.show("Info", 'Please enter valid email address.', MyMessageType.info);
+  //     return null;
+  //   }
+  //   if (_userController.text.isEmpty) {
+  //     MyGlobalMessage.show("Info", 'Please enter username.', MyMessageType.info);
+  //     return null;
+  //   }
+  //   if (_pwController.text != _pwController2.text) {
+  //     MyGlobalMessage.show("Info", 'Passwords dont match.', MyMessageType.info);
+  //     return null;
+  //   }
+  //
+  //   try {
+  //     result = await firebaseAuthService.fireAuthCreateUserWithEmail(
+  //         context,
+  //         _emailController.text,
+  //         _pwController.text
+  //     );
+  //
+  //     if (result.isSuccess && result.user != null) {
+  //       final doc = await FirebaseFirestore.instance
+  //           .collection(collectionUsers)
+  //           .doc(result.user!.uid)
+  //           .get();
+  //
+  //       // Create user ONLY if it does not exist
+  //       if (!doc.exists) {
+  //         userService.create(
+  //             UserData(
+  //               displayName: _userController.text ?? "",
+  //               email: _emailController.text ?? "",
+  //               emailValidated: result.user!.emailVerified ?? false,
+  //             ),
+  //             uid: result.user!.uid
+  //         );
+  //
+  //         print('User Created');
+  //       }
+  //
+  //       return result.user;
+  //
+  //     } else {
+  //       if(result.code != null){
+  //         MyGlobalMessage.show("Login", result.code!, MyMessageType.warning);
+  //       } else {
+  //         MyGlobalMessage.show("Login", result.exception.toString(), MyMessageType.warning);
+  //       }
+  //
+  //       userService.logout();
+  //     }
+  //   } catch (e) {
+  //     MyGlobalMessage.show("Error", result.exception.toString(), MyMessageType.error);
+  //   }
+  //   return null;
+  // }
+  // Future<bool> _resetPasswordWithEmail() async {
+  //   UserDataService userService = context.read<UserDataService>();
+  //
+  //   if (_emailController.text.isEmpty) {
+  //     MyGlobalMessage.show("Info", 'Please enter email address.', MyMessageType.info);
+  //     return false;
+  //   }
+  //   if (!_emailController.text.contains('@')) {
+  //     MyGlobalMessage.show("Info", 'Please enter a valid email address.', MyMessageType.info);
+  //     return false;
+  //   }
+  //
+  //   try {
+  //     if(await firebaseAuthService.fireAuthResetPassword(context, _emailController.text)) {
+  //       if(userService.userdata != null){
+  //         userService.isUserLoggedIn = false;
+  //       }
+  //       printMsg('Password Reset');
+  //       return true;
+  //     }
+  //     else {
+  //       MyGlobalMessage.show("Error", 'Failed to reset password', MyMessageType.error);
+  //       return false;
+  //     }
+  //
+  //   } catch (e) {
+  //     MyGlobalMessage.show("Error", '$e', MyMessageType.error);
+  //     return false;
+  //   }
+  // }
+  // Future<void> _loginScreen () async{
+  //   await showDialog<void>(
+  //     context: context,
+  //     builder: (BuildContext context) {
+  //       return
+  //         Dialog(
+  //           backgroundColor: Colors.transparent,
+  //           child: Padding(
+  //             padding: const EdgeInsets.all(8.0),
+  //             child: Container(
+  //               decoration: BoxDecoration(
+  //                   gradient: MyTileGradient(),
+  //                   borderRadius: BorderRadius.circular(10),
+  //                   border: Border.all(
+  //                       color: Colors.blue,
+  //                       width: 2
+  //                   )
+  //               ),
+  //
+  //               margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
+  //               width: MediaQuery.of(context).size.width * 0.8,
+  //               child: SafeArea(
+  //                 child: SingleChildScrollView(
+  //                   child: Column(
+  //                     mainAxisAlignment: MainAxisAlignment.center,
+  //                     mainAxisSize: MainAxisSize.min,
+  //                     children: [
+  //                       SizedBox(height: 20),
+  //
+  //                       // Heading
+  //                       const MyText(
+  //                         text:  "Login",
+  //                         fontsize: 20,
+  //                       ),
+  //
+  //                       const SizedBox(height: 10),
+  //
+  //                       // Email
+  //                       Padding(
+  //                         padding: const EdgeInsets.symmetric(horizontal: 20),
+  //                         child: MyTextFormField(
+  //                           inputType: TextInputType.emailAddress,
+  //                           backgroundColor: colorAppBackground,
+  //                           foregroundColor: Colors.white,
+  //                           controller: _emailController,
+  //                           //hintText: "Enter Email Address",
+  //                           labelText: "Email",
+  //                           valueFontSize: 12,
+  //
+  //                         ),
+  //                       ),
+  //                       const SizedBox(height: 20),
+  //
+  //                       // Password
+  //                       Padding(
+  //                         padding: const EdgeInsets.symmetric(horizontal: 20),
+  //                         child: MyTextFormField(
+  //                           foregroundColor: Colors.white,
+  //                           backgroundColor: colorAppBackground,
+  //                           controller: _pwController,
+  //                           //hintText: "Enter Password",
+  //                           labelText: "Password",
+  //                           isPasswordField: true,
+  //                           valueFontSize: 12,
+  //                         ),
+  //                       ),
+  //                       const SizedBox(height: 20),
+  //
+  //                       // Reset Password
+  //                       Row(
+  //                         mainAxisAlignment: MainAxisAlignment.center,
+  //                         children: [
+  //                           const MyText(
+  //                             text: "Forgot Password?",
+  //                             color: Colors.grey,
+  //                             fontsize: 14,
+  //                           ),
+  //
+  //                           const SizedBox(width: 10),
+  //
+  //                           GestureDetector(
+  //                             onTap: () async {
+  //                               if(await _resetPasswordWithEmail()){
+  //                                 MyGlobalMessage.show("Check email", "Please check your email and follow the instructions", MyMessageType.info);
+  //                               }
+  //                               //Navigator.of(context).pop();
+  //                             },
+  //                             child: const Text(
+  //                               "Reset",
+  //                               style: TextStyle(color: colorOrange),
+  //                             ),
+  //                           ),
+  //                         ],
+  //                       ),
+  //
+  //                       const SizedBox(height: 10),
+  //
+  //                       // Sign up
+  //                       Row(
+  //                         mainAxisAlignment: MainAxisAlignment.center,
+  //                         children: [
+  //                           const MyText(
+  //                             text: "Don't have an account?",
+  //                             color: Colors.grey,
+  //                             fontsize: 14,
+  //                           ),
+  //
+  //                           const SizedBox(width: 10),
+  //
+  //                           GestureDetector(
+  //                             onTap: () {
+  //                               _signUpScreen();
+  //                             },
+  //                             child: const Text(
+  //                               "Sign up",
+  //                               style: TextStyle(color: colorOrange),
+  //                             ),
+  //                           ),
+  //                         ],
+  //                       ),
+  //
+  //                       const SizedBox(height: 20),
+  //
+  //                       // Google / Facebook
+  //                       Row(
+  //                         mainAxisAlignment: MainAxisAlignment.center,
+  //                         children: [
+  //
+  //                           // Sign In with Google
+  //                           _buildSocialLoginButton(
+  //                             context: context,
+  //                             onPressed: () async {
+  //                               Navigator.of(context).pop();
+  //                               await _loginWithGoogle(context);
+  //                             },
+  //                             iconPath: iconGoogle,
+  //                           ),
+  //
+  //                           const SizedBox(width: 20),
+  //
+  //                           // Sign In with facebook
+  //                           _buildSocialLoginButton(
+  //                             context: context,
+  //                             onPressed: () {
+  //                               // loginWithFacebook implementation would go here
+  //                               Navigator.of(context).pop();
+  //                             },
+  //                             iconPath: iconFacebook,
+  //                           ),
+  //                         ],
+  //                       ),
+  //
+  //                       SizedBox(height: 20),
+  //
+  //                       // Buttons Cancel / OK
+  //                       Row(
+  //                         mainAxisAlignment: MainAxisAlignment.center,
+  //                         children: [
+  //
+  //                           // Cancel Button
+  //                           MyTextButton(
+  //                             text: 'Cancel',
+  //                             onPressed: () {
+  //                               Navigator.of(context).pop();
+  //                             },
+  //                           ),
+  //
+  //                           const SizedBox(width: 10),
+  //
+  //                           // OK Button
+  //                           MyTextButton(
+  //                             text: 'OK',
+  //                             onPressed: () async {
+  //                               bool loggedIn = await _loginWithEmail();
+  //                               if(!mounted) return;
+  //
+  //                               if(loggedIn){
+  //                                 Navigator.of(context).pop();
+  //                               }
+  //                             },
+  //                           )
+  //                         ],
+  //                       ),
+  //                       const SizedBox(height: 20),
+  //
+  //                     ],
+  //                   ),
+  //                 ),
+  //               ),
+  //             ),
+  //           ),
+  //         );
+  //     },
+  //   );
+  // }
+  // void _showEmailVerificationDialog(BuildContext context) {
+  //   Timer? timer;
+  //
+  //   showDialog(
+  //     context: context,
+  //     barrierDismissible: false,
+  //
+  //     builder: (context) {
+  //       timer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+  //         final user = FirebaseAuth.instance.currentUser;
+  //
+  //         if (user == null) {
+  //           timer.cancel();
+  //           Navigator.of(context).pop();
+  //           return;
+  //         }
+  //
+  //         await user.reload(); // 🔥 Force server refresh
+  //
+  //         if (user.emailVerified) {
+  //           timer.cancel();
+  //           Navigator.of(context).pop(); // Close dialog
+  //         }
+  //       });
+  //
+  //       return AlertDialog(
+  //         title: const Text("Email Verification"),
+  //         content: const Text(
+  //           "Please click the verification link sent to your email.\n\n"
+  //               "This window will close automatically once verified.",
+  //         ),
+  //         shape: RoundedRectangleBorder(
+  //           borderRadius: BorderRadius.circular(10),
+  //           side: const BorderSide(
+  //             color: Colors.blue, // Border color
+  //             width: 2, // Border width
+  //           ),
+  //         ),
+  //         backgroundColor: colorAppTitle,
+  //         shadowColor: Colors.black,
+  //         actions: [
+  //           MyTextButton(
+  //             text: "Resend Email",
+  //             onPressed: () async {
+  //               await _sendValidateEmail();
+  //             },
+  //           ),
+  //           MyTextButton(
+  //             text: "Cancel",
+  //             onPressed: () async {
+  //               timer?.cancel();
+  //               await FirebaseAuth.instance.signOut();
+  //               if(mounted){
+  //                 Navigator.of(context).pop();
+  //               }
+  //             },
+  //           )
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
+  // Future<void> _sendValidateEmail() async {
+  //   final user = FirebaseAuth.instance.currentUser;
+  //
+  //   if (user == null) return;
+  //
+  //   try {
+  //     await user.sendEmailVerification();   // 🔥 Forces server check
+  //   } catch (e) {
+  //     MyGlobalMessage.show("Error", e.toString(), MyMessageType.error);
+  //   }
+  // }
   Future<void> _validateUser() async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) return;
 
     try {
-      await user.reload();   // 🔥 Forces server check
+      await user.reload();   // Forces server check
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-not-found') {
         await FirebaseAuth.instance.signOut();
       }
     }
-  }
-  Future<void> _sendValidateEmail() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) return;
-
-    try {
-      await user.sendEmailVerification();   // 🔥 Forces server check
-    } catch (e) {
-      MyGlobalMessage.show("Error", e.toString(), MyMessageType.error);
-    }
-  }
-  void _showEmailVerificationDialog(BuildContext context) {
-    Timer? timer;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-
-      builder: (context) {
-        timer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-          final user = FirebaseAuth.instance.currentUser;
-
-          if (user == null) {
-            timer.cancel();
-            Navigator.of(context).pop();
-            return;
-          }
-
-          await user.reload(); // 🔥 Force server refresh
-
-          if (user.emailVerified) {
-            timer.cancel();
-            Navigator.of(context).pop(); // Close dialog
-          }
-        });
-
-        return AlertDialog(
-          title: const Text("Email Verification"),
-          content: const Text(
-            "Please click the verification link sent to your email.\n\n"
-                "This window will close automatically once verified.",
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: const BorderSide(
-              color: Colors.blue, // Border color
-              width: 2, // Border width
-            ),
-          ),
-          backgroundColor: colorAppTitle,
-          shadowColor: Colors.black,
-          actions: [
-            MyTextButton(
-              text: "Resend Email",
-              onPressed: () async {
-                await _sendValidateEmail();
-              },
-            ),
-            MyTextButton(
-              text: "Cancel",
-              onPressed: () async {
-                timer?.cancel();
-                await FirebaseAuth.instance.signOut();
-                if(mounted){
-                  Navigator.of(context).pop();
-                }
-              },
-            )
-          ],
-        );
-      },
-    );
   }
   void _startTimeout(int sec) {
     _loadingTimer?.cancel();
@@ -832,187 +698,162 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   backgroundColor: colorAppBackground,
                   body: Stack(
                       children: [
-                        Column(
-                            children: [
-                              AppBar(
-                                iconTheme: IconThemeData(color: colorIceBlue),
-                                backgroundColor: colorAppBar,
-                                leading: GestureDetector(
-                                  onTap: () {
-                                    if (userLoggedIn) toggleDrawer();
-                                  },
-                                  child: Icon(Icons.menu),
-                                ),
-                                title: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    MyAppbarTitle("Limitless iOT"),
-                                    MyConnectionStatus(settings),
-                                  ],
-                                ),
-                                actions: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                        Positioned.fill(
+                          child: Column(
+                              children: [
+                                AppBar(
+                                  iconTheme: IconThemeData(color: colorIceBlue),
+                                  backgroundColor: colorAppBar,
+                                  leading: GestureDetector(
+                                    onTap: () {
+                                      if (userLoggedIn) toggleDrawer();
+                                    },
+                                    child: Icon(Icons.menu),
+                                  ),
+                                  title: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      // Profile Pic
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                            right: 10, top: 2, bottom: 2),
-                                        child: GestureDetector(
-                                          onTap: () async {
-                                            await _login(
-                                              isLoading: isLoading,
-                                              userLoggedIn: userLoggedIn,
-                                              user: user,
-                                            );
-                                            // await user.load();
-                                            //
-                                            // if (!isLoading && userLoggedIn) {
-                                            //   if (user.userdata
-                                            //       ?.emailValidated != true) {
-                                            //     MyGlobalMessage.show(
-                                            //         "Verify Email",
-                                            //         "Please open your email.\nClick on the verify link",
-                                            //         MyMessageType.info
-                                            //
-                                            //     );
-                                            //     return;
-                                            //   }
-                                            //
-                                            //   if(mounted){
-                                            //     Navigator.push(
-                                            //       context,
-                                            //       MaterialPageRoute(
-                                            //         builder: (context) =>
-                                            //             profilePage(
-                                            //             ),
-                                            //       ),
-                                            //     );
-                                            //   }//showLogoutDialog(context);
-                                            // }
-                                            //
-                                            // if (!isLoading && !userLoggedIn) {
-                                            //   await _loginScreen();
-                                            //   await user.load();
-                                            // };
-                                          },
+                                      MyAppbarTitle("Limitless iOT"),
+                                      MyConnectionStatus(settings: settings),
+                                    ],
+                                  ),
+                                  actions: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
 
-                                          // Profile Pic
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                  color: Colors.white,
-                                                  width: 0.5),
-                                              // Clean white border
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: Colors.black
-                                                      .withValues(alpha: 0.1),
-                                                  blurRadius: 4,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                            child: CircleAvatar(
-                                              radius: 18,
-                                              // Total size remains ~20 with the border
-                                              backgroundColor: colorIceBlue,
-                                              backgroundImage: profileImage,
+                                        // Profile Pic
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                              right: 10, top: 2, bottom: 2),
+                                          child: GestureDetector(
+                                            onTap: () async {
+                                              await _login(
+                                                isLoading: isLoading,
+                                                userLoggedIn: userLoggedIn,
+                                                user: user,
+                                              );
+                                            },
+                                
+                                            // Profile Pic
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                    color: Colors.white,
+                                                    width: 0.5),
+                                                // Clean white border
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withValues(alpha: 0.1),
+                                                    blurRadius: 4,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: CircleAvatar(
+                                                radius: 18,
+                                                // Total size remains ~20 with the border
+                                                backgroundColor: colorIceBlue,
+                                                backgroundImage: profileImage,
+                                              ),
                                             ),
                                           ),
                                         ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                
+                                !userLoggedIn
+                                  ? Expanded(
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          GestureDetector(
+                                            onTap: ()async{
+                                              await _login(
+                                                isLoading: isLoading,
+                                                userLoggedIn: userLoggedIn,
+                                                user: user,
+                                              );
+                                            },
+                                            child: MyText(text: "Please  Log in")
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-
-                              !userLoggedIn
-                                ? Expanded(
-                                  child: Center(
+                                    ),
+                                  )
+                                  :
+                                // =========================
+                                // Page Data
+                                // =========================
+                                Expanded(
+                                  child: SingleChildScrollView(
                                     child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment: MainAxisAlignment.start,
                                       children: [
-                                        GestureDetector(
-                                          onTap: ()async{
-                                            await _login(
-                                              isLoading: isLoading,
-                                              userLoggedIn: userLoggedIn,
-                                              user: user,
-                                            );
-                                          },
-                                          child: MyText(text: "Please  Log in")
+                                        const SizedBox(height: 20),
+                                
+                                        // Track Vehicle
+                                        MyCustomTileWithPic(
+                                          imagePath: iconFleet,
+                                          header: 'Track',
+                                          description: 'Track your vehicle as it moves inside and outside of your GeoFences',
+                                          widget: TrackingPage(),
                                         ),
+                                
+                                        const SizedBox(height: 10),
+                                
+                                        // GeoFence
+                                        const MyCustomTileWithPic(
+                                          imagePath: iconGeoFence,
+                                          header: 'GeoFence',
+                                          description: 'Set all the fence perimeters where you would like to record refundable tax rebate',
+                                          widget: GeoFencePage(),
+                                        ),
+                                
+                                        const SizedBox(height: 10),
+                                
+                                        // Base Stations
+                                        MyCustomTileWithPic(
+                                          imagePath: iconBase,
+                                          header: 'Base Stations',
+                                          description: 'Add multiple base stations that acts as master network controllers.',
+                                          widget: BaseStationPage(),
+                                        ),
+                                
+                                        const SizedBox(height: 10),
+                                
+                                        // iOT Monitors
+                                        const MyCustomTileWithPic(
+                                          imagePath: iconIot,
+                                          header: 'iOT Monitors',
+                                          description: 'Add multiple iOT monitors for various use cases',
+                                          widget: IotMonitorsPage(),
+                                        ),
+                                
+                                        const SizedBox(height: 10),
+                                
+                                        // Iot Report
+                                        const MyCustomTileWithPic(
+                                          imagePath: iconReport,
+                                          header: 'iOT Data Report',
+                                          description: 'View all the iOT data history',
+                                          widget: IotDataPage(),
+                                        ),
+                                
+                                        SizedBox(height: 15)
                                       ],
                                     ),
                                   ),
-                                )
-                                :
-                              // =========================
-                              // Page Data
-                              // =========================
-                              SingleChildScrollView(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 20),
-
-                                    // Track Vehicle
-                                    MyCustomTileWithPic(
-                                      imagePath: iconFleet,
-                                      header: 'Track',
-                                      description: 'Track your vehicle as it moves inside and outside of your GeoFences',
-                                      widget: TrackingPage(),
-                                    ),
-
-                                    const SizedBox(height: 10),
-
-                                    // GeoFence
-                                    const MyCustomTileWithPic(
-                                      imagePath: iconGeoFence,
-                                      header: 'GeoFence',
-                                      description: 'Set all the fence perimeters where you would like to record refundable tax rebate',
-                                      widget: GeoFencePage(),
-                                    ),
-
-                                    const SizedBox(height: 10),
-
-                                    // Base Stations
-                                    MyCustomTileWithPic(
-                                      imagePath: iconBase,
-                                      header: 'Base Stations',
-                                      description: 'Add multiple base stations that acts as master network controllers.',
-                                      widget: BaseStationPage(),
-                                    ),
-
-                                    const SizedBox(height: 10),
-
-                                    // iOT Monitors
-                                    const MyCustomTileWithPic(
-                                      imagePath: iconIot,
-                                      header: 'iOT Monitors',
-                                      description: 'Add multiple iOT monitors for various use cases',
-                                      widget: IotMonitorsPage(),
-                                    ),
-
-                                    const SizedBox(height: 10),
-
-                                    // Iot Report
-                                    const MyCustomTileWithPic(
-                                      imagePath: iconReport,
-                                      header: 'Report',
-                                      description: 'View all the iOT data history',
-                                      widget: IotDataPage(),
-                                    ),
-
-                                    SizedBox(height: 15)
-                                  ],
                                 ),
-                              ),
-
-                            ]),
+                                
+                              ]),
+                        ),
 
                         if (userLoggedIn)
                           AnimatedBuilder(
@@ -1066,10 +907,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                   width: drawerWidth,
                                                   decoration: BoxDecoration(
                                                     gradient: MyTileGradient(),
-                                                    borderRadius: BorderRadius
-                                                        .only(
-                                                      topRight: Radius.circular(
-                                                          20),
+                                                    borderRadius: BorderRadius.only(topRight: Radius.circular(20),
                                                     ),
                                                   ),
 
@@ -1131,7 +969,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                                                 // Menu
                                                 Expanded(
-                                                  child: ListView(
+                                                  child: Material(
+                                                    type: MaterialType.transparency,
+                                                    color: colorTile,
+                                                    child: ListTileTheme(
+                                                      data: ListTileThemeData(
+                                                        tileColor: colorTile,
+                                                        selectedTileColor: colorTile,
+                                                      ),
+                                                      child: ListView(
                                                     padding: EdgeInsets.zero,
                                                     children: [
 
@@ -1139,9 +985,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                       // (HEADING) Tracking
                                                       // -------------------------
                                                       Padding(
-                                                        padding: const EdgeInsets
-                                                            .only(
-                                                            top: 10, left: 10),
+                                                        padding: const EdgeInsets.only(top: 10, left: 10),
                                                         child: MyTextHeader(
                                                           text: "Tracking",
                                                           color: colorMenuHeader,
@@ -1154,10 +998,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                       ListTile(
                                                         leading: Icon(
                                                             Icons.gps_fixed,
-                                                            color: colorMenuIcons),
+                                                            color: colorMenuIcons
+                                                        ),
                                                         title: Text("Track",
                                                           style: TextStyle(
-                                                              color: colorMenuText),
+                                                              color: colorMenuText
+                                                              ),
                                                         ),
                                                         onTap: () {
                                                           toggleDrawer();
@@ -1173,8 +1019,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                                                       // GeoFence
                                                       ListTile(
-                                                        leading: Icon(Icons.fence,
-                                                            color: colorMenuIcons),
+                                                        leading: Icon(
+                                                          Icons.fence,
+                                                            color: colorMenuIcons
+                                                        ),
                                                         title: Text("GeoFence",
                                                             style: TextStyle(
                                                                 color: colorMenuText)
@@ -1363,6 +1211,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
                                                       SizedBox(height: 5,)
                                                     ],
+                                                  ),
+                                                    ),
                                                   ),
                                                 ),
                                               ]

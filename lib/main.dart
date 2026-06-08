@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geofence/splashScreen.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/firebase_options.dart';
+import 'package:geofence/firebase.dart';
 import 'package:provider/provider.dart';
 import 'MqttService.dart';
 import 'gpsServices.dart';
@@ -18,6 +19,7 @@ Future<void> main() async {
        options: DefaultFirebaseOptions.currentPlatform,
      );
 
+    await initializeGoogleSignIn();
     await initializeGpsService();
 
     final mqttService = MqttService();

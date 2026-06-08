@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -68,7 +69,6 @@ const String iconLimitlessWord = 'assets/limitlessIotWord.png';
 const colorIceBlue = Color.fromARGB(202, 139, 229, 245);
 const colorBlue = Color.fromARGB(255, 4, 145, 246);
 const colorDarkBlue = Color.fromARGB(255, 1, 57, 86);
-const colorTile = Color(0xff132235);
 const colorDarkHeader = Colors.white;
 const colorDarkText = Colors.white;
 const colorBlack = Color(0xFF14140F);
@@ -79,11 +79,14 @@ const colorTealDark = Color(0xFF053D38);
 const colorOrange = Color.fromARGB(255, 255, 60, 1);
 const colorGrey = Color.fromARGB(139, 119, 119, 119);
 const colorLightGrey = Color.fromARGB(137, 222, 222, 222);
+
 const colorAppBar = Color.fromARGB(255, 0, 36, 52);
 const colorAppBackground = colorDarkBlue;
 const colorAppTitle = Color.fromARGB(255, 21, 34, 52);
 const colorDrawer = Color.fromARGB(255, 33, 137, 215);
 const colorProgressCircle = Colors.lightBlueAccent ;
+final colorTile = ui.Color.fromARGB(100, 21, 39, 63).withValues(alpha: 0.70);
+const colorTileLight = ui.Color.fromARGB(255, 7, 73, 105);
 
 final FirebaseAuthService firebaseAuthService = FirebaseAuthService();
 final FirebaseFirestore firestore = FirebaseFirestore.instance;
@@ -180,16 +183,18 @@ const fireMonitorFuelConsumption = 'fuelConsumption';
 const fireMonitorReg = 'registrationNumber';
 const fireMonitorBtName = 'bluetoothDeviceName';
 const fireMonitorBtMac = 'bluetoothMAC';
-const fireMonitorImage = 'imageURL';
+const fireMonitorImageUrl = 'imageUrl';
 const fireMonitorImageFilename = 'imageFilename';
 const fireMonitorType = 'type';
-const fireMonitorId = 'monitorId';
+const fireMonitorDeviceId = 'monitorId';
 const fireMonitorTicksPerM = 'ticksPerM';
+const fireMonitorTicks = 'ticks';
+const fireMonitorCalibrationDistance = 'calibrationDistance';
 const fireMonitorTimestamp = 'timestamp';
 const fireMonitorLastLogTimestamp = 'lastLogTimestamp';
 
 // firebase - Iot Data
-const fireIotDocId = 'monDocId';
+const fireIotMonDocId = 'monDocId';
 const fireIotUserDocId = 'userDocId';
 const fireIotType = 'type';
 const fireIotMonName = 'iotName';
@@ -224,6 +229,7 @@ const mqttTopicLastWill = "mqtt/will";
 const mqttCmdDiscover = "#DISCOVER";
 const mqttCmdFoundMonitor = "#FOUND_MONITOR";
 const mqttCmdConnectMonitor = "#CONNECT_MONITOR";
+const mqttCmdCalibrate = "#CALIBRATE";
 const mqttCmdDisconnectMonitor = "#DISCONNECT_MONITOR";
 const mqttCmdAck = "#ACK";
 const mqttCmdPing = "#PING";
@@ -240,6 +246,7 @@ const mqttJsonTopic = "topic";
 const mqttJsonPayload = "payload";
 const mqttJsonCmd = "cmd";
 const mqttJsonWheelDistance = "wheel_distance";
+const mqttJsonWheelTicks = "ticks";
 const mqttJsonTagData = "tag_data";
 
 // JSON Settings
@@ -343,7 +350,32 @@ Position latLngToPosition(LatLng latLng) {
     isMocked: false,
   );
 }
+ImageProvider<Object> getMonitorImage(MonitorSettings monitor) {
+  if (monitor.imageURL == null || monitor.imageURL!.isEmpty ) {
+    switch (monitor.monitorType) {
+      case monitorTypeVehicle:
+        return AssetImage(iconVehicle);
 
+      case monitorTypeWheel:
+        return AssetImage(iconWheel);
+
+      case monitorTypeMachine:
+        return AssetImage(iconMachine);
+
+      case monitorTypeFleet:
+        return AssetImage(iconFleet);
+
+      case monitorTypeTrailer:
+        return AssetImage(iconTrailer);
+
+      default:
+        return AssetImage(iconNoImage);
+    }
+  }
+  else {
+    return AssetImage(iconNoImage);
+  }
+}
 //--Class-----------------------------------------------------------------------
 class Point {
   final double x, y;
@@ -389,6 +421,7 @@ class MyTextFormField extends StatefulWidget {
   final double? valueFontSize;
   final Color? backgroundColor;
   final Color? foregroundColor;
+  final bool showLine;
 
   const MyTextFormField({
     super.key,
@@ -408,7 +441,8 @@ class MyTextFormField extends StatefulWidget {
     this.foregroundColor = Colors.black,
     this.isReadOnly = false,
     this.labelFontSize = 18,
-    this.valueFontSize = 14
+    this.valueFontSize = 14,
+    this.showLine = true,
   });
 
   @override
@@ -456,16 +490,21 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
         validator: widget.validator,
         onFieldSubmitted: widget.onFieldSubmitted,
         decoration: InputDecoration(
-          enabledBorder: UnderlineInputBorder(
-            borderSide: BorderSide(
-            color: Colors.grey
-            ),
-          ),
-          focusedBorder: UnderlineInputBorder(
-            borderSide: BorderSide(
-            color: Colors.blue,
-            ),
-          ),
+          enabledBorder: widget.showLine
+              ? const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.grey),
+                )
+              : InputBorder.none,
+          focusedBorder: widget.showLine
+              ? const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.blue),
+                )
+              : InputBorder.none,
+          border: widget.showLine
+              ? const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.grey),
+                )
+              : InputBorder.none,
 
           filled: true,
           floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -927,7 +966,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
   final Color? backgroundColor;
   final Color headerColor;
   final Color textColor;
-  final String? image;
+  final ImageProvider<Object>? image;
   final double? height;
 
   MyTextTileWithEditDelete({
@@ -1012,7 +1051,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.all(Radius.elliptical(30, 30)),
                         image: DecorationImage(
-                          image: AssetImage(image!),
+                          image: image!,
                           fit: BoxFit.cover,
                         ),
                       ),
@@ -1106,24 +1145,58 @@ class MyOperatorTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: colorAppBar,
             borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey, width: 0.5),
           ),
+          clipBehavior: Clip.antiAlias,
           child: Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.only(right: 15.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 GestureDetector(
                   onTap:  () => onTapTile!(),
-                  child: CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Colors.white,
-                    child: CircleAvatar(
-                      radius: 28,
-                      backgroundImage: operator.imageURL != null &&  operator.imageURL!.isNotEmpty
-                          ? CachedNetworkImageProvider(operator.imageURL!)
-                          : AssetImage(iconProfile) as ImageProvider,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(10),
+                      bottomRight: Radius.circular(10),
                     ),
+                    child: operator.imageURL != null &&
+                            operator.imageURL!.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: operator.imageURL!,
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Image.asset(
+                              iconProfile,
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                            ),
+                            errorWidget: (_, __, ___) => Image.asset(
+                              iconProfile,
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : Image.asset(
+                            iconProfile,
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                          ),
                   ),
+                  // CircleAvatar(
+                  //   radius: 30,
+                  //   backgroundColor: Colors.white,
+                  //   child: CircleAvatar(
+                  //     radius: 28,
+                  //     backgroundImage: operator.imageURL != null &&  operator.imageURL!.isNotEmpty
+                  //         ? CachedNetworkImageProvider(operator.imageURL!)
+                  //         : AssetImage(iconProfile) as ImageProvider,
+                  //   ),
+                  // ),
                 ),
 
                 SizedBox(width: 8),
@@ -1686,7 +1759,47 @@ class MyGlobalSnackBar {
     );
   }
 }
+class HexagonPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
 
+    double hexSize = 20;
+    double vert = hexSize * 1.5;
+    double horiz = hexSize * 1.732;
+
+    for (double y = 0; y < size.height + vert; y += vert) {
+      for (double x = 0; x < size.width + horiz; x += horiz) {
+        _drawHexagon(canvas,
+            Offset(x + (y ~/ vert % 2 == 0 ? 0 : horiz / 2), y), hexSize, paint);
+      }
+    }
+  }
+
+  void _drawHexagon(Canvas canvas, Offset center, double size, Paint paint) {
+    final path = Path();
+
+    for (int i = 0; i < 6; i++) {
+      double angle = (60 * i - 30) * 3.14159 / 180;
+      double x = center.dx + size * cos(angle);
+      double y = center.dy + size * sin(angle);
+
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
 //--Services--------------------------------------------------------------------
 class UserData{
   String displayName = "";
@@ -2148,12 +2261,14 @@ class MonitorSettings {
   String? imageURL;
   String? imageFilename;
   double ticksPerM;
+  int ticks;
 
   // Local-only (NOT saved)
   bool isLoading;
   bool isConnectedToIot;
   bool isConnectingToIot;
   double wheelDistance;
+  int calibrationDistance;
   bool wheelSignal;
   String monDocId;
   String userDocId;
@@ -2171,6 +2286,8 @@ class MonitorSettings {
     this.imageURL,
     this.imageFilename,
     this.ticksPerM = 20,
+    this.ticks = 0,
+    this.calibrationDistance = 0,
 
     // Local
     this.isLoading = false,
@@ -2187,7 +2304,7 @@ class MonitorSettings {
     return MonitorSettings(
       monDocId: docId,
       userDocId: userId,
-      monitorId: map[fireMonitorId] ?? 'none',
+      monitorId: map[fireMonitorDeviceId] ?? 'none',
       monitorType: map[fireMonitorType] ?? 'none',
       monitorName: map[fireMonitorName] ?? 'New Item',
       reg: map[fireMonitorReg] ?? 'None',
@@ -2195,7 +2312,9 @@ class MonitorSettings {
       bluetoothDeviceName: map[fireMonitorBtName] ?? '',
       bluetoothMac: map[fireMonitorBtMac] ?? '',
       ticksPerM: (map[fireMonitorTicksPerM] as num?)?.toDouble() ?? settingMonDefaultTicksPerM,
-      imageURL: map[fireMonitorImage] ?? '',
+      ticks: (map[fireMonitorTicks] as num?)?.toInt() ?? 0,
+      calibrationDistance: (map[fireMonitorCalibrationDistance] as num?)?.toInt() ?? 0,
+      imageURL: map[fireMonitorImageUrl] ?? '',
       imageFilename: map[fireMonitorImageFilename] ?? '',
     );
   }
@@ -2203,7 +2322,7 @@ class MonitorSettings {
   // To Firebase (NO local fields)
   Map<String, dynamic> toMap() {
     return {
-      fireMonitorId: monitorId,
+      fireMonitorDeviceId: monitorId,
       fireMonitorType: monitorType,
       fireMonitorName: monitorName,
       fireMonitorReg: reg,
@@ -2212,8 +2331,10 @@ class MonitorSettings {
       fireMonitorBtName: bluetoothDeviceName,
       fireMonitorBtMac: bluetoothMac,
       fireMonitorTicksPerM: ticksPerM,
-      fireMonitorImage: imageURL,
-      fireMonitorImageFilename: imageFilename
+      fireMonitorTicks: ticks,
+      fireMonitorImageUrl: imageURL,
+      fireMonitorImageFilename: imageFilename,
+      fireMonitorCalibrationDistance: calibrationDistance
     };
   }
 }
@@ -2368,7 +2489,7 @@ class MonitorCloudData {
     final map = doc.data() as Map<String, dynamic>;
 
     return MonitorCloudData(
-      monDocId: map[fireIotDocId],
+      monDocId: map[fireIotMonDocId],
       userDocId: map[fireIotUserDocId],
       monitorType: map[fireIotType],
       monitorName: map[fireIotMonName],
@@ -3028,7 +3149,10 @@ Future<T?> MyQuestionAlertBox<T> ({
       }
   );
 }
-Widget MyConnectionStatus(SettingsService settings){
+Widget MyConnectionStatus({
+  required SettingsService settings, 
+  double size = 12
+  }){
   return  Row(
     children: [
 
@@ -3040,7 +3164,7 @@ Widget MyConnectionStatus(SettingsService settings){
             : settings.fireSettings == null
             ? Icons.sync // Loading icon
             : Icons.link, // Connected icon
-        size: 14,
+        size: size+2,
         color: settings
             .isBaseStationConnected != true
             ? Colors.redAccent
@@ -3058,7 +3182,7 @@ Widget MyConnectionStatus(SettingsService settings){
             ? "Loading ..."
             : settings.fireSettings!.connectedDevice,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: size,
           color: settings.isBaseStationConnected != true
               ? Colors.grey.withValues(alpha: 0.8)
               : Colors.blueGrey,

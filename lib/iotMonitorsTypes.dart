@@ -215,18 +215,22 @@ class IotDistanceWheelType extends StatefulWidget {
   final MonitorSettings monitorData;
   final Function(String) onChangedName;
   final Function(String) onChangedTicksPerM;
+  final Function(String) onChangedTicks;
   final Function(String) onChangedMonId;
-  final Function() onTapScan;
+  final Function() onTapPair;
   final Function() onTapConnect;
+  final Function() onTapCalibrate;
 
   const IotDistanceWheelType({
     super.key,
     required this.monitorData,
     required this.onChangedName,
     required this.onChangedTicksPerM,
+    required this.onChangedTicks,
     required this.onChangedMonId,
-    required this.onTapScan,
+    required this.onTapPair,
     required this.onTapConnect,
+    required this.onTapCalibrate,
   });
 
   @override
@@ -236,28 +240,39 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   late SettingsService settingService;
   late final TextEditingController _controllerName;
   late final TextEditingController _controllerId;
+  late final TextEditingController _controllerTicksPerM;
   late final TextEditingController _controllerTicks;
   late final TextEditingController _controllerDistance;
+  late final TextEditingController _controllerCalDistance;
   late FocusNode _focusNodeName;
   late FocusNode _focusNodeID;
-  late FocusNode _focusNodeTicks;
-
+  late FocusNode _focusNodeTicksPerM;
+  late FocusNode _focusNodeCalDistance;
+  
+  Color colorSetupTile = colorTileLight;
+  Color colorCalibrateTile = colorTileLight;
+  Color colorLiveTile = colorTileLight;
+  
   @override
   void initState() {
     super.initState();
      _controllerId = TextEditingController(text: widget.monitorData.monitorId);
      _controllerName = TextEditingController(text: widget.monitorData.monitorName);
-     _controllerTicks = TextEditingController(text: widget.monitorData.ticksPerM.toString());
+     _controllerTicksPerM = TextEditingController(text: widget.monitorData.ticksPerM.toString());
+     _controllerTicks = TextEditingController(text: widget.monitorData.ticks.toString());
      _controllerDistance = TextEditingController(text: widget.monitorData.wheelDistance.toString());
+     _controllerCalDistance = TextEditingController(text: widget.monitorData.calibrationDistance.toString());
 
     _focusNodeName = FocusNode();
     _focusNodeID = FocusNode();
-    _focusNodeTicks = FocusNode();
+    _focusNodeTicksPerM = FocusNode();
+    _focusNodeCalDistance = FocusNode();
 
-    // 2. Add listeners to trigger save on focus loss
+    // Add listeners to trigger save on focus loss
     _focusNodeName.addListener(() => _handleFocusChange(_focusNodeName, 'name'));
     _focusNodeID.addListener(() => _handleFocusChange(_focusNodeID, 'id'));
-    _focusNodeTicks.addListener(() => _handleFocusChange(_focusNodeTicks, 'ticks'));
+    _focusNodeTicksPerM.addListener(() => _handleFocusChange(_focusNodeTicksPerM, 'ticksPerM'));
+    _focusNodeCalDistance.addListener(() => _handleFocusChange(_focusNodeCalDistance, 'calDistance'));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
     });
@@ -266,7 +281,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    settingService = context.read<SettingsService>();
+    settingService = context.watch<SettingsService>();
   }
 
   @override
@@ -279,11 +294,13 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
     _controllerId.dispose();
     _controllerDistance.dispose();
     _controllerName.dispose();
+    _controllerTicksPerM.dispose();
     _controllerTicks.dispose();
 
     _focusNodeName.dispose();
     _focusNodeID.dispose();
-    _focusNodeTicks.dispose();
+    _focusNodeTicksPerM.dispose();
+    _focusNodeCalDistance.dispose();
 
     super.dispose();
   }
@@ -293,16 +310,28 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
       setState(() {
         if (field == 'name') widget.monitorData.monitorName = _controllerName.text;
         if (field == 'id') widget.monitorData.monitorId = _controllerId.text;
-        if (field == 'ticks') widget.monitorData.ticksPerM = double.parse(_controllerTicks.text);
+        if (field == 'ticksPerM') widget.monitorData.ticksPerM = double.parse(_controllerTicksPerM.text);
+        if (field == 'calDistance') widget.monitorData.calibrationDistance = int.parse(_controllerCalDistance.text);
 
         context.read<MonitorSettingsService>().save(widget.monitorData);
       });
     }
   }
+  
   // Public methods for parent to update text Controllers
   void updateDistance(double value) {
     if (!mounted) return;
     _controllerDistance.text = value.toStringAsFixed(2);
+  }
+  void updateCalDistance(int value) {
+    if (!mounted) return;
+    _controllerCalDistance.text = value.toStringAsFixed(2);
+  }
+  void updateTicks(int value) {
+    if (!mounted) return;
+    setState(() {
+      _controllerTicks.text = value.toString();
+    });
   }
 
   @override
@@ -310,151 +339,416 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-
-        // Wheel Name
+       
+        // Setup Tile ----------------------------------
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          child: MyTextFormField(
-            focusNode: _focusNodeName,
-            backgroundColor: colorAppBackground,
-            foregroundColor: Colors.white,
-            controller: _controllerName,
-            hintText: "none",
-            labelText: "Wheel Name",
-            onFieldSubmitted: widget.onChangedName,
-          ),
-        ),
-
-        SizedBox(height: 5),
-
-        // ID + Scan Button
-        Row(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 15),
-                child: MyTextFormField(
-                  focusNode: _focusNodeID,
-                  backgroundColor: colorAppBackground,
-                  foregroundColor: Colors.white,
-                  controller: _controllerId,
-                  hintText: "none",
-                  labelText: "Monitor ID",
-                  onFieldSubmitted: widget.onChangedMonId,
+          padding: const EdgeInsets.all(8.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorSetupTile,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: Colors.grey,
+                width: 0.5
                 ),
-              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                  offset: Offset(0, 2),
+                ),
+              ],
             ),
-
+          child: 
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: InkWell(
-                  onTap: widget.onTapScan,
-                  child: Column(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 5 ),
+              child: Column(
+                children: [
+                  
+                  // Setup
+                  MyText(
+                    text: "Setup", 
+                    fontsize: 18
+                  ),
+
+                   SizedBox(height: 15),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const MyText(
+                          fontsize: 14,
+                          color: Colors.grey,
+                          text:
+                            '1. Only 1 Wheel at a time can be in PAIR mode\n'
+                            '2. On Wheel, Press \'Stop\' 6 times\n'
+                            '3. Check if Wheel enters PAIR mode\n'
+                            '4. In App, press \'Pair\'\n'    
+                        ),     
+                      ],
+                    ),
+                  ),
+                  
+                  // Monitor Info
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10,left: 8),
+                    child: MyTextHeader(text:"Monitor Info"),
+                  ),
+
+                  // Wheel Name
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    child: MyTextFormField(
+                      focusNode: _focusNodeName,
+                      backgroundColor: colorSetupTile,
+                      foregroundColor: Colors.white,
+                      controller: _controllerName,
+                      hintText: "none",
+                      labelText: "Wheel Name",
+                      onFieldSubmitted: widget.onChangedName,
+                    ),
+                  ),
+              
+                  SizedBox(height: 5),
+              
+                  // ID + Scan Button
+                  Row(
                     children: [
-                      Icon(
-                        Icons.connected_tv,
-                        size: 30,
-                        color: settingService.isBaseStationConnected
-                            ? Colors.lightBlueAccent
-                            : Colors.grey ,
-                      ),
-                      SizedBox(width: 10),
-                      Text("Pair",
-                        style: TextStyle(
-                            color: settingService.isBaseStationConnected
-                              ? Colors.white
-                              : Colors.grey
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15),
+                          child: MyTextFormField(
+                            focusNode: _focusNodeID,
+                            backgroundColor: colorSetupTile,
+                            foregroundColor: Colors.white,
+                            controller: _controllerId,
+                            hintText: "none",
+                            labelText: "Monitor ID",
+                            onFieldSubmitted: widget.onChangedMonId,
+                          ),
                         ),
-                      )
+                      ),
+              
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: InkWell(
+                            onTap: widget.onTapPair,
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.connected_tv,
+                                  size: 30,
+                                  color: settingService.isBaseStationConnected
+                                      ? Colors.lightBlueAccent
+                                      : Colors.grey ,
+                                ),
+                                SizedBox(width: 10),
+                                Text("Pair",
+                                  style: TextStyle(
+                                      color: settingService.isBaseStationConnected
+                                        ? Colors.white
+                                        : Colors.grey
+                                  ),
+                                )
+                              ],
+                            )
+                        ),
+                      ),
                     ],
-                  )
+                  ),
+              
+                  SizedBox(height: 5),
+              
+                  // Ticks per M
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    child: MyTextFormField(
+                      focusNode: _focusNodeTicksPerM,
+                      backgroundColor: colorSetupTile,
+                      foregroundColor: Colors.white,
+                      controller: _controllerTicksPerM,
+                      hintText: "none",
+                      labelText: "Ticks per Meter",
+                      onFieldSubmitted: widget.onChangedTicksPerM,
+                    ),
+                  ),
+
+                  SizedBox(height: 20,)
+                ],
+              ),
+            ),  
+          ),
+        ),
+        SizedBox(height: 20),
+        
+        // Calibrate Tile ------------------------------
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Container(
+             decoration: BoxDecoration(
+                color: colorCalibrateTile,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.grey,
+                  width: 0.5
+                  ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  
+                  // Calibrate Header
+                  Center(
+                    child: MyText(
+                      text: "Calibrate", 
+                      fontsize: 18
+                    ),
+                  ),
+
+                  SizedBox(height: 15),
+
+                  // Instructions
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const MyText(
+                          fontsize: 14,
+                          color: Colors.grey,
+                          text:
+                            '1. Enter the calibration distance\n'
+                            '2. Pre measure this exact distance\n'
+                            '3. On Wheel, Press \'Start\' 6 times\n'
+                            '4. Check if Wheel enters calibration mode\n'
+                            '5. On the Wheel, press \'Start\'\n'
+                            '6. Move Wheel the exact distance\n'
+                            '7. On the Wheel, press \'Stop\'\n'
+                            '8. Take wheel back into WIFI range\n'
+                            '9. In the App press \'Calibrate\'\n'    
+                        ),     
+                      ],
+                    ),
+                  ),
+                  
+                  // Status
+                  // Padding(
+                  //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  //   child: MyConnectionStatus(
+                  //     settings: settingService, 
+                  //     size: 14
+                  //     ),
+                  // ),
+
+                  // Calibration Data Header
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10,left: 8),
+                    child: MyTextHeader(text:"Calibration Data"),
+                  ),
+                 
+                  // Ticks
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: MyTextFormField(
+                        backgroundColor: colorCalibrateTile,
+                        foregroundColor: Colors.white,
+                        controller: _controllerTicks,
+                        hintText: "—",
+                        labelText: "Ticks",
+                        isReadOnly: true,
+                        showLine: false,
+                      ),
+                  ),                 
+                
+                  // Calibration Distance
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: MyTextFormField(
+                            focusNode: _focusNodeCalDistance,
+                            backgroundColor: colorCalibrateTile,
+                            foregroundColor: Colors.white,
+                            controller: _controllerCalDistance,
+                            labelText: "Calibration Distance",
+                          ),
+                        ),
+                      ),
+
+                       Padding(
+                         padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                         child: InkWell(
+                          onTap: widget.onTapCalibrate,
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.online_prediction_sharp,
+                                size: 30,
+                                color: settingService.isBaseStationConnected
+                                    ? widget.monitorData.isConnectedToIot
+                                        ? Colors.greenAccent
+                                        : Colors.lightBlueAccent
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                "Calibrate",
+                                style: TextStyle(
+                                  color: settingService.isBaseStationConnected
+                                      ? Colors.white
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                                               ),
+                       ),
+                    
+                    ],
+                  ),
+          
+                  SizedBox(height: 10),
+
+                ],
               ),
             ),
-          ],
-        ),
-
-        SizedBox(height: 5),
-
-        // Ticks per M
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          child: MyTextFormField(
-            focusNode: _focusNodeTicks,
-            backgroundColor: colorAppBackground,
-            foregroundColor: Colors.white,
-            controller: _controllerTicks,
-            hintText: "none",
-            labelText: "Ticks per Meter",
-            onFieldSubmitted: widget.onChangedTicksPerM,
           ),
         ),
-
-        SizedBox(height: 30),
-
-        // Connect to iOT  + Connect Button
+        SizedBox(height: 20),
+       
+        // Live Mode Tile ------------------------------
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Row(
-            children: [
-              // Debug Header
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(15,10,15,10),
-                  child: MyTextHeader(
-                      text: "Connect to iOT",
-                      color:widget.monitorData.isConnectedToIot
-                          ? Colors.white
-                          : Colors.grey,
-                      linecolor: widget.monitorData.isConnectedToIot
-                        ? Colors.blue
-                        : Colors.grey
+          padding: const EdgeInsets.all(8.0),
+          child: Container(
+             decoration: BoxDecoration(
+                color: colorLiveTile,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.grey,
+                  width: 0.5
                   ),
-                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  
+                  // Live Monitor
+                  Center(
+                    child: MyText(
+                      text: "Live Monitor", 
+                      fontsize: 18
+                    ),
+                  ),
+                  SizedBox(height: 15),
 
-              SizedBox(width: 15),
-
-              // Connect Button
-              InkWell(
-                  onTap: widget.onTapConnect,
-                  child: Column(
+                  // Instructions
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const MyText(
+                          fontsize: 14,
+                          color: Colors.grey,
+                          text:
+                            '1. Press \'Connect\' to start the live monitor\n'
+                            '2. Move Wheel\n'
+                        ),     
+                      ],
+                    ),
+                  ),
+                   
+                  // Live Monitor Header
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10,left: 8),
+                    child: MyTextHeader(text:"Live Data"),
+                  ),
+                 
+                  // Live Monitor Distance / Connect Button
+                  Row(
                     children: [
-                      Icon(
-                        Icons.online_prediction_sharp,
-                        size: 30,
-                        color: settingService.isBaseStationConnected
-                          ? widget.monitorData.isConnectedToIot
-                            ? Colors.greenAccent
-                            : Colors.lightBlueAccent
-                          : Colors.grey
-                      ),
-                      SizedBox(width: 10),
-                      Text("Connect",
-                        style: TextStyle(
-                            color: settingService.isBaseStationConnected
-                              ? Colors.white
-                              : Colors.grey
+                      
+                      // Distance
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: MyTextFormField(
+                            backgroundColor: colorCalibrateTile,
+                            foregroundColor: Colors.white,
+                            controller: _controllerDistance,
+                            labelText: "Distance",
+                          ),
                         ),
-                      )
-                    ],
-                  )
-              ),
-            ],
-          ),
-        ),
+                      ),
 
-        // Distance
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          child: MyTextFormField(
-            backgroundColor: colorAppBackground,
-            foregroundColor: Colors.white,
-            controller: _controllerDistance,
-            hintText: "Waiting for movement",
-            labelText: "Distance",
+                      // Connect Button
+                      Padding(
+                         padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                         child: InkWell(
+                          onTap: widget.onTapConnect,
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.online_prediction_sharp,
+                                size: 30,
+                                color: settingService.isBaseStationConnected
+                                    ? widget.monitorData.isConnectedToIot
+                                        ? Colors.greenAccent
+                                        : Colors.lightBlueAccent
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                "Connect",
+                                style: TextStyle(
+                                  color: settingService.isBaseStationConnected
+                                      ? Colors.white
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                                               ),
+                       ),
+                    
+                    ],
+                  ),
+          
+                  SizedBox(height: 10),
+
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
+        )
+      ],  
     );
+    
   }
 }

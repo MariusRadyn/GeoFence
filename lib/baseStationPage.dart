@@ -9,7 +9,7 @@ import 'package:geofence/MqttService.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
+//import 'package:permission_handler/permission_handler.dart';
 
 class BaseStationPage extends StatefulWidget {
 
@@ -477,23 +477,23 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
       }
     }
   }
-  void _connectBluetoothDevice(String mac) async {
-    FlutterBluePlus.startScan(timeout: Duration(seconds: 4));
-    print("Connecting... Bluetooth $mac");
+  // void _connectBluetoothDevice(String mac) async {
+  //   FlutterBluePlus.startScan(timeout: Duration(seconds: 4));
+  //   print("Connecting... Bluetooth $mac");
 
-    for(BluetoothDevice bt in lstPairedBtDevices ){
-      if(bt.remoteId.str == mac){
-        String btNname = bt.platformName;
-        await FlutterBluePlus.stopScan();
-        await bt.connect();
-        print("Connected $btNname");
-        await _sendTextToDevice(bt, "Hello Raspberry Pi!");
-        break;
-      }
-    }
+  //   for(BluetoothDevice bt in lstPairedBtDevices ){
+  //     if(bt.remoteId.str == mac){
+  //       String btNname = bt.platformName;
+  //       await FlutterBluePlus.stopScan();
+  //       await bt.connect(license: License.free);
+  //       print("Connected $btNname");
+  //       await _sendTextToDevice(bt, "Hello Raspberry Pi!");
+  //       break;
+  //     }
+  //   }
 
-    print("BT Connection Not Found");
-  }
+  //   print("BT Connection Not Found");
+  // }
 
   // Controllers
   void _updateTabController(int length) {
@@ -559,7 +559,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   MyAppbarTitle("Base Stations"),
-                  MyConnectionStatus(settings),
+                  MyConnectionStatus(settings:  settings),
                 ],
               ),
             ),

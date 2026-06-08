@@ -110,10 +110,11 @@ LocationSettings getLocationSettings() {
 
   return locationsettings;
 }
-Future<void>  getPolylinePoints(double originLatitude, double originLongitude, double destLatitude, double destLongitude) async {
-  PolylinePoints polylinePoints = PolylinePoints();
+
+Future<void> getPolylinePoints(double originLatitude, double originLongitude,
+    double destLatitude, double destLongitude) async {
+  PolylinePoints polylinePoints = PolylinePoints(apiKey: googleAPiKey);
   PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
-    googleApiKey: googleAPiKey,
     request: PolylineRequest(
       origin: PointLatLng(originLatitude, originLongitude),
       destination: PointLatLng(destLatitude, destLongitude),
@@ -121,8 +122,9 @@ Future<void>  getPolylinePoints(double originLatitude, double originLongitude, d
       wayPoints: [PolylineWayPoint(location: "Sabo, Yaba Lagos Nigeria")],
     ),
   );
-  print(result.points);
+  debugPrint("${result.points}");
 }
+
 
 
 // Initialize the background service
@@ -255,7 +257,7 @@ class LocationService {
       });
 
       flutterLocalNotificationsPlugin.initialize(
-        const InitializationSettings(
+        settings: const InitializationSettings(
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         ),
       );

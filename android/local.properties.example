@@ -1,0 +1,5 @@
+# Copy to android/local.properties (gitignored) and fill in your values.
+sdk.dir=C\:\\Users\\YOUR_USER\\AppData\\Local\\Android\\Sdk
+flutter.sdk=C\:\\flutter
+MAP_API_KEY=your_google_maps_api_key
+MQTT_PIN=your_mqtt_pin

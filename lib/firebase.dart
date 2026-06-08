@@ -8,11 +8,18 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as path;
 import 'package:image_picker/image_picker.dart';
 import 'package:geofence/utils.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:provider/provider.dart';
+import 'package:google_sign_in/google_sign_in.dart' as gsis;
 
 FirebaseStorage fireStorageInstance = FirebaseStorage.instance;
 List<Reference> fireAllSongsRef = [];
+final gsis.GoogleSignIn googleSignIn = gsis.GoogleSignIn.instance;
+
+/// google_sign_in 7.x must be initialized once before use.
+/// On Android, [serverClientId] is read automatically from `google-services.json`
+/// (Gradle generates `default_web_client_id` — no need to duplicate it in Dart).
+Future<void> initializeGoogleSignIn() async {
+  await googleSignIn.initialize();
+}
 
 // ----------------------------------------------------------------------------
 // Firebase Storage
@@ -43,7 +50,7 @@ Future<void> fireStoreUploadImage(String inputSource) async {
       ),
     );
   } catch (err) {
-    print(err);
+    debugPrint("$err");
   }
 }
 Future<void> fireStoreUploadFile(String filename) async {
@@ -57,12 +64,13 @@ Future<void> fireStoreUploadFile(String filename) async {
 
     // Waits till the file is uploaded then stores the download url
     uploadTask.whenComplete(() {
-      Future<String> url = reference.getDownloadURL();
+      reference.getDownloadURL();
     }).catchError((onError) {
-      print(onError);
+      debugPrint("$onError");
+      throw onError;
     });
   } catch (err) {
-    print(err);
+    debugPrint("$err");
   }
 }
 Future<List<Map<String, dynamic>>> fireStoreLoadFiles() async {
@@ -97,7 +105,7 @@ Future<List<Reference>> fireStoreGetFilesList(String path) async {
 
     return fireAllSongsRef;
   } catch (e) {
-    print("fireStoreGetFilesList Error: $e");
+    debugPrint("fireStoreGetFilesList Error: $e");
     return [];
   }
 }
@@ -147,20 +155,20 @@ Future<String> fireStoreUploadProfilePic(String userId, File imageFile) async {
 // Firestore Database
 // ----------------------------------------------------------------------------
 Future fireDbGetSongs(String table) async {
-  List Songs = [];
+  List songs = [];
 
   final CollectionReference fRef = FirebaseFirestore.instance.collection(table);
 
   try {
     await fRef.get().then((querySnapshot) {
       for (var result in querySnapshot.docs) {
-        Songs.add(result.data());
+        songs.add(result.data());
       }
     });
 
-    return Songs;
+    return songs;
   } catch (e) {
-    print("Firebase DB Error: $e");
+    debugPrint("Firebase DB Error: $e");
     return null;
   }
 }
@@ -253,7 +261,7 @@ class FirebaseAuthService {
         await user.sendEmailVerification();
       }
 
-      return AuthResult(user: credential.user); credential.user;
+      return AuthResult(user: credential.user);
     } on FirebaseAuthException catch (e) {
       return AuthResult(exception: e as Exception, code: e.code);
     } catch (e) {
@@ -265,7 +273,7 @@ class FirebaseAuthService {
       await _auth.signOut();
       return AuthResult(user: null);
     } catch (e) {
-      debugPrint("Firebase Error: ${e}");
+      debugPrint("Firebase Error: $e");
       return AuthResult(exception: e as Exception);
     }
   }
@@ -283,7 +291,7 @@ class FirebaseAuthService {
       if (user == null) {
         printMsg('User is currently signed out!');
       } else {
-        print('User Data Changed!');
+        debugPrint('User Data Changed!');
       }
     });
   }
@@ -327,15 +335,10 @@ class FirebaseAuthService {
         return AuthResult(user: credential.user);
       } else {
         // Mobile authentication (Android & iOS)
-        final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-        if (googleUser == null) {
-          throw Exception("Google sign-in aborted");
-        }
-
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final gsis.GoogleSignInAccount googleUser = await googleSignIn.authenticate();
+        final gsis.GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
         final AuthCredential credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
           idToken: googleAuth.idToken,
         );
 

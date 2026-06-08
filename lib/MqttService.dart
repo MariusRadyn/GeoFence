@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:geofence/utils.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
@@ -44,8 +45,32 @@ class MqttService {
 
     return ok;
   }
+  static const Duration brokerReachabilityTimeout = Duration(seconds: 2);
+
+  /// Quick TCP check — fails fast when the base station is off or unreachable.
+  Future<bool> isBrokerReachable(String ip, {Duration? timeout}) async {
+    if (ip.isEmpty) return false;
+
+    try {
+      final socket = await Socket.connect(
+        ip,
+        1883,
+        timeout: timeout ?? brokerReachabilityTimeout,
+      );
+      await socket.close();
+      return true;
+    } catch (e) {
+      printMsg('MQTT broker not reachable at $ip:1883 ($e)');
+      return false;
+    }
+  }
+
   Future<bool> restartService(String ip) async {
     try {
+      if (!await isBrokerReachable(ip)) {
+        return false;
+      }
+
       autoReconnect = false;
 
       await _updatesSubscription?.cancel();
@@ -129,7 +154,10 @@ class MqttService {
           .withWillQos(MqttQos.atLeastOnce);
 
       printMsg("Connecting to MQTT broker... $ipAdr");
-      await client!.connect();
+      await client!.connect().timeout(
+        Duration(milliseconds: client!.connectTimeoutPeriod),
+        onTimeout: () => throw TimeoutException('MQTT connect timed out'),
+      );
 
       if (client!.connectionStatus != null && client!.connectionStatus!.state == MqttConnectionState.connected) {
         printMsg("Connected successfully!");
@@ -138,6 +166,8 @@ class MqttService {
         printMsg("Connection failed");
       }
 
+    } on TimeoutException {
+      printMsg("MQTT connect timed out");
     } catch (e) {
       printMsg("MQTT Connect Error: $e");
 

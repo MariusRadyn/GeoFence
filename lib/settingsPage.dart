@@ -240,7 +240,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
       if(bt.remoteId.str == mac){
         String btNname = bt.platformName;
         await FlutterBluePlus.stopScan();
-        await bt.connect();
+        await bt.connect(license: License.free);
         print("Connected $btNname");
         await sendTextToDevice(bt, "Hello Raspberry Pi!");
         break;

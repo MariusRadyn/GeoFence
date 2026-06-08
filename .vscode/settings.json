@@ -1,0 +1,10 @@
+{
+  "dart.flutterSdkPath": "C:\\flutter",
+  "dart.debugExternalPackageLibraries": false,
+  "dart.debugSdkLibraries": false,
+  "terminal.integrated.env.windows": {
+    "ANDROID_HOME": "${env:LOCALAPPDATA}\\Android\\Sdk",
+    "PATH": "${env:PATH};${env:LOCALAPPDATA}\\Android\\Sdk\\platform-tools"
+  },
+  "cmake.sourceDirectory": "C:/git/GeoFenceApp/windows"
+}

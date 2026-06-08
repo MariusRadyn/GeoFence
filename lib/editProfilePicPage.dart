@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/firebase.dart';
@@ -13,17 +12,17 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 class EditProfilePicPage extends StatefulWidget {
-  String? imageURL;
-  String? imageFilename;
+  final String? imageURL;
+  final String? imageFilename;
   final String docId;
   final String profileType;
 
-  EditProfilePicPage({
+  const EditProfilePicPage({
     required this.docId,
     required this.profileType,
     this.imageURL,
     this.imageFilename,
-    super.key
+    super.key,
   });
 
   @override
@@ -31,16 +30,17 @@ class EditProfilePicPage extends StatefulWidget {
 }
 
 class _EditProfilePicPageState extends State<EditProfilePicPage> {
-  String? oldImgFilename;
+  String? currentImageUrl;
+  String? currentImgFilename;
   bool isLoading = false;
+  int _selectedIndex = 0;
   ProfilePicData profilePicData = ProfilePicData(update: false);
 
   @override
   void initState() {
-    if(widget.imageFilename != null){
-      oldImgFilename = widget.imageFilename!;
-    }
     super.initState();
+    currentImageUrl = widget.imageURL;
+    currentImgFilename = widget.imageFilename;
   }
 
   Future<File?> _selectImage({ImageSource? source}) async {
@@ -57,13 +57,21 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
       final thumb = await pick.readAsBytes();
 
       setState(() {
-
+        isLoading = true;
       });
+
 
       final dir = await getTemporaryDirectory();
       final filePath = path.join(dir.path, 'image.jpg');
       final file = File(filePath);
       await file.writeAsBytes(thumb, flush: true);
+
+      await _updateImage(file);
+
+      setState(() {
+        isLoading = false;
+      });
+
       return file;
 
     } catch (e, st) {
@@ -115,53 +123,46 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
     );
   }
   Future<void> _updateImage(File file) async {
-    setState(() {
-      isLoading = true;
-    });
 
-    if(oldImgFilename!= null && oldImgFilename!.isNotEmpty) {
-      await _fireDeleteImage(filename: oldImgFilename!, docId: widget.docId);
+    if (currentImgFilename != null && currentImgFilename!.isNotEmpty) {
+      await _fireDeleteImage(filename: currentImgFilename!, docId: widget.docId);
     }
     final imgURL = await _fireUploadImage(image: file, docId: widget.docId);
 
-    setState(()  {
-      widget.imageURL = imgURL;
-      oldImgFilename = profilePicData.imageFilename;
+    setState(() {
+      currentImageUrl = imgURL;
+      currentImgFilename = profilePicData.imageFilename;
       profilePicData.imageURL = imgURL;
-      isLoading = false;
     });
   }
 
   Future<void> _deleteImage() async {
-    if (oldImgFilename == null || oldImgFilename!.isEmpty) return;
+    if (currentImgFilename == null || currentImgFilename!.isEmpty) return;
 
     setState(() {
       isLoading = true;
     });
-    try{
+    try {
       await _fireDeleteImage(
-          filename: oldImgFilename!,
-          docId: widget.docId
+        filename: currentImgFilename!,
+        docId: widget.docId,
       );
 
       setState(() {
-        widget.imageURL = null;
-        oldImgFilename = null;
+        currentImageUrl = null;
+        currentImgFilename = null;
 
         profilePicData.imageURL = "";
         profilePicData.imageFilename = "";
         profilePicData.update = true; // ✅ Tell the previous screen to update DB
         isLoading = false;
       });
-
     } catch (e) {
-      MyGlobalMessage.show('Delete Image: ','$e', MyMessageType.error);
-      setState(()  {
+      MyGlobalMessage.show('Delete Image: ', '$e', MyMessageType.error);
+      setState(() {
         isLoading = false;
       });
     }
-
-
   }
 
   @override
@@ -177,73 +178,56 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
             },
             icon: const Icon(Icons.arrow_back),
         )
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          backgroundColor: colorAppBar,
+          unselectedItemColor: Colors.grey,
+          selectedItemColor: Colors.grey,
+          onTap: (index) async {
+            setState(() => _selectedIndex = index);
+            if(index == 0) await _selectImage(source:  ImageSource.camera);
+            if(index == 1) await _selectImage(source:  ImageSource.gallery);
+            if(index == 2) await _deleteImage();
+          },
+          items: [
+            // Add Button
+            BottomNavigationBarItem(
+                icon: Icon(Icons.camera_alt_outlined),
+                label: 'Camera',
+                backgroundColor: Colors.grey
+            ),
 
+            // Image Button
+            BottomNavigationBarItem(
+              icon: Icon(Icons.image),
+              label: 'Image',
+              backgroundColor: Colors.grey,
+            ),
+
+            // Delete Button
+            BottomNavigationBarItem(
+              icon: Icon(Icons.delete_forever),
+              label: 'Delete',
+              backgroundColor: Colors.grey,
+            ),
+
+          ]
       ),
       backgroundColor: colorAppBackground,
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-
-          // Camera
-          FloatingActionButton(
-            heroTag: "heroCamera",
-              backgroundColor: colorOrange,
-              foregroundColor: Colors.white,
-            onPressed: () async {
-              File? file = await _selectImage(source:  ImageSource.camera);
-              if(file!=null){
-               await _updateImage(file);
-              }
-            },
-            child: Icon(Icons.camera_alt_outlined),
-          ),
-
-          SizedBox(height: 10),
-
-          // Select Image
-          FloatingActionButton(
-            heroTag: "heroSelectImage",
-            backgroundColor: colorOrange,
-            foregroundColor: Colors.white,
-            onPressed: () async {
-              File? file = await _selectImage(source:  ImageSource.gallery);
-              if(file!=null){
-                await _updateImage(file);
-              }
-            },
-
-            child: Icon(Icons.image),
-          ),
-
-          SizedBox(height: 10),
-
-          // Delete
-          FloatingActionButton(
-            heroTag: "heroDelete",
-            backgroundColor: colorOrange,
-            foregroundColor: Colors.white,
-            onPressed: () async {
-              _deleteImage();
-            },
-
-            child: Icon(Icons.delete_outline,size: 30,),
-          ),
-
-        ],
-      ),
-      body: isLoading ?  MyProgressCircle(): Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child:
-          Image(
-            image: widget.imageURL != null && widget.imageURL!.isNotEmpty
-                ? CachedNetworkImageProvider(widget.imageURL!) as ImageProvider
-                : AssetImage(iconProfile) as ImageProvider,
-            fit: BoxFit.contain, // ✅ shows entire image
-          ),
-
-        ),
-      ),
+      body: isLoading
+          ? MyProgressCircle()
+          : Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Image(
+                  image: currentImageUrl != null && currentImageUrl!.isNotEmpty
+                      ? CachedNetworkImageProvider(currentImageUrl!) as ImageProvider
+                      : AssetImage(iconProfile) as ImageProvider,
+                  fit: BoxFit.contain, // ✅ shows entire image
+                ),
+              ),
+            ),
     );
   }
 }
