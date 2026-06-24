@@ -1,13 +1,13 @@
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:geofence/splashScreen.dart';
+import 'package:geofence/splash_screen.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/firebase_options.dart';
 import 'package:geofence/firebase.dart';
 import 'package:provider/provider.dart';
-import 'MqttService.dart';
-import 'gpsServices.dart';
+import 'mqtt_service.dart';
+import 'gps_services.dart';
 import 'mqtt_lifecycle_handler.dart';
 late AppLifecycleHandler lifecycleHandler;
 
@@ -48,7 +48,7 @@ Future<void> main() async {
     );
   }
   catch(e){
-    printMsg('StartUp Error: $e');
+    printDebugMsg('StartUp Error: $e');
   }
 }
 

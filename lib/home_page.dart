@@ -1,31 +1,31 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
+//import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:geofence/IotDataPage.dart';
-import 'package:geofence/MqttService.dart';
-import 'package:geofence/firebase.dart';
-import 'package:geofence/loginPage.dart';
-import 'package:geofence/operatorsPage.dart';
-import 'package:geofence/TrackingPage.dart';
-import 'package:geofence/baseStationPage.dart';
-import 'package:geofence/geofencePage.dart';
-import 'package:geofence/profilePage.dart';
-import 'package:geofence/settingsPage.dart';
-import 'package:geofence/trackingHistoryPage.dart';
+import 'package:geofence/iot_data_page.dart';
+import 'package:geofence/mqtt_service.dart';
+//import 'package:geofence/firebase.dart';
+import 'package:geofence/login_page.dart';
+import 'package:geofence/operators_page.dart';
+import 'package:geofence/Tracking_page.dart';
+import 'package:geofence/base_station_page.dart';
+import 'package:geofence/geo_fence_page.dart';
+import 'package:geofence/profile_page.dart';
+import 'package:geofence/settings_page.dart';
+import 'package:geofence/tracking_history_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
-import 'iotMonitorsPage.dart';
+import 'iot_monitors_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomePage> createState() => HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
+class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
   final mqttService = MqttService();
   late AnimationController _controllerDraw;
   late Animation<double> _animationDraw;
@@ -112,7 +112,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           context,
           MaterialPageRoute(
             builder: (context) =>
-                profilePage(
+                ProfilePage(
                 ),
           ),
         );
@@ -131,7 +131,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
       //await _loginScreen();
       await user.load();
-    };
+    }
   }
 
   // void _signUpScreen (){
@@ -951,9 +951,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                                               ),
                                                               MyText(
                                                                 text: user
-                                                                    .userdata!
-                                                                    .displayName ??
-                                                                    "Not Logged in",
+                                                                    .userdata!.displayName,
                                                                 color: Colors
                                                                     .grey,
                                                               ),

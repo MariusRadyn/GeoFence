@@ -1,6 +1,6 @@
 
 import 'package:flutter/widgets.dart';
-import 'MqttService.dart';
+import 'mqtt_service.dart';
 
 class AppLifecycleHandler with WidgetsBindingObserver {
   final MqttService mqttService;

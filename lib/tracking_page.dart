@@ -6,7 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:provider/provider.dart';
-import 'gpsServices.dart';
+import 'gps_services.dart';
 
 class TrackingPage extends StatefulWidget {
 
@@ -15,13 +15,13 @@ class TrackingPage extends StatefulWidget {
   });
 
   @override
-  _TrackingPageState createState() => _TrackingPageState();
+  TrackingPageState createState() => TrackingPageState();
 }
-class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver {
+class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver {
   late SettingsService settings;
   GoogleMapController? _mapController;
   Position? _currentPosition;
-  final Set<Polygon> _geofences = {};
+  //final Set<Polygon> _geofences = {};
   final Set<Marker> _markers = {};
   final Set<Polygon> _polygons = {};
   int _polygonIdCounter = 0;
@@ -143,8 +143,8 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
               LatLng(point.latitude, point.longitude)).toList();
 
           if (polygonPoints.length >= 3) {
-            final polygonId = '${geoFencePolygon}${_polygonIdCounter++}';
-            final markerId = '${geoFenceMarker}${_polygonIdCounter++}';
+            final polygonId = '$geoFencePolygon${_polygonIdCounter++}';
+            final markerId = '$geoFenceMarker${_polygonIdCounter++}';
 
             setState(() {
               // Add marker for the label
@@ -166,7 +166,7 @@ class _TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver
                   points: polygonPoints,
                   strokeWidth: 2,
                   strokeColor: Colors.blue,
-                  fillColor: Colors.blue.withOpacity(0.2),
+                  fillColor: Colors.blue.withValues(alpha: 0.2),
                   consumeTapEvents: true,
                 ),
               );

@@ -1,8 +1,8 @@
 
-import 'dart:convert';
+//import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+//import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
@@ -10,36 +10,26 @@ import 'package:provider/provider.dart';
 
 class IotDataLogsPage extends StatefulWidget {
   final String? userDocId;
-  //final String? monDocId;
-  //final String monitorName;
-  //final String image;
   final MonitorSettings monitor;
-  final List<QueryDocumentSnapshot<Object?>> snapshot;
+  final Stream<QuerySnapshot> streamIotData;
 
   const IotDataLogsPage({
     required this.userDocId,
-    //required this.monDocId,
-    //required this.monitorName,
-    //required this.image,
-    required this.snapshot,
+    required this.streamIotData,
     required this.monitor,
     super.key
   });
 
 
   @override
-  State<IotDataLogsPage> createState() => _IotDataLogsPageState();
+  State<IotDataLogsPage> createState() => IotDataLogsPageState();
 }
 
-class _IotDataLogsPageState extends State<IotDataLogsPage> {
+class IotDataLogsPageState extends State<IotDataLogsPage> {
   late SettingsService settings;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final nrFormatter = NumberFormat('0.00', 'en_US');
-  List<Map<String, dynamic>>? _vehicles = [];
-  DateTime _selectedDateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
-  DateTime _selectedDateTo = DateTime(DateTime.now().year, DateTime.now().month + 1, 0, );
-
+  
   @override
   void initState() {
     super.initState();
@@ -120,6 +110,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: colorAppBackground,
       appBar: AppBar(
         title: MyText(text: widget.monitor.monitorName, fontsize: 18,),
         backgroundColor: colorAppBar,
@@ -150,9 +141,8 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                   ),
                   child: CircleAvatar(
                     radius: 18,
-                    // Total size remains ~20 with the border
-                    backgroundColor: colorIceBlue,
-                    backgroundImage: widget.monitor.imageURL != null
+                    backgroundColor: Colors.white,
+                    backgroundImage: widget.monitor.imageURL != null && widget.monitor.imageURL!.isNotEmpty
                         ? CachedNetworkImageProvider(widget.monitor.imageURL!)
                         : getMonitorImage(widget.monitor),
                   ),
@@ -162,15 +152,41 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
           ),
         ],
       ),
+      // body: Container(
+      //   color: colorAppBackground,
+      //   child:  ListView.builder(
+      //     itemCount: widget.snapshot.length,
+      //     itemBuilder: (context, index) {
+      //       var monitorData = widget.snapshot[index];
+      //       return Column(
+      //         children: [
+      //           MyTextTileWithEditDelete(
+      //             header: monitorData[fireIotTimestamp].toDate().toString(),
+      //             subtext: 'Operator: ${monitorData[fireIotOperator]}\nSupervisor: ${monitorData[fireIotSupervisor]}\nLines: ${monitorData[fireIotLines]}\nDistance: ${monitorData[fireIotDistance]} m',
+      //             headerColor: Colors.white,
+      //             textColor: Colors.white,
+      //             backgroundColor: colorAppBar,
+      //             onTapDelete: () {
+      //               _delete('${widget.monitor.monitorName}\n${monitorData[fireIotTimestamp].toDate().toString()}', widget.userDocId, widget.monitor.monDocId, monitorData.id);
+      //             },
+      //           ),
+      //         ],
+          // stream: 
+          // _firestore
+          //   .collection(collectionUsers).doc(FirebaseAuth.instance.currentUser?.uid)
+          //   .collection(collectionMonitors).doc(widget.monitor.monDocId)
+          //   .collection(collectionIotData)
+          //   .snapshots(),
+      // builder: (context, monitorSnapshot) {
+          //   if (monitorSnapshot.connectionState == ConnectionState.waiting ) {
+          //   return Center(child: MyProgressCircle());
+          // }
+           // var docs = monitorSnapshot.data!.docs;
+
       body: Container(
         color: colorAppBackground,
         child:  StreamBuilder<QuerySnapshot>(
-          stream: _firestore
-            .collection(collectionUsers).doc(FirebaseAuth.instance.currentUser?.uid)
-            .collection(collectionMonitors).doc(widget.monitor.monDocId)
-            .collection(collectionIotData)
-            .snapshots(),
-
+          stream: widget.streamIotData,
           builder: (context, monitorSnapshot) {
             if (monitorSnapshot.connectionState == ConnectionState.waiting ) {
             return Center(child: MyProgressCircle());
@@ -179,66 +195,6 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
 
             return Column(
               children: [
-                // Stack(
-                //   children: [
-                //     // Backdrop
-                //     Container(
-                //       alignment: Alignment.topCenter,
-                //       height: 120,
-                //       decoration: const BoxDecoration(
-                //         gradient: LinearGradient(
-                //           begin: Alignment.topLeft,
-                //           end: Alignment.bottomRight,
-                //           stops: [0.3, 0.9],
-                //           colors: [Colors.blueGrey, colorAppBackground],
-                //         ),
-                //         borderRadius: BorderRadius.only(
-                //           bottomLeft: Radius.circular(100),
-                //           bottomRight: Radius.circular(100),
-                //         ),
-                //       ),
-                //     ),
-                //
-                //     // Avatar
-                //     Padding(
-                //       padding: const EdgeInsets.only(top: 8.0),
-                //       child: Center(
-                //         child: Column(
-                //           mainAxisAlignment: MainAxisAlignment.center,
-                //           crossAxisAlignment: CrossAxisAlignment.center,
-                //           children: [
-                //             GestureDetector(
-                //               onTap: () {
-                //                 // Navigation logic could go here
-                //               },
-                //               child: CircleAvatar(
-                //                 radius: 35,
-                //                 backgroundColor: Colors.white,
-                //                 child: CircleAvatar(
-                //                   backgroundImage: AssetImage(widget.image),
-                //                   radius: 34,
-                //                 ),
-                //               ),
-                //             ),
-                //           ],
-                //         ),
-                //       ),
-                //     ),
-                //
-                //     // Heading
-                //     Center(
-                //       child: Container(
-                //         padding: const EdgeInsets.only(top: 80),
-                //         child: MyText(
-                //           text:widget.monitorName,
-                //           fontsize: 20,
-                //           color: Colors.grey,
-                //         ),
-                //       ),
-                //     ),
-                //   ],
-                // ),
-
                 Expanded(
                   child: ListView.builder(
                     itemCount: docs.length,
@@ -251,6 +207,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                       String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[fireMonitorTimestamp].toDate());
                       String dist = monitorData[fireIotDistance].toStringAsFixed(2);
 
+                      // ignore: unused_local_variable
                       String image;
                       String img = widget.monitor.imageURL ?? '';
                       img.isEmpty ? image = iconWheel : image = img;
@@ -258,21 +215,24 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
                       return Column(
                         children: [
                           SizedBox(height: 20),
-
-                          MyTextTileWithEditDelete(
-                            header: date,
-                            subtext: 'Operator: $operator\nSupervisor: $sup\nLines: $nrOfItems\nDistance: $dist m',
-                            headerColor: Colors.white,
-                            textColor: Colors.white,
-                            gradient: LinearGradient(colors: [Colors.blueGrey,colorAppBackground]),
-                            height: 130,
-
-                            onTapDelete: (){
-                               _delete('${widget.monitor.monitorName}\n$date', widget.userDocId, widget.monitor.monDocId, monitorData.id);
-                            },
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                            child: MySlidableTile(
+                              header: date,
+                              subtext: 'Operator: $operator\nSupervisor: $sup\nLines: $nrOfItems\nDistance: $dist m',
+                              onTapDelete: () {
+                                _delete(
+                                  '${widget.monitor.monitorName}\n$date', 
+                                  widget.userDocId, 
+                                  widget.monitor.monDocId, 
+                                  monitorData.id
+                                );
+                              },
+                         
+                            ),
                           ),
-
-                          SizedBox(height: 1)
+                     
+                          
                         ],
                       );
                     }
@@ -282,7 +242,7 @@ class _IotDataLogsPageState extends State<IotDataLogsPage> {
             );
           }
         ),
-      ),
+      ),  
     );
-  }
+  } 
 }

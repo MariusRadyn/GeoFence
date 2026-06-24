@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:geofence/MqttService.dart';
+import 'package:geofence/mqtt_service.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -13,15 +13,15 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 class BaseStationPage extends StatefulWidget {
 
-  BaseStationPage({
+  const BaseStationPage({
     super.key,
   });
 
   @override
-  State<BaseStationPage> createState() => _BaseStationState();
+  State<BaseStationPage> createState() => BaseStationState();
 }
 
-class _BaseStationState extends State<BaseStationPage> with TickerProviderStateMixin{
+class BaseStationState extends State<BaseStationPage> with TickerProviderStateMixin{
   bool debug = false;
   bool isLoading = true;
   TabController? _tabController;
@@ -464,37 +464,7 @@ class _BaseStationState extends State<BaseStationPage> with TickerProviderStateM
       ),
     );
   }
-  Future<void> _sendTextToDevice(BluetoothDevice device, String message) async {
-    List<BluetoothService> services = await device.discoverServices();
-    for (BluetoothService service in services) {
-      if (service.uuid.str.toLowerCase() == bluetoothServiceUuid) {
-        for (BluetoothCharacteristic characteristic in service.characteristics) {
-          if (characteristic.uuid.toString().toLowerCase() == bluetoothCharUuid) {
-            await characteristic.write(utf8.encode(message), withoutResponse: true);
-            print("Message sent: $message");
-          }
-        }
-      }
-    }
-  }
-  // void _connectBluetoothDevice(String mac) async {
-  //   FlutterBluePlus.startScan(timeout: Duration(seconds: 4));
-  //   print("Connecting... Bluetooth $mac");
-
-  //   for(BluetoothDevice bt in lstPairedBtDevices ){
-  //     if(bt.remoteId.str == mac){
-  //       String btNname = bt.platformName;
-  //       await FlutterBluePlus.stopScan();
-  //       await bt.connect(license: License.free);
-  //       print("Connected $btNname");
-  //       await _sendTextToDevice(bt, "Hello Raspberry Pi!");
-  //       break;
-  //     }
-  //   }
-
-  //   print("BT Connection Not Found");
-  // }
-
+  
   // Controllers
   void _updateTabController(int length) {
     if (length == 0) return;

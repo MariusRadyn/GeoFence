@@ -5,12 +5,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 //import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:geofence/iotListPage.dart';
-import 'package:geofence/iotMonitorsTypes.dart';
+import 'package:geofence/iot_list_page.dart';
+import 'package:geofence/iot_monitors_types.dart';
 //import 'package:google_maps_flutter/google_maps_flutter.dart';
 //import 'package:http/http.dart' as http;
 //import 'dart:io';
-import 'package:image_picker/image_picker.dart';
+//import 'package:image_picker/image_picker.dart';
 //import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -19,17 +19,17 @@ import 'package:geofence/utils.dart';
 //import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
-import 'MqttService.dart';
-import 'editProfilePicPage.dart';
+import 'mqtt_service.dart';
+import 'edit_profile_pic_page.dart';
 
 class IotMonitorsPage extends StatefulWidget {
   const IotMonitorsPage({super.key});
 
   @override
-  _IotMonitorsPageState createState() => _IotMonitorsPageState();
+  IotMonitorsPageState createState() => IotMonitorsPageState();
 }
 
-class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderStateMixin {
+class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderStateMixin {
   StreamSubscription<String>? _mqttSubscription;
   TabController? _tabController;
   List<ScrollController> _scrollControllers = [];
@@ -81,8 +81,6 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
     }
     super.dispose();
   }
-
-
 
   // Timers
   void _startTimeout(int sec) {
@@ -496,13 +494,13 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
       }
     }
   }
-  void _scrollToBottomOnce(ScrollController _scrollController) {
+  void _scrollToBottomOnce(ScrollController scrollController) {
     Future.delayed(Duration.zero, () {
       // Callback runs after widget is built
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients && _scrollController.position.hasContentDimensions) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
+        if (scrollController.hasClients && scrollController.position.hasContentDimensions) {
+          scrollController.animateTo(
+            scrollController.position.maxScrollExtent,
             duration: Duration(milliseconds: 300),
             curve: Curves.easeOut,
           );
@@ -516,6 +514,46 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
 
     _tabKeys[_tabController!.index].currentState?.updateDistance(distance);
     _tabKeys[_tabController!.index].currentState?.updateTicks(ticks);
+  }
+
+  /// Reads 'ticks' and 'ticksPerM' from a document in 'iotData',
+  /// calculates the distance, and updates the document atomically.
+  Future<void> _updateIotDistance(String documentId) async {
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+    final DocumentReference docRef = firestore.collection('iotData').doc(documentId);
+
+    try {
+      // Using a transaction to ensure atomic read-write operations
+      await firestore.runTransaction((transaction) async {
+        final DocumentSnapshot snapshot = await transaction.get(docRef);
+
+        if (!snapshot.exists) {
+          throw FirebaseException(
+            plugin: 'cloud_firestore',
+            message: "Document $documentId not found in 'iotData' collection.",
+          );
+        }
+
+        // Extract values dynamically and cast safely to num
+        final num ticks = snapshot.get('ticks') ?? 0;
+        final num ticksPerM = snapshot.get('ticksPerM') ?? 1; // Default to 1 to avoid division by zero
+
+        // Calculate distance = ticks / ticksPerM
+        final double calculatedDistance = ticksPerM != 0 
+            ? ticks.toDouble() / ticksPerM.toDouble() 
+            : 0.0;
+
+        // Atomically write the calculated distance back to the document
+        transaction.update(docRef, {
+          'distance': calculatedDistance,
+          'lastUpdated': FieldValue.serverTimestamp(), // Optional: track when it was updated
+        });
+      });
+      
+      print("Distance updated successfully for document: $documentId");
+    } catch (e) {
+      print("Failed to update distance: $e");
+    }
   }
 
   Widget _buildBody(MonitorSettings monitor, Key key) {
@@ -561,8 +599,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               });
             },
           );
-
-        
+  
         case monitorTypeWheel:
           return IotDistanceWheelType(
             key: key,
@@ -587,11 +624,39 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
             },
 
             // Ticks per Meter
-            onChangedTicksPerM: (value){
+            onChangedTicksPerM: (value) async {
+              final double oldTicksPerM = monitor.ticksPerM;
+              final double newTicksPerM = double.parse(value);
+              if (oldTicksPerM == newTicksPerM) return;
+
               setState(() {
-                monitor.ticksPerM = double.parse(value);
-                _saveMonitor(monitor);
+                monitor.ticksPerM = newTicksPerM;
               });
+
+              final monitorService = context.read<MonitorSettingsService>();
+              await monitorService.save(monitor);
+              if (!mounted) return;
+
+              try {
+                final updated = await monitorService.recalculateIotDataForTicksPerM(
+                  monDocId: monitor.monDocId,
+                  oldTicksPerM: oldTicksPerM,
+                  newTicksPerM: newTicksPerM,
+                );
+                if (!mounted) return;
+                MyGlobalSnackBar.show(
+                  updated > 0
+                      ? 'Saved. Updated $updated log(s).'
+                      : 'Saved',
+                );
+              } catch (e) {
+                if (!mounted) return;
+                MyGlobalMessage.show(
+                  'Update Failed',
+                  'Monitor saved but iOT data could not be recalculated: $e',
+                  MyMessageType.warning,
+                );
+              }
             },
 
             // Ticks
@@ -645,7 +710,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               else {
                 _connectRequest = true;
                 await _mqttConnectBase();
-              };
+              }
             },
           );
 
@@ -697,7 +762,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
               labelColor: Colors.white,
               unselectedLabelColor: Colors.grey,
               tabs: monitors.lstMonitors
-                  .map((doc) => Tab(text: doc.monitorName ?? "New Item"))
+                  .map((doc) => Tab(text: doc.monitorName))
                   .toList(),
             )
                 :null
@@ -830,7 +895,7 @@ class _IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSt
                               final selectedType = await Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                builder: (context) => iotListPage()
+                                builder: (context) => IotListPage()
                                 ),
                               );
 

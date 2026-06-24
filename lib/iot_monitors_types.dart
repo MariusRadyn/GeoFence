@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+//import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -14,7 +14,7 @@ class IotVehicleType extends StatefulWidget {
   final Function(BluetoothDevice?) onChangedBluetooth;
   final List<BluetoothDevice> lstPairedDevices;
 
-  IotVehicleType({
+  const IotVehicleType({
     super.key,
     required this.monitorData,
     required this.onChangedVehicleName,
@@ -140,7 +140,7 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
           child: Theme(
             data: Theme.of(context).copyWith(canvasColor: colorAppTitle),
             child: DropdownButtonFormField<BluetoothDevice>(
-              value: (() {
+              initialValue: (() {
 
                 // Find the matching paired device
                 return widget.lstPairedDevices.firstWhereOrNull(
@@ -307,10 +307,14 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
 
   void _handleFocusChange(FocusNode node, String field) {
     if (!node.hasFocus) {
+      if (field == 'ticksPerM') {
+        widget.onChangedTicksPerM(_controllerTicksPerM.text);
+        return;
+      }
+
       setState(() {
         if (field == 'name') widget.monitorData.monitorName = _controllerName.text;
         if (field == 'id') widget.monitorData.monitorId = _controllerId.text;
-        if (field == 'ticksPerM') widget.monitorData.ticksPerM = double.parse(_controllerTicksPerM.text);
         if (field == 'calDistance') widget.monitorData.calibrationDistance = int.parse(_controllerCalDistance.text);
 
         context.read<MonitorSettingsService>().save(widget.monitorData);

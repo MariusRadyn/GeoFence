@@ -60,7 +60,7 @@ class MqttService {
       await socket.close();
       return true;
     } catch (e) {
-      printMsg('MQTT broker not reachable at $ip:1883 ($e)');
+      printDebugMsg('MQTT broker not reachable at $ip:1883 ($e)');
       return false;
     }
   }
@@ -126,7 +126,7 @@ class MqttService {
     }
     catch (e)
     {
-      printMsg("MQTT Init Error: $e");
+      printDebugMsg("MQTT Init Error: $e");
       return false;
     }
 
@@ -136,10 +136,10 @@ class MqttService {
       //Set _listenerStarted inside _rxStreamListener();
 
       _rxStreamListener();
-      printMsg("MQTT Listener Started");
+      printDebugMsg("MQTT Listener Started");
     }
     else {
-      printMsg("MQTT listener - already Started");
+      printDebugMsg("MQTT listener - already Started");
     }
   }
   Future<bool> _connect() async {
@@ -153,23 +153,23 @@ class MqttService {
           .withWillMessage('offline')
           .withWillQos(MqttQos.atLeastOnce);
 
-      printMsg("Connecting to MQTT broker... $ipAdr");
+      printDebugMsg("Connecting to MQTT broker... $ipAdr");
       await client!.connect().timeout(
         Duration(milliseconds: client!.connectTimeoutPeriod),
         onTimeout: () => throw TimeoutException('MQTT connect timed out'),
       );
 
       if (client!.connectionStatus != null && client!.connectionStatus!.state == MqttConnectionState.connected) {
-        printMsg("Connected successfully!");
+        printDebugMsg("Connected successfully!");
         return true;
       } else {
-        printMsg("Connection failed");
+        printDebugMsg("Connection failed");
       }
 
     } on TimeoutException {
-      printMsg("MQTT connect timed out");
+      printDebugMsg("MQTT connect timed out");
     } catch (e) {
-      printMsg("MQTT Connect Error: $e");
+      printDebugMsg("MQTT Connect Error: $e");
 
     }
     return false;
@@ -187,9 +187,9 @@ class MqttService {
     _subscribedTopics.add(topic);
     client!.subscribe(topic, MqttQos.atMostOnce);
 
-    final _topic = "$topic/$myDeviceId";
-    client!.subscribe(_topic, MqttQos.atLeastOnce);
-    printMsg("Subscribing: $topic");
+    final topic0 = "$topic/$myDeviceId";
+    client!.subscribe(topic0, MqttQos.atLeastOnce);
+    printDebugMsg("Subscribing: $topic");
   }
   void _disconnect() async {
     if (client == null) return;
@@ -222,11 +222,11 @@ class MqttService {
     _reconnectTimer?.cancel(); // stop reconnection attempts
   }
   void _onSuscribed(String topic) {
-    printMsg("Subscribed to $topic");
+    printDebugMsg("Subscribed to $topic");
   }
   void _onDisconnected() {
     isConnected = false;
-    printMsg("MQTT Disconnected");
+    printDebugMsg("MQTT Disconnected");
     if(autoReconnect) _scheduleReconnect(); // auto schedule reconnect manually
   }
   void _onAutoReconnect() {
@@ -237,7 +237,7 @@ class MqttService {
   }
   void _rxStreamListener() {
     if (client == null || client!.updates == null) {
-      printMsg("MQTT RX Stream Error: Client == null");
+      printDebugMsg("MQTT RX Stream Error: Client == null");
       return;
     }
 
@@ -269,13 +269,13 @@ class MqttService {
             //printMsg('MQTT RX Stream: $topic: $payload');
           }
           catch (e) {
-            printMsg('MQTT Rx Stream: $e');
+            printDebugMsg('MQTT Rx Stream: $e');
           }
         }
       });
     }
     catch (e){
-        printMsg('MQTT Rx Stream: $e');
+        printDebugMsg('MQTT Rx Stream: $e');
     }
 
   }
@@ -304,7 +304,7 @@ class MqttService {
 
     _reconnectTimer = Timer.periodic(Duration(seconds: 5), (t) {
       _connect();
-      printMsg("Reconnecting to MQTT…");
+      printDebugMsg("Reconnecting to MQTT…");
     });
   }
   void listenForSettings(void Function(Map<String, dynamic>) onSettingsReceived) {

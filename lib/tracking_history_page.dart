@@ -5,17 +5,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
-import 'trackingHistoryMap.dart';
+import 'tracking_history_map.dart';
 import 'package:provider/provider.dart';
 
 class TrackingHistoryPage extends StatefulWidget {
   const TrackingHistoryPage({super.key});
 
   @override
-  State<TrackingHistoryPage> createState() => _TrackingHistoryPageState();
+  State<TrackingHistoryPage> createState() => TrackingHistoryPageState();
 }
 
-class _TrackingHistoryPageState extends State<TrackingHistoryPage> {
+class TrackingHistoryPageState extends State<TrackingHistoryPage> {
   late SettingsService settings;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;

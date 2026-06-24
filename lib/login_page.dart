@@ -13,10 +13,10 @@ class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<LoginPage> createState() => LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class LoginPageState extends State<LoginPage> {
   final TextEditingController _pwController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController2 = TextEditingController();
@@ -237,9 +237,9 @@ class _LoginPageState extends State<LoginPage> {
         if (!doc.exists) {
           userService.create(
               UserData(
-                displayName: _userController.text ?? "",
-                email: _emailController.text ?? "",
-                emailValidated: result.user!.emailVerified ?? false,
+                displayName: _userController.text,
+                email: _emailController.text,
+                emailValidated: result.user!.emailVerified,
               ),
               uid: result.user!.uid
           );
@@ -280,7 +280,7 @@ class _LoginPageState extends State<LoginPage> {
         if(userService.userdata != null){
           userService.isUserLoggedIn = false;
         }
-        printMsg('Password Reset');
+        printDebugMsg('Password Reset');
         return true;
       }
       else {

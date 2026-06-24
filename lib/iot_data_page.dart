@@ -1,30 +1,51 @@
 
-import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:geofence/IotDataLogsPage.dart';
+import 'package:geofence/iot_data_logs_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
-import 'trackingHistoryMap.dart';
+//import 'trackingHistoryMap.dart';
 import 'package:provider/provider.dart';
 
 class IotDataPage extends StatefulWidget {
   const IotDataPage({super.key});
 
   @override
-  State<IotDataPage> createState() => _IotDataPageState();
+  State<IotDataPage> createState() => IotDataPageState();
 }
 
-class _IotDataPageState extends State<IotDataPage> {
+class IotDataPageState extends State<IotDataPage> {
   late SettingsService settings;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final nrFormatter = NumberFormat('0.00', 'en_US');
-  List<Map<String, dynamic>>? _vehicles = [];
   DateTime _selectedDateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
-  DateTime _selectedDateTo = DateTime(DateTime.now().year, DateTime.now().month + 1, 0, );
+  DateTime _selectedDateTo = DateTime.now();
+
+  DateTime _startOfDay(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+  DateTime _endOfDayExclusive(DateTime date) =>
+      _startOfDay(date).add(const Duration(days: 1));
+  Stream<QuerySnapshot> _iotDataStream(DateTime from, DateTime to) {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    final DateTime rangeStart = _startOfDay(from);
+    final DateTime rangeEndExclusive = _endOfDayExclusive(to);
+
+    return _firestore
+        .collectionGroup(collectionIotData)
+        .where(mqttJsonUserDocId, isEqualTo: uid)
+        .where(
+          fireIotTimestamp,
+          isGreaterThanOrEqualTo: Timestamp.fromDate(rangeStart),
+        )
+        .where(
+          fireIotTimestamp,
+          isLessThan: Timestamp.fromDate(rangeEndExclusive),
+        )
+        .orderBy(fireIotTimestamp, descending: true)
+        .snapshots();
+  }
 
   @override
   void initState() {
@@ -40,7 +61,7 @@ class _IotDataPageState extends State<IotDataPage> {
   Future<void> _pickDateFrom() async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDateFrom ?? DateTime.now(),
+      initialDate: _selectedDateFrom,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -48,13 +69,16 @@ class _IotDataPageState extends State<IotDataPage> {
     if (picked != null && picked != _selectedDateFrom) {
       setState(() {
         _selectedDateFrom = picked;
+        if (_selectedDateFrom.isAfter(_selectedDateTo)) {
+          _selectedDateTo = picked;
+        }
       });
     }
   }
   Future<void> _pickDateTo() async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDateTo ?? DateTime.now(),
+      initialDate: _selectedDateTo,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -62,11 +86,14 @@ class _IotDataPageState extends State<IotDataPage> {
     if (picked != null && picked != _selectedDateTo) {
       setState(() {
         _selectedDateTo = picked;
+        if (_selectedDateTo.isBefore(_selectedDateFrom)) {
+          _selectedDateFrom = picked;
+        }
       });
     }
   }
 
-  Widget _buildBody(AsyncSnapshot<QuerySnapshot<Object?>> iotSnapshot){
+  Widget _buildBody(AsyncSnapshot<QuerySnapshot<Object?>> iotSnapshot, DateTime fromDate, DateTime toDate){
     if (iotSnapshot.connectionState == ConnectionState.waiting ) {
       return Center(child: MyProgressCircle());
     }
@@ -93,6 +120,7 @@ class _IotDataPageState extends State<IotDataPage> {
       return Center(child: MyProgressCircle());
     }
 
+    // Create Summary  
     for (var doc in iotSnapshot.data!.docs) {
       String monId = doc.get(fireIotMonDocId);
 
@@ -109,7 +137,7 @@ class _IotDataPageState extends State<IotDataPage> {
         dist = doc.get(fireIotDistance) ?? 0.0;
         lines = doc.get(fireIotLines) ?? 0;
       } catch (e) {
-        printMsg('$e');
+        printDebugMsg('$e');
       }
 
       if (!summaries.containsKey(monId)) {
@@ -139,7 +167,6 @@ class _IotDataPageState extends State<IotDataPage> {
               itemCount: summaryList.length,
               itemBuilder: (context, index) {
                 var iotSummary = summaryList[index];
-
                 String image = iotSummary['image'] ?? "";
                 String monId = summaries.keys.elementAt(index);
 
@@ -158,19 +185,20 @@ class _IotDataPageState extends State<IotDataPage> {
                           : getMonitorImage(actualMonitor),
                       header: iotSummary['name'],
                       subtext:
-                      'Logs: ${iotSummary['logCount']}\n'
-                          'Lines: ${iotSummary['totalLines']}\n'
-                          'Total: ${iotSummary['totalDistance'].toInt()} m',
+                        'Logs: ${iotSummary['logCount']}\n'
+                        'Lines: ${iotSummary['totalLines']}\n'
+                        'Total: ${iotSummary['totalDistance'].toInt()} m',
                       headerColor: Colors.white,
                       textColor: Colors.grey,
-                      gradient: LinearGradient(colors: [Colors.blueGrey,Colors.grey]),
-
+                      backgroundColor: colorAppBar,
+                     
                       onTapTile: (){
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => IotDataLogsPage(
                             monitor: actualMonitor,
-                            snapshot: iotSummary['logs'].cast<QueryDocumentSnapshot>(),
+                            //snapshot: iotSummary['logs'].cast<QueryDocumentSnapshot>(),
+                            streamIotData: _iotDataStream(fromDate, toDate),
                             userDocId: FirebaseAuth.instance.currentUser?.uid ,
                           )),
                         );
@@ -230,8 +258,7 @@ class _IotDataPageState extends State<IotDataPage> {
 
   @override
   Widget build(BuildContext context) {
-    var dateFromToday = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-    var dateToToday = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59);
+    final DateTime today = DateTime.now();
 
     return DefaultTabController(
       length: 2,
@@ -257,17 +284,9 @@ class _IotDataPageState extends State<IotDataPage> {
             Container(
               color: colorAppBackground,
               child: StreamBuilder<QuerySnapshot>(
-                stream: _firestore
-                  .collectionGroup(collectionIotData)
-                  .where(mqttJsonUserDocId, isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-                  .where(fireIotTimestamp, isGreaterThanOrEqualTo: Timestamp.fromDate(dateFromToday))
-                  .where(fireIotTimestamp, isLessThanOrEqualTo: Timestamp.fromDate(dateToToday))
-                  .orderBy(fireIotTimestamp, descending: true)
-                  .snapshots(),
-
-              builder: (context, iotSnapshot) {
-                 return _buildBody(iotSnapshot);
-                },
+                key: const ValueKey('iot-data-today'),
+                stream: _iotDataStream(today, today),
+                builder: (context, iotSnapshot) => _buildBody(iotSnapshot, today, today),
               ),
             ),
 
@@ -280,21 +299,13 @@ class _IotDataPageState extends State<IotDataPage> {
 
                   Expanded(
                     child: StreamBuilder<QuerySnapshot>(
-                      stream:_firestore
-                          .collectionGroup(collectionIotData)
-                          .where(mqttJsonUserDocId, isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-                          .where(
-                            fireIotTimestamp, isGreaterThanOrEqualTo: Timestamp.fromDate(
-                            DateTime(_selectedDateFrom.year, _selectedDateFrom.month, _selectedDateFrom.day))
-                          )
-                          .where(
-                            fireIotTimestamp, isLessThanOrEqualTo: Timestamp.fromDate(
-                            DateTime(_selectedDateTo.year, _selectedDateTo.month, _selectedDateTo.day, 23, 59, 59))
-                          )
-                          .orderBy(fireIotTimestamp, descending: true)
-                          .snapshots(),
-
-                      builder: (context, iotSnapshot) => _buildBody(iotSnapshot)
+                      key: ValueKey(
+                        'iot-data-range-'
+                        '${_selectedDateFrom.year}-${_selectedDateFrom.month}-${_selectedDateFrom.day}-'
+                        '${_selectedDateTo.year}-${_selectedDateTo.month}-${_selectedDateTo.day}',
+                      ),
+                      stream: _iotDataStream(_selectedDateFrom, _selectedDateTo),
+                      builder: (context, iotSnapshot) => _buildBody(iotSnapshot, _selectedDateFrom, _selectedDateTo),
                     ),
                   ),
                 ],

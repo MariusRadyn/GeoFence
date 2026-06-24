@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 
-class iotListPage extends StatefulWidget {
-  const iotListPage({super.key});
+class IotListPage extends StatefulWidget {
+  const IotListPage({super.key});
 
   @override
-  State<iotListPage> createState() => _iotListPageState();
+  State<IotListPage> createState() => IotListPageState();
 }
 
-class _iotListPageState extends State<iotListPage> {
+class IotListPageState extends State<IotListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(

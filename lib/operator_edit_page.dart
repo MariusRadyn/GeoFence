@@ -5,10 +5,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:geofence/MqttService.dart';
-import 'package:geofence/editProfilePicPage.dart';
+import 'package:geofence/mqtt_service.dart';
+import 'package:geofence/edit_profile_pic_page.dart';
 import 'package:geofence/utils.dart';
-import 'package:image_picker/image_picker.dart';
+//import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 class OperatorEditPage extends StatefulWidget {
@@ -20,9 +20,9 @@ class OperatorEditPage extends StatefulWidget {
   });
 
   @override
-  State<OperatorEditPage> createState() => _OperatorEditPageState();
+  State<OperatorEditPage> createState() => OperatorEditPageState();
 }
-class _OperatorEditPageState extends State<OperatorEditPage> {
+class OperatorEditPageState extends State<OperatorEditPage> {
   TextEditingController? _controllerName;
   TextEditingController? _controllerSurname;
   TextEditingController? _controllerTag;
@@ -104,7 +104,7 @@ class _OperatorEditPageState extends State<OperatorEditPage> {
 
       final jsonData = jsonDecode(msg);
       final cmd = jsonData[mqttJsonCmd];
-      final fromId = jsonData[mqttJsonFromDeviceId];
+      //final fromId = jsonData[mqttJsonFromDeviceId];
       final payload = jsonData[mqttJsonPayload];
 
       // Tag Data (from any IOT)

@@ -3,22 +3,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
-import 'editProfilePicPage.dart';
-import 'firebase.dart';
-import 'homePage.dart';
+import 'edit_profile_pic_page.dart';
+//import 'firebase.dart';
+import 'home_page.dart';
 
-class profilePage extends StatefulWidget {
-  const profilePage({super.key});
+class ProfilePage extends StatefulWidget {
+  const ProfilePage({super.key});
 
   @override
-  State<profilePage> createState() => _profilePageState();
+  State<ProfilePage> createState() => ProfilePageState();
 }
 
-class _profilePageState extends State<profilePage> {
+class ProfilePageState extends State<ProfilePage> {
   final TextEditingController _displaynameControl = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _Control = TextEditingController();
-  final TextEditingController _pwControl = TextEditingController();
+  //final TextEditingController _Control = TextEditingController();
+  //final TextEditingController _pwControl = TextEditingController();
 
   @override
   void initState() {

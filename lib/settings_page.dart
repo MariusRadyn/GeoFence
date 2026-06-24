@@ -6,7 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
+//import 'package:permission_handler/permission_handler.dart';
 
 class SettingsPage extends StatefulWidget {
   final String userId;
@@ -17,11 +17,11 @@ class SettingsPage extends StatefulWidget {
   });
 
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  State<SettingsPage> createState() => SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMixin{
-  bool Debug = false;
+class SettingsPageState extends State<SettingsPage> with TickerProviderStateMixin{
+  //bool Debug = false;
   bool isLoading = true;
   TabController? _tabControllerMain;
   TabController? _tabControllerServers;
@@ -30,7 +30,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   final TextEditingController _controllerLogPointPerM = TextEditingController();
   final TextEditingController _controllerRebateValue = TextEditingController();
   final FlutterTts _flutterTts = FlutterTts();
-  bool _didInitListeners = false;
+  final bool _didInitListeners = false;
   String? bluetoothValue;
   bool isScanning = false;
   bool isSetBTVehicleID = false;
@@ -121,7 +121,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   }
   void getVoices() async {
     List<dynamic> voices = await _flutterTts.getVoices;
-    print("Available Voices: $voices");
+    printDebugMsg("Available Voices: $voices");
   }
   void _initTts() async {
     await _flutterTts.setLanguage('en-US');
@@ -146,13 +146,11 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
 
         for (var doc in lstServerData) {
           mapServerData[doc.id] = doc.data() ?? {};
-          print("Server Data: ");
-          print(doc.data());
+          printDebugMsg("Server Data: ${jsonEncode(doc.data() ?? {})}");
         }
-        print("lstServeData Len: ");
-        print(lstServerData.length);
+        printDebugMsg("lstServeData Len: ${lstServerData.length}");
 
-        if(lstServerData.length > 0) {
+        if(lstServerData.isNotEmpty) {
           if(_tabControllerServers != null)  _tabControllerServers?.dispose();
 
           _tabControllerServers = TabController(
@@ -169,55 +167,55 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
       setState(() {isLoading = false;});
     }
   }
-  Future<void> _deleteServer() async {
-    try {
-      User? user = FirebaseAuth.instance.currentUser;
-      int index = _tabControllerServers!.index;
-      final docId = lstServerData[index].id;
+  // Future<void> _deleteServer() async {
+  //   try {
+  //     User? user = FirebaseAuth.instance.currentUser;
+  //     int index = _tabControllerServers!.index;
+  //     final docId = lstServerData[index].id;
 
-      // 1️⃣ Delete from Firestore
-      await FirebaseFirestore.instance
-          .collection(collectionUsers)
-          .doc(user?.uid)
-          .collection(collectionBaseStations)
-          .doc(docId)
-          .delete();
+  //     // 1️⃣ Delete from Firestore
+  //     await FirebaseFirestore.instance
+  //         .collection(collectionUsers)
+  //         .doc(user?.uid)
+  //         .collection(collectionBaseStations)
+  //         .doc(docId)
+  //         .delete();
 
-      setState(() {
-        lstServerData.removeWhere((d) => d.id == docId);
-        mapServerData.remove(docId);
+  //     setState(() {
+  //       lstServerData.removeWhere((d) => d.id == docId);
+  //       mapServerData.remove(docId);
 
-        _tabControllerServers?.dispose();
+  //       _tabControllerServers?.dispose();
 
-        if (lstServerData.isNotEmpty) {
-          _tabControllerServers = TabController(
-            length: lstServerData.length,
-            vsync: this,
-          );
+  //       if (lstServerData.isNotEmpty) {
+  //         _tabControllerServers = TabController(
+  //           length: lstServerData.length,
+  //           vsync: this,
+  //         );
 
-          // 5️⃣ Ensure a safe tab is selected
-          int newIndex = 0;
-          if (_tabControllerServers!.index >= lstServerData.length) {
-            newIndex = lstServerData.length - 1;
-          } else {
-            newIndex = _tabControllerServers!.index;
-          }
-          _tabControllerServers!.animateTo(newIndex);
-        } else {
-          _tabControllerServers = null;
-        }
+  //         // 5️⃣ Ensure a safe tab is selected
+  //         int newIndex = 0;
+  //         if (_tabControllerServers!.index >= lstServerData.length) {
+  //           newIndex = lstServerData.length - 1;
+  //         } else {
+  //           newIndex = _tabControllerServers!.index;
+  //         }
+  //         _tabControllerServers!.animateTo(newIndex);
+  //       } else {
+  //         _tabControllerServers = null;
+  //       }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Server Deleted')),
-        );
-      });
-    } catch (e) {
-      print('Error deleting Server: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete Server: $e')),
-      );
-    }
-  }
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text('Server Deleted')),
+  //       );
+  //     });
+  //   } catch (e) {
+  //     print('Error deleting Server: $e');
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Failed to delete Server: $e')),
+  //     );
+  //   }
+  // }
 
   Future<void> sendTextToDevice(BluetoothDevice device, String message) async {
     List<BluetoothService> services = await device.discoverServices();
@@ -226,7 +224,7 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
         for (BluetoothCharacteristic characteristic in service.characteristics) {
           if (characteristic.uuid.toString().toLowerCase() == bluetoothCharUuid) {
             await characteristic.write(utf8.encode(message), withoutResponse: true);
-            print("Message sent: $message");
+            printDebugMsg("Message sent: $message");
           }
         }
       }
@@ -234,20 +232,20 @@ class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMix
   }
   void connectBluetoothDevice(String mac) async {
     FlutterBluePlus.startScan(timeout: Duration(seconds: 4));
-    print("Connecting... Bluetooth $mac");
+    printDebugMsg("Connecting... Bluetooth $mac");
 
     for(BluetoothDevice bt in lstPairedDevices ){
       if(bt.remoteId.str == mac){
         String btNname = bt.platformName;
         await FlutterBluePlus.stopScan();
         await bt.connect(license: License.free);
-        print("Connected $btNname");
+        printDebugMsg("Connected $btNname");
         await sendTextToDevice(bt, "Hello Raspberry Pi!");
         break;
       }
     }
 
-    print("BT Connection Not Found");
+    printDebugMsg("BT Connection Not Found");
   }
 
   @override

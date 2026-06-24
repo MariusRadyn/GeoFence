@@ -240,7 +240,7 @@ class _BluetoothDeviceDropdownState extends State<BluetoothDeviceDropdown> {
     }
 
     return DropdownButtonFormField<BluetoothDevice>(
-      value: selectedDevice,
+      initialValue: selectedDevice,
       decoration: InputDecoration(
         labelText: 'Select Bluetooth Device',
         prefixIcon: const Icon(Icons.bluetooth),

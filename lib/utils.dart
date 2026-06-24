@@ -22,7 +22,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-import 'MqttService.dart';
+import 'mqtt_service.dart';
 
 const APP_VERSION = "V1.0.1";
 
@@ -202,6 +202,7 @@ const fireIotMonImageUrl = 'imageUrl';
 const fireIotMonImageFile = 'imageFilename';
 const fireIotDistance = 'distance';
 const fireIotLines = 'lines';
+const fireIotTicks = 'ticks';
 const fireIotOperator = 'operator';
 const fireIotSupervisor = 'supervisor';
 const fireIotTimestamp = 'timestamp';
@@ -286,7 +287,7 @@ Future<List<BluetoothDevice>> getBluetoothDevices() async {
 }
 
 //--Methods---------------------------------------------------------------------
-void printMsg(String msg) {
+void printDebugMsg(String msg) {
   if (kDebugMode) {
     debugPrint(msg);
   }
@@ -376,6 +377,7 @@ ImageProvider<Object> getMonitorImage(MonitorSettings monitor) {
     return AssetImage(iconNoImage);
   }
 }
+
 //--Class-----------------------------------------------------------------------
 class Point {
   final double x, y;
@@ -466,7 +468,7 @@ class _MyTextFormFieldState extends State<MyTextFormField> {
       inputFormatters = null; // No restriction
     }
 
-    return Container(
+    return SizedBox(
       width: widget.width,
       height: 55,
       child: TextFormField(
@@ -1003,6 +1005,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
           decoration: BoxDecoration(
             color: colorTile,
             borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.grey, width: 0.5),
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(25,5,0,5),
@@ -1187,16 +1190,6 @@ class MyOperatorTile extends StatelessWidget {
                             fit: BoxFit.cover,
                           ),
                   ),
-                  // CircleAvatar(
-                  //   radius: 30,
-                  //   backgroundColor: Colors.white,
-                  //   child: CircleAvatar(
-                  //     radius: 28,
-                  //     backgroundImage: operator.imageURL != null &&  operator.imageURL!.isNotEmpty
-                  //         ? CachedNetworkImageProvider(operator.imageURL!)
-                  //         : AssetImage(iconProfile) as ImageProvider,
-                  //   ),
-                  // ),
                 ),
 
                 SizedBox(width: 8),
@@ -1212,13 +1205,88 @@ class MyOperatorTile extends StatelessWidget {
                     ],
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+class MySlidableTile extends StatelessWidget {
+  final String header;
+  final String subtext;
+  final VoidCallback? onTapDelete;
+  final VoidCallback? onTapTile;
 
-                // IconButton(
-                //   icon: Icon(Icons.delete_forever),
-                //   iconSize: 30,
-                //   color: Colors.redAccent,
-                //   onPressed:  () => onTapDelete!(),
-                // ),
+  const MySlidableTile({
+    super.key,
+    required this.header,
+    required this.subtext,
+    this.onTapDelete,
+    this.onTapTile,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Slidable(
+      //key: ValueKey(operator.docId),
+
+      // This defines the actions that appear when swiping from right to left
+      endActionPane: ActionPane(
+        motion: const ScrollMotion(),
+        extentRatio: 0.25,
+        children: [
+          CustomSlidableAction(
+            onPressed: (context) => onTapDelete?.call(),
+            backgroundColor: Colors.redAccent,
+            foregroundColor: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            child: Icon(
+              Icons.delete_outline,
+              color: Colors.white,
+              size: 30,
+            ),
+          ),
+        ],
+      ),
+
+      child: GestureDetector(
+        onTap: () {
+          if(onTapTile != null) {
+            onTapTile!();
+          }
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: colorAppBar,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey, width: 0.5),
+          ),
+          
+          child: Padding(
+            padding: const EdgeInsets.all(5.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                         
+                // Operator name
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                        child: MyText(text: header, fontsize: 14, color: Colors.white),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                        child: MyText(text: subtext, fontsize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -1231,7 +1299,7 @@ class MyCircleIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
 
-  const MyCircleIconButton({
+  const MyCircleIconButton({super.key, 
     required this.icon,
     required this.onPressed,
   });
@@ -1453,7 +1521,7 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
                         canvasColor: colorAppTitle
                     ),
                     child: DropdownButtonFormField<BluetoothDevice>(
-                      value: selectedDevice,
+                      initialValue: selectedDevice,
                       style: TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: 'Select Bluetooth Device',
@@ -1590,7 +1658,7 @@ class MyDropdown extends StatelessWidget {
         ),
       ),
       //value: SettingMonitorTypeList.contains(monitor[SettingMonitorType]) ? monitor[SettingMonitorType] : null,
-      value: value,
+      initialValue: value,
       hint: const Text("Select Monitor Type",
         style: TextStyle(
           color: Colors.grey,
@@ -1800,6 +1868,7 @@ class HexagonPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
+
 //--Services--------------------------------------------------------------------
 class UserData{
   String displayName = "";
@@ -2403,6 +2472,63 @@ class MonitorSettingsService extends ChangeNotifier {
     catch (e){
       MyGlobalSnackBar.show('Cloud Error: $e');
     }
+  }
+  Future<int> recalculateIotDataForTicksPerM({
+    required String monDocId,
+    required double oldTicksPerM,
+    required double newTicksPerM,
+  }) async {
+    if (monDocId.isEmpty || newTicksPerM <= 0 || oldTicksPerM <= 0) {
+      return 0;
+    }
+    if (oldTicksPerM == newTicksPerM) return 0;
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return 0;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collectionGroup(collectionIotData)
+        .where(fireIotUserDocId, isEqualTo: uid)
+        .where(fireIotMonDocId, isEqualTo: monDocId)
+        .get();
+
+    if (snapshot.docs.isEmpty) return 0;
+
+    WriteBatch batch = FirebaseFirestore.instance.batch();
+    int batchCount = 0;
+    int updated = 0;
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      num ticks = (data[fireIotTicks] as num?) ?? 0;
+
+      if (ticks <= 0) {
+        final double oldDistance =
+            (data[fireIotDistance] as num?)?.toDouble() ?? 0;
+        if (oldDistance <= 0) continue;
+        ticks = oldDistance * oldTicksPerM;
+      }
+
+      final double newDistance = ticks / newTicksPerM;
+      batch.update(doc.reference, {
+        fireIotDistance: newDistance,
+        fireIotTicks: ticks,
+      });
+      batchCount++;
+      updated++;
+
+      if (batchCount >= 450) {
+        await batch.commit();
+        batch = FirebaseFirestore.instance.batch();
+        batchCount = 0;
+      }
+    }
+
+    if (batchCount > 0) {
+      await batch.commit();
+    }
+
+    return updated;
   }
 
   //void notify() => notifyListeners();

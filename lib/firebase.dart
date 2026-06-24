@@ -179,7 +179,7 @@ Future fireDbGetUserById(String id) async {
   try {
     return await fRef.doc(id).get();
   } catch (e) {
-    printMsg("Firebase DB Error: $e");
+    printDebugMsg("Firebase DB Error: $e");
     return null;
   }
 }
@@ -225,7 +225,7 @@ Future<void> fireDbUpdateUserData(User user) async {
       'createdDate': FieldValue.serverTimestamp(),
     });
 
-    printMsg('UserData Updated');
+    printDebugMsg('UserData Updated');
 }
 Future<void> fireDbCreateUser(User user) async {
   final CollectionReference users =
@@ -238,7 +238,7 @@ Future<void> fireDbCreateUser(User user) async {
       'createdDate': FieldValue.serverTimestamp(),
     });
 
-    printMsg('UserData Created');
+    printDebugMsg('UserData Created');
 }
 
 // ----------------------------------------------------------------------------
@@ -289,7 +289,7 @@ class FirebaseAuthService {
   void fireAuthChangeListner() {
     _auth.userChanges().listen((User? user) {
       if (user == null) {
-        printMsg('User is currently signed out!');
+        printDebugMsg('User is currently signed out!');
       } else {
         debugPrint('User Data Changed!');
       }

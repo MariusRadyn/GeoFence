@@ -18,10 +18,10 @@ class TrackingHistoryMap extends StatefulWidget {
   });
 
   @override
-  State<TrackingHistoryMap> createState() => _TrackingHistoryMapState();
+  State<TrackingHistoryMap> createState() => TrackingHistoryMapState();
 }
 
-class _TrackingHistoryMapState extends State<TrackingHistoryMap> {
+class TrackingHistoryMapState extends State<TrackingHistoryMap> {
   GoogleMapController? _mapController;
   Position? _currentPosition;
   final Set<Polygon> _geofences = {};
@@ -82,17 +82,17 @@ class _TrackingHistoryMapState extends State<TrackingHistoryMap> {
     }
   }
   Future<void> _initializeTracking() async {
-    printMsg("_loadGeoFences");
+    printDebugMsg("_loadGeoFences");
     await _loadGeoFences(context);
-    printMsg("DONE");
+    printDebugMsg("DONE");
 
-    printMsg("_getTrackSessionPoints");
+    printDebugMsg("_getTrackSessionPoints");
     await _getTrackSessionPoints();
-    printMsg("DONE");
+    printDebugMsg("DONE");
 
-    printMsg("_loadTrackingPath");
+    printDebugMsg("_loadTrackingPath");
     await _loadTrackingPath();
-    printMsg("DONE");
+    printDebugMsg("DONE");
   }
   Future<void> _loadGeoFences(BuildContext context) async {
 
@@ -139,7 +139,7 @@ class _TrackingHistoryMapState extends State<TrackingHistoryMap> {
                   points: polygonPoints,
                   strokeWidth: 2,
                   strokeColor: Colors.blue,
-                  fillColor: Colors.blue.withOpacity(0.2),
+                  fillColor: Colors.blue.withValues(alpha: 0.2),
                   consumeTapEvents: true,
                 ),
               );

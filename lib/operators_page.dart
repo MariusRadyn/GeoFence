@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:geofence/operatorEditPage.dart';
+import 'package:geofence/operator_edit_page.dart';
 import 'package:geofence/utils.dart';
-import 'package:http/http.dart';
+//import 'package:http/http.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -9,10 +9,10 @@ class OperatorsPage extends StatefulWidget {
   const OperatorsPage({super.key});
 
   @override
-  State<OperatorsPage> createState() => _OperatorsPageState();
+  State<OperatorsPage> createState() => OperatorsPageState();
 }
 
-class _OperatorsPageState extends State<OperatorsPage> {
+class OperatorsPageState extends State<OperatorsPage> {
   OperatorData? selectedOperator;
 
   @override

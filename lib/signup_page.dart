@@ -1,20 +1,20 @@
-import 'package:firebase_auth/firebase_auth.dart';
+//import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/firebase.dart';
-import 'package:geofence/homePage.dart';
+import 'package:geofence/home_page.dart';
 //import 'package:teamplayerwebapp/theme/theme_manager.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 //import 'package:teamplayerwebapp/utils/helpers.dart';
 
-class signupPage extends StatefulWidget {
-  const signupPage({super.key});
+class SignupPage extends StatefulWidget {
+  const SignupPage({super.key});
 
   @override
-  State<signupPage> createState() => _signupPageState();
+  State<SignupPage> createState() => SignupPageState();
 }
 
-class _signupPageState extends State<signupPage> {
+class SignupPageState extends State<SignupPage> {
   final FirebaseAuthService _auth = FirebaseAuthService();
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -131,7 +131,7 @@ class _signupPageState extends State<signupPage> {
       userData?.userID = result.user!.uid;
       userData?.displayName = username;
 
-      printMsg('User created successfully');
+      printDebugMsg('User created successfully');
 
       fireDbCreateUser(result.user!);
 
@@ -141,7 +141,7 @@ class _signupPageState extends State<signupPage> {
             builder: (context) => HomePage(),
           ));
     } else {
-      printMsg('Error creating user');
+      printDebugMsg('Error creating user');
     }
   }
 }
