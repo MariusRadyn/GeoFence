@@ -218,7 +218,7 @@ class MqttService {
 
     _subscribe(mqttTopicToAndroid);
 
-    print("MQTT Connected");
+    printDebugMsg("MQTT Connected");
     _reconnectTimer?.cancel(); // stop reconnection attempts
   }
   void _onSuscribed(String topic) {
@@ -230,10 +230,10 @@ class MqttService {
     if(autoReconnect) _scheduleReconnect(); // auto schedule reconnect manually
   }
   void _onAutoReconnect() {
-    print("MQTT Auto-reconnecting…");
+    printDebugMsg("MQTT Auto-reconnecting…");
   }
   void _onAutoReconnected() {
-    print("Auto-reconnected successfully");
+    printDebugMsg("Auto-reconnected successfully");
   }
   void _rxStreamListener() {
     if (client == null || client!.updates == null) {
@@ -314,7 +314,7 @@ class MqttService {
       //print("Subscribing: $MQTT_TOPIC_RESPONSE");
       if(client?.updates == null) return;
 
-      print("Listening: $mqttTopicToAndroid");
+      printDebugMsg("Listening: $mqttTopicToAndroid");
 
       client!.updates!.listen((messages) {
         final mqttMsg = messages[0].payload as MqttPublishMessage;
@@ -322,13 +322,13 @@ class MqttService {
           mqttMsg.payload.message,
         );
 
-        print("Received MQTT message: $payload");
+        printDebugMsg("Received MQTT message: $payload");
 
         try {
           final jsonData = jsonDecode(payload);
           onSettingsReceived(jsonData);
         } catch (_) {
-          print("Invalid JSON received");
+          printDebugMsg("Invalid JSON received");
         }
       });
     }
@@ -347,7 +347,7 @@ class MqttService {
     builder.addString(payload);
 
     client!.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
-    print("MQTT TX: $payload");
+    printDebugMsg("MQTT TX: $payload");
   }
   void _dispatchMessage(String topic, String message) {
     if (_topicCallbacks.containsKey(topic)) {

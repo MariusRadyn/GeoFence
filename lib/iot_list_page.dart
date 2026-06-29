@@ -14,7 +14,7 @@ class IotListPageState extends State<IotListPage> {
     return Scaffold(
       backgroundColor: colorAppBackground,
       appBar: AppBar(
-        title: MyAppbarTitle('IoT List'),
+        title: myAppbarTitle('IoT List'),
         backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
       ),

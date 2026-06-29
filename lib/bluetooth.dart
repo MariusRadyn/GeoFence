@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:geofence/utils.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 
@@ -7,9 +8,9 @@ class BluetoothScreen extends StatefulWidget {
   const BluetoothScreen({super.key});
 
   @override
-  _BluetoothScreenState createState() => _BluetoothScreenState();
+  BluetoothScreenState createState() => BluetoothScreenState();
 }
-class _BluetoothScreenState extends State<BluetoothScreen> {
+class BluetoothScreenState extends State<BluetoothScreen> {
   List<ScanResult> scanResults = [];
   List<BluetoothDevice> pairedDevices = [];
   bool isScanning = false;
@@ -43,14 +44,16 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
         pairedDevices = devices;
       });
     } catch (e) {
-      print('Error getting paired devices: $e');
+      printDebugMsg('Error getting paired devices: $e');
     }
   }
   Future<void> _startScan() async {
     if (await FlutterBluePlus.isSupported == false) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Bluetooth not supported')),
-      );
+        );
+      }
       return;
     }
 
@@ -81,23 +84,28 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
   }
   Future<void> _connectToDevice(BluetoothDevice device) async {
     try {
-      await device.connect(license: License.free);
+      await device.connect(license: License.nonprofit);
       setState(() {
         connectedDevice = device;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Connected to ${device.platformName}')),
-      );
+        );
+      }
 
       // Discover services after connection
       List<BluetoothService> services = await device.discoverServices();
-      print('Discovered ${services.length} services');
+      printDebugMsg('Discovered ${services.length} services');
 
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to connect: $e')),
-      );
+    } 
+    catch (e) {
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to connect: $e')),
+        );
+      }
     }
   }
   Future<void> _disconnect() async {
@@ -106,9 +114,11 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
       setState(() {
         connectedDevice = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Disconnected')),
-      );
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Disconnected')),
+        );
+      }
     }
   }
 
@@ -122,7 +132,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
             padding: EdgeInsets.all(16.0),
             color: Colors.green,
             child: Text(
-              'Connected to: ${connectedDevice!.platformName.isNotEmpty ? connectedDevice!.name : "Unknown Device"}',
+              'Connected to: ${connectedDevice!.platformName.isNotEmpty ? connectedDevice!.platformName : "Unknown Device"}',
               style: TextStyle(
                 color: Colors.green,
                 fontWeight: FontWeight.bold,
@@ -294,12 +304,12 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
                     color: isConnected ? Colors.green : (isPaired ? Colors.orange : Colors.blue),
                   ),
                   title: Text(
-                    device.name.isNotEmpty ? device.name : 'Unknown Device',
+                    device.platformName.isNotEmpty ? device.platformName : 'Unknown Device',
                   ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('ID: ${device.id}'),
+                      Text('ID: ${device.remoteId}'),
                       Text('RSSI: ${result.rssi} dBm'),
                       if (isPaired)
                         Text(
@@ -369,9 +379,9 @@ class BluetoothInteraction extends StatefulWidget {
   const BluetoothInteraction({super.key, required this.device});
 
   @override
-  _BluetoothInteractionState createState() => _BluetoothInteractionState();
+  BluetoothInteractionState createState() => BluetoothInteractionState();
 }
-class _BluetoothInteractionState extends State<BluetoothInteraction> {
+class BluetoothInteractionState extends State<BluetoothInteraction> {
   List<BluetoothService> services = [];
 
   @override
@@ -387,13 +397,15 @@ class _BluetoothInteractionState extends State<BluetoothInteraction> {
   Future<void> _readCharacteristic(BluetoothCharacteristic characteristic) async {
     try {
       List<int> value = await characteristic.read();
-      print('Read value: $value');
+      printDebugMsg('Read value: $value');
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Read: ${value.toString()}')),
-      );
+        );
+      }
     } catch (e) {
-      print('Error reading characteristic: $e');
+      printDebugMsg('Error reading characteristic: $e');
     }
   }
   Future<void> _writeCharacteristic(BluetoothCharacteristic characteristic) async {
@@ -401,11 +413,13 @@ class _BluetoothInteractionState extends State<BluetoothInteraction> {
       List<int> dataToWrite = [0x01, 0x02, 0x03]; // Example data
       await characteristic.write(dataToWrite);
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Data written successfully')),
-      );
+        );
+      }
     } catch (e) {
-      print('Error writing characteristic: $e');
+      printDebugMsg('Error writing characteristic: $e');
     }
   }
   Future<void> _enableNotifications(BluetoothCharacteristic characteristic) async {
@@ -413,13 +427,16 @@ class _BluetoothInteractionState extends State<BluetoothInteraction> {
       await characteristic.setNotifyValue(true);
 
       characteristic.lastValueStream.listen((value) {
-        print('Notification received: $value');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Notification: ${value.toString()}')),
-        );
+        printDebugMsg('Notification received: $value');
+
+        if(mounted){
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Notification: $value')),
+          );
+        }
       });
     } catch (e) {
-      print('Error enabling notifications: $e');
+      printDebugMsg('Error enabling notifications: $e');
     }
   }
 

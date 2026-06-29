@@ -134,12 +134,13 @@ class SignupPageState extends State<SignupPage> {
       printDebugMsg('User created successfully');
 
       fireDbCreateUser(result.user!);
-
+      if(!mounted) return;
+      
       Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => HomePage(),
-          ));
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomePage(),
+        ));
     } else {
       printDebugMsg('Error creating user');
     }

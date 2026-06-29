@@ -20,6 +20,7 @@ class TrackingPage extends StatefulWidget {
 class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver {
   late SettingsService settings;
   GoogleMapController? _mapController;
+  // ignore: unused_field
   Position? _currentPosition;
   //final Set<Polygon> _geofences = {};
   final Set<Marker> _markers = {};
@@ -31,8 +32,8 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   //final FirebaseAuth _auth = FirebaseAuth.instance;
   final FlutterTts _flutterTts = FlutterTts();
-  bool _isLoading_Geofence = true;
-  bool _isLoading_Vehicles = true;
+  bool _isLoadingGeofence = true;
+  bool _isLoadingVehicles = true;
   bool _isTracking = false;
   bool _newTrackingStarted = false;
   final Map<String, bool> _insideGeofence = {};
@@ -60,7 +61,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-      if (_vehicles.isEmpty && !_isLoading_Vehicles) {
+      if (_vehicles.isEmpty && !_isLoadingVehicles) {
         MyGlobalMessage.show(
           "Vehicle Not Found",
           "No Vehicles Found.\nPlease set one in 'IOT Monitors'",
@@ -121,7 +122,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
     _geofenceList.clear();
 
     setState(() {
-      _isLoading_Geofence = true;
+      _isLoadingGeofence = true;
       _polygons.clear();
       _markers.clear();
     });
@@ -197,7 +198,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
       MyGlobalSnackBar.show('Error loading GEO Fences: $e');
     } finally {
       setState(() {
-        _isLoading_Geofence = false;
+        _isLoadingGeofence = false;
       });
     }
   }
@@ -231,7 +232,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
       userId = context.read<UserDataService>().userdata!.userID;
 
       setState(() {
-        _isLoading_Vehicles = true;
+        _isLoadingVehicles = true;
       });
 
       final vehiclesSnapshot = await _firestore
@@ -257,18 +258,18 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
         setState(() {
           _vehicles = vehicles;
           _selectedVehicleId = vehicles[0]['id'];
-          _isLoading_Vehicles = false;
+          _isLoadingVehicles = false;
         });
       }
       else{
         setState(() {
-          _isLoading_Vehicles = false;
+          _isLoadingVehicles = false;
         });
       }
 
     } catch (e) {
       setState(() {
-        _isLoading_Vehicles = false;
+        _isLoadingVehicles = false;
       });
       MyGlobalSnackBar.show('Error loading vehicles: $e\nUserID: $userId');
     }
@@ -295,11 +296,13 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
         final requestPermission = await Geolocator.requestPermission();
         if (requestPermission == LocationPermission.denied ||
             requestPermission == LocationPermission.deniedForever) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          if(mounted){
+            ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Location permission denied')),
           );
           _isTracking = false;
           return;
+        }
         }
       }
 
@@ -410,6 +413,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
           _newTrackingStarted = false;
           if(_isVoicePromptOn) _flutterTts.speak('Movement Detected');
 
+          if(!mounted) return;
           final userId = context.read<UserDataService>().userdata!.userID;
 
           final sessionRef = await _firestore
@@ -462,6 +466,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
       }
 
       // Update tracking session with new data
+      if(!mounted) return;
       final userId = context.read<UserDataService>().userdata!.userID;
 
       final batch = _firestore.batch();
@@ -524,6 +529,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
 
     try {
       await LocationService.stopLocationTracking();
+      if(!mounted) return;
       final userId = context.read<UserDataService>().userdata!.userID;
 
       await _firestore
@@ -619,7 +625,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
           _mapController?.animateCamera(
             CameraUpdate.newLatLng(LatLng(mark.position.latitude, mark.position.longitude)),
           );
-          print(mark.infoWindow.title);
+          printDebugMsg('${mark.infoWindow.title}');
           return;
         }
         else{
@@ -628,7 +634,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
       }
     });
   }
-  void _onBotBarTap(index) {
+  void _onBotBarTap(int index) {
     if(index == 0){
       _nextFence();
     }
@@ -643,8 +649,8 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
   @override
   Widget build(BuildContext context) {
 
-    if(_isLoading_Vehicles || _isLoading_Geofence){
-      return MyProgressCircle();
+    if(_isLoadingVehicles || _isLoadingGeofence){
+      return myProgressCircle();
     }
 
     // if (_vehicles.isEmpty) {
@@ -655,13 +661,13 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
     //     ),
     //   );
     // }
-
+myAppbarTitle(_statusMessage);
     return Scaffold(
       backgroundColor: colorAppBackground,
       appBar: AppBar(
         foregroundColor: Colors.white,
         backgroundColor: _isTracking ? Colors.redAccent : colorAppBar,
-        title: MyAppbarTitle(_statusMessage),
+        title: myAppbarTitle(_statusMessage),
       ),
       bottomNavigationBar: BottomNavigationBar(
           onTap: _onBotBarTap,
@@ -680,7 +686,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
           ]
       ),
       body: _vehicles.isEmpty
-          ? MyCenterMsg('No Vehicles Found')
+          ? myCenterMsg('No Vehicles Found')
           : Stack(
         children: [
           Column(
@@ -696,7 +702,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
                   mapType: MapType.normal,
                   markers: _markers,
                   polygons: _polygons,
-                  polylines: _pathPolyline ?? {},
+                  polylines: _pathPolyline,
                   onMapCreated: (controller) {
                     _mapController = controller;
                   },

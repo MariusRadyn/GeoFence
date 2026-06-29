@@ -238,7 +238,7 @@ class SettingsPageState extends State<SettingsPage> with TickerProviderStateMixi
       if(bt.remoteId.str == mac){
         String btNname = bt.platformName;
         await FlutterBluePlus.stopScan();
-        await bt.connect(license: License.free);
+        await bt.connect(license: License.nonprofit);
         printDebugMsg("Connected $btNname");
         await sendTextToDevice(bt, "Hello Raspberry Pi!");
         break;
@@ -253,7 +253,7 @@ class SettingsPageState extends State<SettingsPage> with TickerProviderStateMixi
     return Consumer<SettingsService>(
       builder: (context , settings, _){
         if (settings.isLoading || isLoading) {
-          return MyProgressCircle();
+          return myProgressCircle();
         }
 
         if(settings.fireSettings != null) {
@@ -270,7 +270,7 @@ class SettingsPageState extends State<SettingsPage> with TickerProviderStateMixi
             appBar: AppBar(
               backgroundColor: colorAppBar,
               foregroundColor: Colors.white,
-              title: MyAppbarTitle('Settings'),
+              title: myAppbarTitle('Settings'),
               actions: [
 
                 // Save Button

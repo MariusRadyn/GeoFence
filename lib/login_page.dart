@@ -87,7 +87,7 @@ class LoginPageState extends State<LoginPage> {
             height: height > 600 ? 600 : height, // Custom height
             child: Container(
               decoration: BoxDecoration(
-                  gradient: MyTileGradient(),
+                  gradient: myTileGradient(),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                       color: Colors.blue,
@@ -167,7 +167,7 @@ class LoginPageState extends State<LoginPage> {
                     children: [
 
                       // Cancel Button
-                      MyTextButton(
+                      myTextButton(
                         text: 'Cancel',
                         onPressed: () {
                           Navigator.of(context).pop();
@@ -177,17 +177,21 @@ class LoginPageState extends State<LoginPage> {
                       SizedBox(width: 10),
 
                       // OK Button
-                      MyTextButton(
+                      myTextButton(
                         text:'OK',
                         onPressed: () async {
                           final user = await _signUp();
 
                           if (user != null) {
-                            if(mounted){
-                              Navigator.of(context).pop(); // close current dialog FIRST
-                              await _sendValidateEmail();
-                              _showEmailVerificationDialog(context);
-                            }
+                            if(!mounted) return;
+                            // ignore: use_build_context_synchronously
+                            Navigator.of(context).pop(); // close current dialog FIRST
+                            
+                            await _sendValidateEmail();
+                            if(!mounted) return;
+
+                            // ignore: use_build_context_synchronously
+                            _showEmailVerificationDialog(context);
                           }
                         },
                       ),
@@ -244,7 +248,7 @@ class LoginPageState extends State<LoginPage> {
               uid: result.user!.uid
           );
 
-          print('User Created');
+          printDebugMsg('User Created');
         }
 
         return result.user;
@@ -322,9 +326,11 @@ class LoginPageState extends State<LoginPage> {
           }
 
           await user.reload(); // 🔥 Force server refresh
-
+          if(!mounted) return;
+          
           if (user.emailVerified) {
             timer.cancel();
+            // ignore: use_build_context_synchronously
             Navigator.of(context).pop(); // Close dialog
           }
         });
@@ -345,18 +351,19 @@ class LoginPageState extends State<LoginPage> {
           backgroundColor: colorAppTitle,
           shadowColor: Colors.black,
           actions: [
-            MyTextButton(
+            myTextButton(
               text: "Resend Email",
               onPressed: () async {
                 await _sendValidateEmail();
               },
             ),
-            MyTextButton(
+            myTextButton(
               text: "Cancel",
               onPressed: () async {
                 timer?.cancel();
                 await FirebaseAuth.instance.signOut();
                 if(mounted){
+                  // ignore: use_build_context_synchronously
                   Navigator.of(context).pop();
                 }
               },
@@ -492,11 +499,13 @@ class LoginPageState extends State<LoginPage> {
       else{
         String err = _getGoogleError(result.exception);
         MyGlobalMessage.show("Error", err, MyMessageType.error);
-      }
-      setState(() {
-        busyLoggingIn = false;
-      });
 
+        setState(() {
+          busyLoggingIn = false;
+        });
+
+        return false;
+      }
     } catch (e) {
       setState(() {
         busyLoggingIn = false;
@@ -506,6 +515,10 @@ class LoginPageState extends State<LoginPage> {
       return false;
     }
 
+    if(!mounted) return false;
+    setState(() {
+      busyLoggingIn = false;
+    });
     return true;
   }
 
@@ -663,11 +676,12 @@ class LoginPageState extends State<LoginPage> {
                       _buildSocialLoginButton(
                         context: context,
                         onPressed: () async {
-                          if(await _loginWithGoogle(context))
-                          {
-                            if(mounted){
-                               Navigator.of(context).pop();
-                            }
+                          final loggedin = await _loginWithGoogle(context);
+                          if(!mounted) return;
+                          
+                          if(loggedin){
+                            // ignore: use_build_context_synchronously
+                            Navigator.of(context).pop();
                           }
                         },
                         iconPath: iconGoogle,
@@ -696,7 +710,7 @@ class LoginPageState extends State<LoginPage> {
                     children: [
 
                       // Cancel Button
-                      MyTextButton(
+                      myTextButton(
                         text: 'Cancel',
                         onPressed: () {
                           Navigator.of(context).pop();
@@ -706,13 +720,14 @@ class LoginPageState extends State<LoginPage> {
                       const SizedBox(width: 10),
 
                       // OK Button
-                      MyTextButton(
+                      myTextButton(
                         text: 'OK',
                         onPressed: () async {
                           bool loggedIn = await _loginWithEmail();
                           if(!mounted) return;
 
                           if(loggedIn){
+                            // ignore: use_build_context_synchronously
                             Navigator.of(context).pop();
                           }
                         },

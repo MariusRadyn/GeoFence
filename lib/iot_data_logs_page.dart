@@ -189,7 +189,7 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
           stream: widget.streamIotData,
           builder: (context, monitorSnapshot) {
             if (monitorSnapshot.connectionState == ConnectionState.waiting ) {
-            return Center(child: MyProgressCircle());
+            return Center(child: myProgressCircle());
           }
             var docs = monitorSnapshot.data!.docs;
 
@@ -205,7 +205,7 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                       String sup = monitorData[fireIotSupervisor];
                       num nrOfItems = monitorData[fireIotLines];
                       String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[fireMonitorTimestamp].toDate());
-                      String dist = monitorData[fireIotDistance].toStringAsFixed(2);
+                      String dist = (nrOfItems * widget.monitor.ticksPerM).toStringAsFixed(2);
 
                       // ignore: unused_local_variable
                       String image;
@@ -231,8 +231,6 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                          
                             ),
                           ),
-                     
-                          
                         ],
                       );
                     }

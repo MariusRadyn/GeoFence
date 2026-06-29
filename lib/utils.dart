@@ -1,10 +1,8 @@
-import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,15 +13,14 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:path/path.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// ignore: depend_on_referenced_packages
 import 'package:uuid/uuid.dart';
 
-import 'mqtt_service.dart';
 
+// ignore: constant_identifier_names
 const APP_VERSION = "V1.0.1";
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -277,7 +274,7 @@ Future<List<BluetoothDevice>> getBluetoothDevices() async {
     }
 
     List<BluetoothDevice> devices = await FlutterBluePlus.bondedDevices;
-    devices.sort((a, b) => (a.platformName ?? '').compareTo(b.platformName ?? ''));
+    devices.sort((a, b) => (a.platformName).compareTo(b.platformName));
     return devices;
 
   } catch (e) {
@@ -292,8 +289,8 @@ void printDebugMsg(String msg) {
     debugPrint(msg);
   }
 }
-void writeLog(var text) {
-  debugLog += text +'\r';
+void writeLog(String text) {
+  debugLog += '$text\r';
 }
 bool isOnDesktop() {
   if(kIsWeb) {
@@ -448,9 +445,9 @@ class MyTextFormField extends StatefulWidget {
   });
 
   @override
-  _MyTextFormFieldState createState() => _MyTextFormFieldState();
+  MyTextFormFieldState createState() => MyTextFormFieldState();
 }
-class _MyTextFormFieldState extends State<MyTextFormField> {
+class MyTextFormFieldState extends State<MyTextFormField> {
   bool _obscureText = true;
 
   @override
@@ -985,7 +982,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
     this.image,
     this.height,
     super.key
-  }) : gradient = gradient ?? MyTileGradient();
+  }) : gradient = gradient ?? myTileGradient();
 
   @override
   Widget build(BuildContext context) {
@@ -1801,7 +1798,7 @@ class MyGlobalMessage {
           fontsize: 18,
         ),
         actions: [
-          MyTextButton(
+          myTextButton(
               text: "OK",
               onPressed: () async {
                 Navigator.pop(context);
@@ -2011,7 +2008,7 @@ class UserDataService extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-      print("Failed to save user data: $e");
+      printDebugMsg("Failed to save user data: $e");
     }
   }
   Future<void> save(UserData user) async{
@@ -2100,7 +2097,7 @@ class UserDataService extends ChangeNotifier {
     }
   }
   void printHash() {
-    print(hashCode);
+    printDebugMsg(hashCode.toString());
   }
 }
 
@@ -2189,7 +2186,7 @@ class SettingsService extends ChangeNotifier {
   bool monitorWheelSignal = false;
   String? lastConnectionError = "";
   final _db = FirebaseFirestore.instance;
-  String? _lastMqttIp;
+  //String? _lastMqttIp;
 
   Future<void> load() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -2431,7 +2428,7 @@ class MonitorSettingsService extends ChangeNotifier {
     try {
       setMonitors(list);
     } catch (e) {
-      print(e);
+      printDebugMsg(e.toString());
     } finally {
       isLoading = false;   // ✅ CLEAR HERE
       notifyListeners();   // ✅ NOTIFY HERE
@@ -2473,65 +2470,60 @@ class MonitorSettingsService extends ChangeNotifier {
       MyGlobalSnackBar.show('Cloud Error: $e');
     }
   }
-  Future<int> recalculateIotDataForTicksPerM({
-    required String monDocId,
-    required double oldTicksPerM,
-    required double newTicksPerM,
-  }) async {
-    if (monDocId.isEmpty || newTicksPerM <= 0 || oldTicksPerM <= 0) {
-      return 0;
-    }
-    if (oldTicksPerM == newTicksPerM) return 0;
+  // Future<int> recalculateIotDataForTicksPerM({required String monDocId, required double oldTicksPerM, required double newTicksPerM,}) async {
+  //   if (monDocId.isEmpty || newTicksPerM <= 0 || oldTicksPerM <= 0) {
+  //     return 0;
+  //   }
+  //   if (oldTicksPerM == newTicksPerM) return 0;
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return 0;
+  //   final uid = FirebaseAuth.instance.currentUser?.uid;
+  //   if (uid == null) return 0;
 
-    final snapshot = await FirebaseFirestore.instance
-        .collectionGroup(collectionIotData)
-        .where(fireIotUserDocId, isEqualTo: uid)
-        .where(fireIotMonDocId, isEqualTo: monDocId)
-        .get();
+  //   final snapshot = await FirebaseFirestore.instance
+  //       .collectionGroup(collectionIotData)
+  //       .where(fireIotUserDocId, isEqualTo: uid)
+  //       .where(fireIotMonDocId, isEqualTo: monDocId)
+  //       .get();
 
-    if (snapshot.docs.isEmpty) return 0;
+  //   if (snapshot.docs.isEmpty) return 0;
 
-    WriteBatch batch = FirebaseFirestore.instance.batch();
-    int batchCount = 0;
-    int updated = 0;
+  //   WriteBatch batch = FirebaseFirestore.instance.batch();
+  //   int batchCount = 0;
+  //   int updated = 0;
 
-    for (final doc in snapshot.docs) {
-      final data = doc.data();
-      num ticks = (data[fireIotTicks] as num?) ?? 0;
+  //   for (final doc in snapshot.docs) {
+  //     final data = doc.data();
+  //     num ticks = (data[fireIotTicks] as num?) ?? 0;
 
-      if (ticks <= 0) {
-        final double oldDistance =
-            (data[fireIotDistance] as num?)?.toDouble() ?? 0;
-        if (oldDistance <= 0) continue;
-        ticks = oldDistance * oldTicksPerM;
-      }
+  //     if (ticks <= 0) {
+  //       final double oldDistance =
+  //           (data[fireIotDistance] as num?)?.toDouble() ?? 0;
+  //       if (oldDistance <= 0) continue;
+  //       ticks = oldDistance * oldTicksPerM;
+  //     }
 
-      final double newDistance = ticks / newTicksPerM;
-      batch.update(doc.reference, {
-        fireIotDistance: newDistance,
-        fireIotTicks: ticks,
-      });
-      batchCount++;
-      updated++;
+  //     final double newDistance = ticks / newTicksPerM;
+  //     batch.update(doc.reference, {
+  //       fireIotDistance: newDistance,
+  //       fireIotTicks: ticks,
+  //     });
+  //     batchCount++;
+  //     updated++;
 
-      if (batchCount >= 450) {
-        await batch.commit();
-        batch = FirebaseFirestore.instance.batch();
-        batchCount = 0;
-      }
-    }
+  //     if (batchCount >= 450) {
+  //       await batch.commit();
+  //       batch = FirebaseFirestore.instance.batch();
+  //       batchCount = 0;
+  //     }
+  //   }
 
-    if (batchCount > 0) {
-      await batch.commit();
-    }
+  //   if (batchCount > 0) {
+  //     await batch.commit();
+  //   }
 
-    return updated;
-  }
+  //   return updated;
+  // }
 
-  //void notify() => notifyListeners();
   void setMonitors(List<MonitorSettings> list) {
     _monitors
       ..clear()
@@ -2755,7 +2747,7 @@ class BaseStationService extends ChangeNotifier {
         setBaseStations(list);
       }
     } catch (e) {
-      print(e);
+      printDebugMsg(e.toString());
     } finally {
       isLoading = false;
       notifyListeners();
@@ -2947,7 +2939,7 @@ class OperatorService extends ChangeNotifier {
     }
     catch (e) {
       MyGlobalSnackBar.show("Cloud Error: $e");
-      print(e);
+      printDebugMsg(e.toString());
     }
     finally {
       isLoading = false;
@@ -3079,7 +3071,7 @@ class ProfilePicData{
 }
 
 //--Widgets --------------------------------------------------------------------
-Widget MyTextButton({double fontSize = 20, VoidCallback? onPressed, required String text}){
+Widget myTextButton({double fontSize = 20, VoidCallback? onPressed, required String text}){
   return TextButton(
       onPressed: onPressed,
     child: MyText(
@@ -3089,7 +3081,7 @@ Widget MyTextButton({double fontSize = 20, VoidCallback? onPressed, required Str
     ),
   );
 }
-Widget ShowWelcomeMsg(BuildContext context) {
+Widget showWelcomeMsg(BuildContext context) {
   UserDataService user = context.read<UserDataService>();
 
   if (user.isUserLoggedIn) {
@@ -3112,7 +3104,7 @@ Widget ShowWelcomeMsg(BuildContext context) {
     );
   }
 }
-Widget MyIcons(String text, IconData icon, GestureTapCallback onTap){
+Widget myIcons(String text, IconData icon, GestureTapCallback onTap){
   return
     GestureDetector(
       onTap: onTap,
@@ -3146,7 +3138,7 @@ Widget MyIcons(String text, IconData icon, GestureTapCallback onTap){
         ),
     );
 }
-Widget MyAppbarTitle(String text){
+Widget myAppbarTitle(String text){
   return Center(
     child: Row(
       mainAxisAlignment: MainAxisAlignment.start,
@@ -3166,7 +3158,7 @@ Widget MyAppbarTitle(String text){
     ),
   );
 }
-LinearGradient MyTileGradient() {
+LinearGradient myTileGradient() {
   return const LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
@@ -3182,7 +3174,7 @@ LinearGradient MyTileGradient() {
       ],
   );
 }
-LinearGradient MyTileGradientBlue() {
+LinearGradient myTileGradientBlue() {
   return const LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -3196,7 +3188,7 @@ LinearGradient MyTileGradientBlue() {
     ],
   );
 }
-Widget MyProgressCircle({double size = 40, double strokeWidth = 5}) {
+Widget myProgressCircle({double size = 40, double strokeWidth = 5}) {
   return Center(
     child: SizedBox(
       width: size,
@@ -3210,7 +3202,7 @@ Widget MyProgressCircle({double size = 40, double strokeWidth = 5}) {
     ),
   );
 }
-Widget MyCenterMsg(String msg){
+Widget myCenterMsg(String msg){
   return Container(
     color: colorAppBackground,
     child: Center(
@@ -3218,7 +3210,7 @@ Widget MyCenterMsg(String msg){
     ),
   );
 }
-Future<T?> MyQuestionAlertBox<T> ({
+Future<T?> myQuestionAlertBox<T> ({
   required BuildContext context,
   required String header,
   required String message,
@@ -3275,7 +3267,7 @@ Future<T?> MyQuestionAlertBox<T> ({
       }
   );
 }
-Widget MyConnectionStatus({
+Widget myConnectionStatus({
   required SettingsService settings, 
   double size = 12
   }){
@@ -3319,14 +3311,14 @@ Widget MyConnectionStatus({
 }
 
 //--Styles----------------------------------------------------------------------
-ButtonStyle MyButtonStyle(Color backgroundColor) {
+ButtonStyle myButtonStyle(Color backgroundColor) {
   return TextButton.styleFrom(
     minimumSize: ui.Size(100, 30),
     backgroundColor: backgroundColor,
     shadowColor: Colors.white,
   );
 }
-TextStyle MyTextStyle(){
+TextStyle myTextStyle(){
   double fontsize = 16;
 
   return TextStyle(

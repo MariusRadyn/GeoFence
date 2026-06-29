@@ -120,7 +120,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         }
 
         if (monitorOld != null && monitorOld.monitorId != fromId) {
-          MyQuestionAlertBox(
+          myQuestionAlertBox(
             context: context,
             header: "Monitor Alert",
             message:
@@ -354,7 +354,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       if (monService.lstMonitors.isEmpty) return;
       final mon = monService.lstMonitors[ _tabController!.index];
 
-      MyQuestionAlertBox(
+      myQuestionAlertBox(
           context: context,
           header: "Delete",
           message: "${mon.monitorName}\n${mon.reg}\n\nAre you sure?",
@@ -392,6 +392,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
     final doc = await ref.add(monitor.toMap());
 
+    if(!mounted) return;
     final monitorService = context.read<MonitorSettingsService>();
     await monitorService.load();
     if (!mounted) return;
@@ -418,9 +419,10 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           .doc(monitor.monDocId)
           .delete();
 
+      if(!mounted) return;
       final monitorService = context.read<MonitorSettingsService>();
       await monitorService.load();
-
+      
       setState(() {
         _tabController?.dispose();
 
@@ -443,10 +445,12 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         }
       });
     } catch (e) {
-      print('Error deleting vehicle: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
+      printDebugMsg('Error deleting vehicle: $e');
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Delete Failed: $e')),
-      );
+        );
+      }
     }
   }
 
@@ -518,43 +522,43 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
   /// Reads 'ticks' and 'ticksPerM' from a document in 'iotData',
   /// calculates the distance, and updates the document atomically.
-  Future<void> _updateIotDistance(String documentId) async {
-    final FirebaseFirestore firestore = FirebaseFirestore.instance;
-    final DocumentReference docRef = firestore.collection('iotData').doc(documentId);
+  // Future<void> _updateIotDistance(String documentId) async {
+  //   final FirebaseFirestore firestore = FirebaseFirestore.instance;
+  //   final DocumentReference docRef = firestore.collection('iotData').doc(documentId);
 
-    try {
-      // Using a transaction to ensure atomic read-write operations
-      await firestore.runTransaction((transaction) async {
-        final DocumentSnapshot snapshot = await transaction.get(docRef);
+  //   try {
+  //     // Using a transaction to ensure atomic read-write operations
+  //     await firestore.runTransaction((transaction) async {
+  //       final DocumentSnapshot snapshot = await transaction.get(docRef);
 
-        if (!snapshot.exists) {
-          throw FirebaseException(
-            plugin: 'cloud_firestore',
-            message: "Document $documentId not found in 'iotData' collection.",
-          );
-        }
+  //       if (!snapshot.exists) {
+  //         throw FirebaseException(
+  //           plugin: 'cloud_firestore',
+  //           message: "Document $documentId not found in 'iotData' collection.",
+  //         );
+  //       }
 
-        // Extract values dynamically and cast safely to num
-        final num ticks = snapshot.get('ticks') ?? 0;
-        final num ticksPerM = snapshot.get('ticksPerM') ?? 1; // Default to 1 to avoid division by zero
+  //       // Extract values dynamically and cast safely to num
+  //       final num ticks = snapshot.get('ticks') ?? 0;
+  //       final num ticksPerM = snapshot.get('ticksPerM') ?? 1; // Default to 1 to avoid division by zero
 
-        // Calculate distance = ticks / ticksPerM
-        final double calculatedDistance = ticksPerM != 0 
-            ? ticks.toDouble() / ticksPerM.toDouble() 
-            : 0.0;
+  //       // Calculate distance = ticks / ticksPerM
+  //       final double calculatedDistance = ticksPerM != 0 
+  //           ? ticks.toDouble() / ticksPerM.toDouble() 
+  //           : 0.0;
 
-        // Atomically write the calculated distance back to the document
-        transaction.update(docRef, {
-          'distance': calculatedDistance,
-          'lastUpdated': FieldValue.serverTimestamp(), // Optional: track when it was updated
-        });
-      });
+  //       // Atomically write the calculated distance back to the document
+  //       transaction.update(docRef, {
+  //         'distance': calculatedDistance,
+  //         'lastUpdated': FieldValue.serverTimestamp(), // Optional: track when it was updated
+  //       });
+  //     });
       
-      print("Distance updated successfully for document: $documentId");
-    } catch (e) {
-      print("Failed to update distance: $e");
-    }
-  }
+  //     print("Distance updated successfully for document: $documentId");
+  //   } catch (e) {
+  //     print("Failed to update distance: $e");
+  //   }
+  // }
 
   Widget _buildBody(MonitorSettings monitor, Key key) {
     try{
@@ -636,27 +640,6 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
               final monitorService = context.read<MonitorSettingsService>();
               await monitorService.save(monitor);
               if (!mounted) return;
-
-              try {
-                final updated = await monitorService.recalculateIotDataForTicksPerM(
-                  monDocId: monitor.monDocId,
-                  oldTicksPerM: oldTicksPerM,
-                  newTicksPerM: newTicksPerM,
-                );
-                if (!mounted) return;
-                MyGlobalSnackBar.show(
-                  updated > 0
-                      ? 'Saved. Updated $updated log(s).'
-                      : 'Saved',
-                );
-              } catch (e) {
-                if (!mounted) return;
-                MyGlobalMessage.show(
-                  'Update Failed',
-                  'Monitor saved but iOT data could not be recalculated: $e',
-                  MyMessageType.warning,
-                );
-              }
             },
 
             // Ticks
@@ -722,7 +705,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           );
       }
     } catch (e){
-      return MyProgressCircle();
+      return myProgressCircle();
     }
   }
 
@@ -731,7 +714,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     return Consumer3<MonitorSettingsService, SettingsService, BaseStationService>(
       builder: (context, monitors, settings, base,_){
         if (monitors.isLoading || base.isLoading || settings.isLoading || settings.isConnecting) {
-          return MyProgressCircle();
+          return myProgressCircle();
         }
         
         if (_tabController != null && monitors.lstMonitors[_tabController!.index].isConnectedToIot && !_hasScrolled) {
@@ -750,8 +733,8 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                MyAppbarTitle("iOT Monitors"),
-                MyConnectionStatus(settings: settings),
+                myAppbarTitle("iOT Monitors"),
+                myConnectionStatus(settings: settings),
               ],
             ),
             bottom: monitors.lstMonitors.isNotEmpty
@@ -799,7 +782,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           ),
 
           body: monitors.lstMonitors.isEmpty
-            ?  MyCenterMsg('No iOT Monitors')
+            ?  myCenterMsg('No iOT Monitors')
               :Container(
             color: colorAppBackground,
             child: TabBarView(

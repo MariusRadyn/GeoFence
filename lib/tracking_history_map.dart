@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+//import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+//import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geofence/utils.dart';
-import 'package:geolocator/geolocator.dart';
+//import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 
@@ -23,11 +23,11 @@ class TrackingHistoryMap extends StatefulWidget {
 
 class TrackingHistoryMapState extends State<TrackingHistoryMap> {
   GoogleMapController? _mapController;
-  Position? _currentPosition;
-  final Set<Polygon> _geofences = {};
+  //Position? _currentPosition;
+  //final Set<Polygon> _geofences = {};
   final Set<Marker> _markers = {};
   final Set<Polygon> _polygons = {};
-  final LatLng _currentLocation = const LatLng(-29.6, 30.3);
+  //final LatLng _currentLocation = const LatLng(-29.6, 30.3);
   bool _isLoading = false;
   int _polygonIdCounter = 0;
   Set<Polyline> _pathPolyline = {};
@@ -35,9 +35,9 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
   int _fencePntr = 0;
 
   List<LatLng> _trackSessionPoints = [];
-  final List<Map<String, dynamic>> _geofenceData = [];
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FlutterTts _flutterTts = FlutterTts();
+  //final List<Map<String, dynamic>> _geofenceData = [];
+  //final FirebaseAuth _auth = FirebaseAuth.instance;
+  //final FlutterTts _flutterTts = FlutterTts();
   final Map<String, bool> _insideGeofence = {};
   final List<FenceData> _geoFenceList = [];
 
@@ -71,9 +71,11 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
         lst.add(LatLng(data['latitude'], data['longitude']));
       }
     }catch (e){
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading tracking locations: $e')),
-      );
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading tracking locations: $e')),
+        );
+      }
     }
     finally{
       setState(() {
@@ -162,9 +164,12 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading geo fences: $e')),
-      );
+      if(mounted){
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading geo fences: $e')),
+        );
+      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -273,7 +278,7 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
           _mapController?.animateCamera(
             CameraUpdate.newLatLng(LatLng(mark.position.latitude, mark.position.longitude)),
           );
-          print(mark.infoWindow.title);
+          printDebugMsg('${mark.infoWindow.title}');
           return;
         }
         else{
@@ -282,7 +287,7 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
       }
     });
   }
-  void _onBotBarTap(index) {
+  void _onBotBarTap(int index) {
     if(index == 0){
       _nextFence();
     }
@@ -306,7 +311,7 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: MyAppbarTitle('Track History') ,
+        title: myAppbarTitle('Track History') ,
         backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
       ) ,
@@ -354,7 +359,7 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
                   mapType: MapType.normal,
                   markers: _markers,
                   polygons: _polygons,
-                  polylines: _pathPolyline ?? {},
+                  polylines: _pathPolyline,
                   onMapCreated: (controller) {
                     _mapController = controller;
                   },

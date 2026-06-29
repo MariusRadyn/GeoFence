@@ -144,7 +144,7 @@ class OperatorsPageState extends State<OperatorsPage> {
           appBar: AppBar(
             backgroundColor: colorAppBar,
             foregroundColor: Colors.white,
-            title: MyAppbarTitle('Operators'),
+            title: myAppbarTitle('Operators'),
           ),
           backgroundColor: colorAppBackground,
           floatingActionButton: FloatingActionButton(
@@ -156,6 +156,7 @@ class OperatorsPageState extends State<OperatorsPage> {
               if(!mounted) return;
 
               Navigator.push(
+                // ignore: use_build_context_synchronously
                 context,
                 MaterialPageRoute(
                   builder: (context) => OperatorEditPage(
@@ -166,8 +167,8 @@ class OperatorsPageState extends State<OperatorsPage> {
             },
             child: Icon(Icons.add),
           ),
-          body: (operatorService.isLoading) ? MyProgressCircle():
-            (operatorService.lstOperators.isEmpty) ? MyCenterMsg('No Operators')
+          body: (operatorService.isLoading) ? myProgressCircle():
+            (operatorService.lstOperators.isEmpty) ? myCenterMsg('No Operators')
             : Column(
             children: [
               SizedBox(height: 10),

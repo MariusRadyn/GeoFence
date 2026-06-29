@@ -316,14 +316,14 @@ class OperatorEditPageState extends State<OperatorEditPage> {
 return Consumer<BaseStationService>(
     builder: (_,base,__){
       if (base.isLoading) {
-        return MyProgressCircle();
+        return myProgressCircle();
       }
       return Scaffold(
         backgroundColor: colorAppBackground,
         appBar: AppBar(
           backgroundColor: colorAppBar,
           foregroundColor: Colors.white,
-          title: MyAppbarTitle('Operator'),
+          title: myAppbarTitle('Operator'),
         ),
         body: SafeArea(
           child: // Avatar

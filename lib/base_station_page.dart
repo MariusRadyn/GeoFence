@@ -211,7 +211,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
   }
   void getVoices() async {
     List<dynamic> voices = await _flutterTts.getVoices;
-    print("Available Voices: $voices");
+    printDebugMsg("Available Voices: $voices");
   }
   void _initTts() async {
     await _flutterTts.setLanguage('en-US');
@@ -517,7 +517,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
       return Consumer2<BaseStationService, SettingsService>(
         builder: (_ , baseService , settings, __){
           if (baseService.isLoading) {
-            return MyProgressCircle();
+            return myProgressCircle();
           }
           _updateTabController(baseService.lstBaseStations.length);
 
@@ -528,8 +528,8 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  MyAppbarTitle("Base Stations"),
-                  MyConnectionStatus(settings:  settings),
+                  myAppbarTitle("Base Stations"),
+                  myConnectionStatus(settings:  settings),
                 ],
               ),
             ),
@@ -566,7 +566,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
             body: (baseService.lstBaseStations.isEmpty)
 
             // (Body) No Base Stations
-                ? MyCenterMsg('No Base Stations')
+                ? myCenterMsg('No Base Stations')
 
             // (Body) Has Base Stations
                 : Column(
@@ -748,7 +748,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                                       return;
                                     }
 
-                                    print('IP Address: $ipAdr');
+                                    printDebugMsg('IP Address: $ipAdr');
                                     MyGlobalSnackBar.show('IP Address: $ipAdr');
 
                                     setState(() {

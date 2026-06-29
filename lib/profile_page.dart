@@ -35,7 +35,7 @@ class ProfilePageState extends State<ProfilePage> {
             padding: const EdgeInsets.all(8.0),
             child: Container(
               decoration: BoxDecoration(
-                  gradient: MyTileGradient(),
+                  gradient: myTileGradient(),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                       color: Colors.blue,
@@ -73,7 +73,7 @@ class ProfilePageState extends State<ProfilePage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       // No Button
-                      MyTextButton(
+                      myTextButton(
                         onPressed: () {
                           Navigator.of(context).pop();
                         },
@@ -83,7 +83,7 @@ class ProfilePageState extends State<ProfilePage> {
                       const SizedBox(width: 20),
 
                       // OK Button
-                      MyTextButton(
+                      myTextButton(
                         onPressed: () async {
                           await FirebaseAuth.instance.signOut();
                           if (!context.mounted) return;
@@ -188,7 +188,7 @@ class ProfilePageState extends State<ProfilePage> {
           Center(
             child: Container(
               padding: const EdgeInsets.only(top: 130),
-              child: ShowWelcomeMsg(context),
+              child: showWelcomeMsg(context),
             ),
           ),
 
@@ -246,7 +246,7 @@ class ProfilePageState extends State<ProfilePage> {
         return Scaffold(
           backgroundColor: colorAppBackground,
           appBar: AppBar(
-            title: MyAppbarTitle('Profile'),
+            title: myAppbarTitle('Profile'),
             backgroundColor: colorAppBar,
             foregroundColor: Colors.white,
           ),

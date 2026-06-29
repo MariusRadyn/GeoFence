@@ -691,7 +691,7 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                 }
 
                 if (isLoading) {
-                  return MyProgressCircle();
+                  return myProgressCircle();
                 }
                 return Scaffold(
 
@@ -713,8 +713,8 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                   title: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      MyAppbarTitle("Limitless iOT"),
-                                      MyConnectionStatus(settings: settings),
+                                      myAppbarTitle("Limitless iOT"),
+                                      myConnectionStatus(settings: settings),
                                     ],
                                   ),
                                   actions: [
@@ -906,7 +906,7 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                                   height: 120,
                                                   width: drawerWidth,
                                                   decoration: BoxDecoration(
-                                                    gradient: MyTileGradient(),
+                                                    gradient: myTileGradient(),
                                                     borderRadius: BorderRadius.only(topRight: Radius.circular(20),
                                                     ),
                                                   ),
@@ -922,7 +922,7 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                                         crossAxisAlignment: CrossAxisAlignment
                                                             .center,
                                                         children: [
-                                                          MyAppbarTitle("Menu"),
+                                                          myAppbarTitle("Menu"),
 
                                                           Image.asset(
                                                             iconLimitlessLogo,

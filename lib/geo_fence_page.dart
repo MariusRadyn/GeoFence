@@ -935,7 +935,7 @@ class GeoFencePageState extends State<GeoFencePage> {
                                   textColor: Colors.black,
                                   iconSize: 20,
                                   onTap: () {
-                                    MyQuestionAlertBox(
+                                    myQuestionAlertBox(
                                       context: context,
                                       header: "Delete Fence",
                                       message: "Delete: ${fenceData.name}\nAre you Sure?",
@@ -994,7 +994,7 @@ class GeoFencePageState extends State<GeoFencePage> {
       appBar: AppBar(
         foregroundColor: Colors.white,
         backgroundColor: colorAppBar,
-        title: MyAppbarTitle(_appBarTitle),
+        title: myAppbarTitle(_appBarTitle),
         actions: [
           IconButton(
             icon: Icon(Icons.more_horiz),
@@ -1019,7 +1019,7 @@ class GeoFencePageState extends State<GeoFencePage> {
 
                 // Loading
                 if (_isLoading == true)
-                  MyProgressCircle(),
+                  myProgressCircle(),
 
                 if(_isLoading == false)
                   GoogleMap(

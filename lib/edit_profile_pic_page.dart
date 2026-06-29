@@ -171,7 +171,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
       appBar: AppBar(
         backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
-        title: MyAppbarTitle('Profile Picture'),
+        title: myAppbarTitle('Profile Picture'),
         leading: IconButton(
             onPressed: () {
               Navigator.pop<ProfilePicData>(context, profilePicData);
@@ -216,7 +216,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
       ),
       backgroundColor: colorAppBackground,
       body: isLoading
-          ? MyProgressCircle()
+          ? myProgressCircle()
           : Center(
               child: Padding(
                 padding: const EdgeInsets.all(20),

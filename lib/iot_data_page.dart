@@ -95,7 +95,7 @@ class IotDataPageState extends State<IotDataPage> {
 
   Widget _buildBody(AsyncSnapshot<QuerySnapshot<Object?>> iotSnapshot, DateTime fromDate, DateTime toDate){
     if (iotSnapshot.connectionState == ConnectionState.waiting ) {
-      return Center(child: MyProgressCircle());
+      return Center(child: myProgressCircle());
     }
 
     if (!iotSnapshot.hasData || iotSnapshot.data!.docs.isEmpty) {
@@ -117,7 +117,7 @@ class IotDataPageState extends State<IotDataPage> {
 
     var monitorSettings = context.watch<MonitorSettingsService>().lstMonitors;
     if (monitorSettings.isEmpty) {
-      return Center(child: MyProgressCircle());
+      return Center(child: myProgressCircle());
     }
 
     // Create Summary  
@@ -134,8 +134,8 @@ class IotDataPageState extends State<IotDataPage> {
       double dist = 0.0;
       num lines = 0;
       try {
-        dist = doc.get(fireIotDistance) ?? 0.0;
         lines = doc.get(fireIotLines) ?? 0;
+        dist = lines * monitor.ticksPerM;
       } catch (e) {
         printDebugMsg('$e');
       }
@@ -264,7 +264,7 @@ class IotDataPageState extends State<IotDataPage> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: MyAppbarTitle('iOT Data'),
+          title: myAppbarTitle('iOT Data'),
           backgroundColor: colorAppBar,
           foregroundColor: Colors.white,
           bottom: TabBar(

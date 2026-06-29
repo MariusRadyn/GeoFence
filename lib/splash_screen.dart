@@ -71,7 +71,9 @@ class SplashScreenState extends State<SplashScreen> with SingleTickerProviderSta
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         Future.delayed(const Duration(milliseconds: 1500), () {
-           Navigator.of(context).pushReplacement(
+          if(!mounted) return;
+          // ignore: use_build_context_synchronously
+          Navigator.of(context).pushReplacement(
              //MaterialPageRoute(builder: (_) => AuthGate()),
              MaterialPageRoute(builder: (_) => HomePage()),
            );

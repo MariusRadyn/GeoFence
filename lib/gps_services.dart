@@ -113,16 +113,15 @@ LocationSettings getLocationSettings() {
 
 Future<void> getPolylinePoints(double originLatitude, double originLongitude,
     double destLatitude, double destLongitude) async {
-  PolylinePoints polylinePoints = PolylinePoints(apiKey: googleAPiKey);
-  PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
-    request: PolylineRequest(
+  final polylinePoints = PolylinePoints(apiKey: googleAPiKey);
+  final response = await polylinePoints.getRouteBetweenCoordinatesV2(
+    request: RoutesApiRequest(
       origin: PointLatLng(originLatitude, originLongitude),
       destination: PointLatLng(destLatitude, destLongitude),
-      mode: TravelMode.driving,
-      wayPoints: [PolylineWayPoint(location: "Sabo, Yaba Lagos Nigeria")],
+      travelMode: TravelMode.driving,
     ),
   );
-  debugPrint("${result.points}");
+  debugPrint("${response.routes.firstOrNull?.polylinePoints}");
 }
 
 

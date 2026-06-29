@@ -35,7 +35,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      User? user = _auth.currentUser;
+      //User? user = _auth.currentUser;
     });
   }
 
@@ -49,7 +49,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
     _vehicles = await getVehicles();
     setState(() {}); // Refresh UI after fetching data
 
-    print(jsonEncode(_vehicles)); // Pretty-print JSON format
+    printDebugMsg(jsonEncode(_vehicles)); // Pretty-print JSON format
   }
   Future<List<Map<String, dynamic>>> getVehicles() async {
     final QuerySnapshot snapshot = await FirebaseFirestore.instance
@@ -171,7 +171,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
   Future<void> _pickDateFrom() async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDateFrom ?? DateTime.now(),
+      initialDate: _selectedDateFrom,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -185,7 +185,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
   Future<void> _pickDateTo() async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDateTo ?? DateTime.now(),
+      initialDate: _selectedDateTo,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -197,9 +197,9 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
     }
   }
   Future<void> _sendReportToEmail (String email) async{
-    final subject = Uri.encodeComponent('Tracking Report');
-    final body = Uri.encodeComponent('Here is your requested tracking report.');
-    final uri = Uri.parse('mailto:$email?subject=$subject&body=$body');
+    //final subject = Uri.encodeComponent('Tracking Report');
+    //final body = Uri.encodeComponent('Here is your requested tracking report.');
+    //final uri = Uri.parse('mailto:$email?subject=$subject&body=$body');
 
     // if (await canLaunchUrl(uri)) {
     // await launchUrl(uri);
