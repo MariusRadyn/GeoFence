@@ -47,9 +47,32 @@ class IotDataPageState extends State<IotDataPage> {
         .snapshots();
   }
 
+  // Summaries
+  Map<String, Map<String, dynamic>> summaryWheel = {};
+  
   @override
   void initState() {
     super.initState();
+    _loadSavedDateRange();
+  }
+
+  Future<void> _loadSavedDateRange() async {
+    final saved = await DateRangePreferences.load(prefDateRangeIotData);
+    if (!mounted) return;
+    if (saved.from != null && saved.to != null) {
+      setState(() {
+        _selectedDateFrom = saved.from!;
+        _selectedDateTo = saved.to!;
+      });
+    }
+  }
+
+  Future<void> _saveDateRange() async {
+    await DateRangePreferences.save(
+      prefDateRangeIotData,
+      _selectedDateFrom,
+      _selectedDateTo,
+    );
   }
 
   @override
@@ -73,6 +96,7 @@ class IotDataPageState extends State<IotDataPage> {
           _selectedDateTo = picked;
         }
       });
+      await _saveDateRange();
     }
   }
   Future<void> _pickDateTo() async {
@@ -90,77 +114,46 @@ class IotDataPageState extends State<IotDataPage> {
           _selectedDateFrom = picked;
         }
       });
+      await _saveDateRange();
     }
   }
-
-  Widget _buildBody(AsyncSnapshot<QuerySnapshot<Object?>> iotSnapshot, DateTime fromDate, DateTime toDate){
-    if (iotSnapshot.connectionState == ConnectionState.waiting ) {
-      return Center(child: myProgressCircle());
-    }
-
-    if (!iotSnapshot.hasData || iotSnapshot.data!.docs.isEmpty) {
-      return Column(
-        children: [
-          const Expanded(
-            child: Center(
-              child: MyText(
-                text: "No Data",
-                color: Colors.grey,
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    Map<String, Map<String, dynamic>> summaries = {};
-
-    var monitorSettings = context.watch<MonitorSettingsService>().lstMonitors;
-    if (monitorSettings.isEmpty) {
-      return Center(child: myProgressCircle());
-    }
-
-    // Create Summary  
-    for (var doc in iotSnapshot.data!.docs) {
-      String monId = doc.get(fireIotMonDocId);
-
-      MonitorSettings? monitor;
-      try {
-        monitor = monitorSettings.firstWhere((x) => x.monDocId == monId);
-      } catch (e) {
-        continue; // Skip logs for monitors that don't exist in settings
-      }
-
+  
+  // Summaries
+  void createSummaryWheel(QueryDocumentSnapshot doc, MonitorSettings monitor){
       double dist = 0.0;
       num lines = 0;
+      num ticks = 0;
+
       try {
         lines = doc.get(fireIotLines) ?? 0;
-        dist = lines * monitor.ticksPerM;
-      } catch (e) {
+        ticks = doc.get(fireIotTicks) ?? 0;
+        dist = lines * (ticks / monitor.ticksPerM);
+      } 
+      catch (e) {
         printDebugMsg('$e');
       }
 
-      if (!summaries.containsKey(monId)) {
-        summaries[monId] = {
+      if (!summaryWheel.containsKey(monitor.monDocId)) {
+        summaryWheel[monitor.monDocId] = {
           'name': monitor.monitorName,
           'totalDistance': 0.0,
           'totalLines': 0,
           'logCount': 0,
-          'image': monitor.imageURL  ?? "",
-          'logs': [], // Store logs if you want to pass them to the next page
+          'image': monitor.imageURL  ?? ""
         };
       }
 
-      summaries[monId]!['totalDistance'] += (dist * lines);
-      summaries[monId]!['totalLines'] += lines;
-      summaries[monId]!['logCount'] += 1;
-      summaries[monId]!['logs'].add(doc);
-    }
+      summaryWheel[monitor.monDocId]!['totalDistance'] += (dist);
+      summaryWheel[monitor.monDocId]!['totalLines'] += lines;
+      summaryWheel[monitor.monDocId]!['logCount'] += 1;
+  }
+
+  Widget _buildWheelMonitorLog(List<MonitorSettings> lstMonitorSettings,DateTime fromDate, DateTime toDate){
 
     // Convert map values to a list for the ListView
-    var summaryList = summaries.values.toList();
+    var summaryList = summaryWheel.values.toList();
 
-    return  Column(
+     return  Column(
       children: [
         Expanded(
           child: ListView.builder(
@@ -168,11 +161,11 @@ class IotDataPageState extends State<IotDataPage> {
               itemBuilder: (context, index) {
                 var iotSummary = summaryList[index];
                 String image = iotSummary['image'] ?? "";
-                String monId = summaries.keys.elementAt(index);
+                String monId = summaryWheel.keys.elementAt(index);
 
-                var actualMonitor = monitorSettings.firstWhere(
+                var actualMonitor = lstMonitorSettings.firstWhere(
                         (m) => m.monDocId == monId,
-                    orElse: () => monitorSettings.first // Fallback to first if not found
+                    orElse: () => lstMonitorSettings.first // Fallback to first if not found
                 );
 
                 return Column(
@@ -215,6 +208,7 @@ class IotDataPageState extends State<IotDataPage> {
         ),
       ],
     );
+    
   }
   Widget _buildDateSelector(){
     return  Center(
@@ -255,16 +249,70 @@ class IotDataPageState extends State<IotDataPage> {
       ),
     );
 }
+  Widget _buildBody(AsyncSnapshot<QuerySnapshot<Object?>> iotSnapshot, DateTime fromDate, DateTime toDate){
+    if (iotSnapshot.connectionState == ConnectionState.waiting ) {
+      return Center(child: myProgressCircle());
+    }
+
+    if (!iotSnapshot.hasData || iotSnapshot.data!.docs.isEmpty) {
+      return Column(
+        children: [
+          const Expanded(
+            child: Center(
+              child: MyText(
+                text: "No Data",
+                color: Colors.grey,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    var lstMonitorSettings = context.watch<MonitorSettingsService>().lstMonitors;
+    if (lstMonitorSettings.isEmpty) {
+      return Center(child: myProgressCircle());
+    }
+ 
+    // Create Summary  
+    for (var doc in iotSnapshot.data!.docs) {
+      String monId = doc.get(fireIotMonDocId);
+
+      MonitorSettings? monitor;
+      try {
+        monitor = lstMonitorSettings.firstWhere((x) => x.monDocId == monId);
+      } 
+      catch (e) {
+        continue; // Skip logs for monitors that don't exist in settings
+      }
+      
+      if(monitor.monitorType == monitorTypeWheel) createSummaryWheel(doc, monitor);
+    }
+
+      // Distance Wheel Monitor
+      if(summaryWheel.isNotEmpty){
+         return _buildWheelMonitorLog(lstMonitorSettings, fromDate, toDate);
+      }
+      else{
+        return Container();
+      }
+  }
 
   @override
   Widget build(BuildContext context) {
     final DateTime today = DateTime.now();
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: myAppbarTitle('iOT Data'),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              myAppbarTitle('iOT Data'),
+              MyText(text: DateTime.now().toLocal().toString().split(' ')[0]),
+            ],
+          ),
           backgroundColor: colorAppBar,
           foregroundColor: Colors.white,
           bottom: TabBar(
@@ -273,6 +321,7 @@ class IotDataPageState extends State<IotDataPage> {
               unselectedLabelColor: Colors.grey,
               tabs: [
                 Tab(text: "Today"),
+                Tab(text: "Month"),
                 Tab(text: "By Date"),
               ]
           ),
@@ -287,6 +336,16 @@ class IotDataPageState extends State<IotDataPage> {
                 key: const ValueKey('iot-data-today'),
                 stream: _iotDataStream(today, today),
                 builder: (context, iotSnapshot) => _buildBody(iotSnapshot, today, today),
+              ),
+            ),
+
+            // Month
+            Container(
+              color: colorAppBackground,
+              child: StreamBuilder<QuerySnapshot>(
+                key: const ValueKey('iot-data-month'),
+                stream: _iotDataStream(DateTime(today.year, today.month, 1), today),
+                builder: (context, iotSnapshot) => _buildBody(iotSnapshot, DateTime(today.year, today.month, 1), today),
               ),
             ),
 

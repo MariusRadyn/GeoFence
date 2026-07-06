@@ -768,6 +768,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                               // Connect Button
                               Row(
                                 children: [
+                                  
                                   InkWell(
                                       onTap: () async {
                                         if(currentBase.ipAddress == ""){

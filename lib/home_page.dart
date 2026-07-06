@@ -3,7 +3,7 @@ import 'dart:async';
 //import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:geofence/iot_data_page.dart';
+import 'package:geofence/iot_data_summary_page.dart';
 import 'package:geofence/mqtt_service.dart';
 //import 'package:geofence/firebase.dart';
 import 'package:geofence/login_page.dart';
@@ -15,6 +15,7 @@ import 'package:geofence/profile_page.dart';
 import 'package:geofence/settings_page.dart';
 import 'package:geofence/tracking_history_page.dart';
 import 'package:geofence/utils.dart';
+import 'package:geofence/wages_summary_page.dart';
 import 'package:provider/provider.dart';
 import 'iot_monitors_page.dart';
 
@@ -1064,6 +1065,8 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                                       // -------------------------
                                                       // (HEADING) IOT Monitor
                                                       // -------------------------
+                                                      
+                                                      // Heading
                                                       Padding(
                                                         padding: const EdgeInsets
                                                             .fromLTRB(
@@ -1144,6 +1147,45 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                                         },
                                                       ),
 
+                                                      // Wages
+                                                      ListTile(
+                                                        leading: Icon(
+                                                            Icons.attach_money_sharp,
+                                                            color: colorMenuIcons
+                                                        ),
+                                                        title: Text("Wages",
+                                                          style: TextStyle(
+                                                              color: colorMenuText),
+                                                        ),
+                                                        onTap: () {
+                                                          toggleDrawer();
+                                                          Navigator.push(
+                                                            context,
+                                                            MaterialPageRoute(
+                                                                builder: (
+                                                                    context) =>
+                                                                    WagesPage()),
+                                                          );
+                                                        },
+                                                      ),
+
+                                                      // -------------------------
+                                                      // (HEADING) Setup
+                                                      // -------------------------
+                                                      
+                                                      // Heading
+                                                      Padding(
+                                                        padding: const EdgeInsets
+                                                            .fromLTRB(
+                                                            10, 20, 10, 0),
+                                                        child: MyTextHeader(
+                                                          text: "Setup",
+                                                          color: colorMenuHeader,
+                                                          fontsize: 18,
+                                                          linecolor: colorAppBackground,
+                                                        ),
+                                                      ),
+
                                                       // Operator Data
                                                       ListTile(
                                                         leading: Icon(
@@ -1164,21 +1206,6 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                                                     OperatorsPage()),
                                                           );
                                                         },
-                                                      ),
-
-                                                      // -------------------------
-                                                      // (HEADING) Settings
-                                                      // -------------------------
-                                                      Padding(
-                                                        padding: const EdgeInsets
-                                                            .fromLTRB(
-                                                            10, 20, 10, 0),
-                                                        child: MyTextHeader(
-                                                          text: "Settings",
-                                                          color: colorMenuHeader,
-                                                          fontsize: 18,
-                                                          linecolor: colorAppBackground,
-                                                        ),
                                                       ),
 
                                                       // Settings

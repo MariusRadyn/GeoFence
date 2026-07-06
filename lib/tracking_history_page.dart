@@ -32,11 +32,31 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
   void initState() {
     super.initState();
     fetchVehicles();
+    _loadSavedDateRange();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       //User? user = _auth.currentUser;
     });
+  }
+
+  Future<void> _loadSavedDateRange() async {
+    final saved = await DateRangePreferences.load(prefDateRangeTracking);
+    if (!mounted) return;
+    if (saved.from != null && saved.to != null) {
+      setState(() {
+        _selectedDateFrom = saved.from!;
+        _selectedDateTo = saved.to!;
+      });
+    }
+  }
+
+  Future<void> _saveDateRange() async {
+    await DateRangePreferences.save(
+      prefDateRangeTracking,
+      _selectedDateFrom,
+      _selectedDateTo,
+    );
   }
 
   @override
@@ -180,6 +200,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
       setState(() {
         _selectedDateFrom = picked;
       });
+      await _saveDateRange();
     }
   }
   Future<void> _pickDateTo() async {
@@ -194,6 +215,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
       setState(() {
         _selectedDateTo = picked;
       });
+      await _saveDateRange();
     }
   }
   Future<void> _sendReportToEmail (String email) async{

@@ -119,30 +119,33 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           }
         }
 
-        if (monitorOld != null && monitorOld.monitorId != fromId) {
-          myQuestionAlertBox(
-            context: context,
-            header: "Monitor Alert",
-            message:
-            "$fromId exists in Monitor: '${monitorOld.monitorName}'.\n"
-                "Do you want to change the monitor to this one?\n"
-                "The other monitor will be disconnected",
-            onPress: () {
-              setState(() {
-                monitor.monitorId = fromId;
-                monitorOld!.monitorId = "none";
-              });
-              _saveMonitor(monitor);
-              _saveMonitor(monitorOld!);
-            },
-          );
+        if (monitorOld != null) {
+          if(monitorOld.monitorId != monitor.monitorId){
+            // Swap Monitor
+            myQuestionAlertBox(
+              context: context,
+              header: "Monitor Alert",
+              message:
+              "$fromId exists in Monitor: '${monitorOld.monitorName}'.\n"
+                  "Do you want to change the monitor to this one?\n"
+                  "The other monitor will be disconnected",
+              onPress: () {
+                setState(() {
+                  monitor.monitorId = fromId;
+                  monitorOld!.monitorId = "none";
+                });
+                _saveMonitor(monitor);
+                _saveMonitor(monitorOld!);
+              },
+            );
+          }
+          else{
+            // Nothing changed
+            MyGlobalMessage.show("Device found", fromId, MyMessageType.info);   
+          }
+         
         }
-
-        if(monitorOld != null && monitorOld.monitorId == fromId){
-          // Nothing changed
-          MyGlobalMessage.show("Device found", fromId, MyMessageType.info);
-        } else {
-
+        else {
           // New Monitor
           setState(() {
             monitor.monitorId = fromId;
@@ -153,10 +156,10 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
         final payload =  {
           mqttJsonUserDocId: context.read<UserDataService>().userdata!.userID,
-          mqttJsonMonitorDocId: monitorService.lstMonitors[_selectedIndex].monDocId,
-          mqttJsonIotName: monitorService.lstMonitors[_selectedIndex].monitorName,
-          mqttJsonIotType: monitorService.lstMonitors[_selectedIndex].monitorType,
-          mqttJsonTicksPerM: monitorService.lstMonitors[_selectedIndex].ticksPerM,
+          mqttJsonMonitorDocId: monitor.monDocId,
+          mqttJsonIotName: monitor.monitorName,
+          mqttJsonIotType: monitor.monitorType,
+          mqttJsonTicksPerM: monitor.ticksPerM,
         };
 
         // Reply - Found Monitor
@@ -251,7 +254,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       if (!mounted) return false;
       MyGlobalMessage.show(
         "Base Station Offline",
-        "Check that the base station is powered on and on the same Wi‑Fi network.",
+        "Check that the base station is powered 'ON' and connected to the same Wi‑Fi network.",
         MyMessageType.warning,
       );
       setState(() {
@@ -519,46 +522,6 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     _tabKeys[_tabController!.index].currentState?.updateDistance(distance);
     _tabKeys[_tabController!.index].currentState?.updateTicks(ticks);
   }
-
-  /// Reads 'ticks' and 'ticksPerM' from a document in 'iotData',
-  /// calculates the distance, and updates the document atomically.
-  // Future<void> _updateIotDistance(String documentId) async {
-  //   final FirebaseFirestore firestore = FirebaseFirestore.instance;
-  //   final DocumentReference docRef = firestore.collection('iotData').doc(documentId);
-
-  //   try {
-  //     // Using a transaction to ensure atomic read-write operations
-  //     await firestore.runTransaction((transaction) async {
-  //       final DocumentSnapshot snapshot = await transaction.get(docRef);
-
-  //       if (!snapshot.exists) {
-  //         throw FirebaseException(
-  //           plugin: 'cloud_firestore',
-  //           message: "Document $documentId not found in 'iotData' collection.",
-  //         );
-  //       }
-
-  //       // Extract values dynamically and cast safely to num
-  //       final num ticks = snapshot.get('ticks') ?? 0;
-  //       final num ticksPerM = snapshot.get('ticksPerM') ?? 1; // Default to 1 to avoid division by zero
-
-  //       // Calculate distance = ticks / ticksPerM
-  //       final double calculatedDistance = ticksPerM != 0 
-  //           ? ticks.toDouble() / ticksPerM.toDouble() 
-  //           : 0.0;
-
-  //       // Atomically write the calculated distance back to the document
-  //       transaction.update(docRef, {
-  //         'distance': calculatedDistance,
-  //         'lastUpdated': FieldValue.serverTimestamp(), // Optional: track when it was updated
-  //       });
-  //     });
-      
-  //     print("Distance updated successfully for document: $documentId");
-  //   } catch (e) {
-  //     print("Failed to update distance: $e");
-  //   }
-  // }
 
   Widget _buildBody(MonitorSettings monitor, Key key) {
     try{

@@ -248,10 +248,13 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   late FocusNode _focusNodeID;
   late FocusNode _focusNodeTicksPerM;
   late FocusNode _focusNodeCalDistance;
+  bool _pairButtonPressed = false;
+  bool _calibrateButtonPressed = false;
+  bool _connectButtonPressed = false;
   
-  Color colorSetupTile = colorTileLight;
-  Color colorCalibrateTile = colorTileLight;
-  Color colorLiveTile = colorTileLight;
+  Color colorSetupTile = colorAppBar;
+  Color colorCalibrateTile = colorAppBar;
+  Color colorLiveTile = colorAppBar;
   
   @override
   void initState() {
@@ -276,6 +279,16 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
     });
+  }
+
+  Future<void> _animateTap(
+    VoidCallback action,
+    void Function(bool) setPressed,
+  ) async {
+    setState(() => setPressed(true));
+    action();
+    await Future.delayed(const Duration(milliseconds: 150));
+    if (mounted) setState(() => setPressed(false));
   }
 
   @override
@@ -387,10 +400,10 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                           fontsize: 14,
                           color: Colors.grey,
                           text:
-                            '1. Only 1 Wheel at a time can be in PAIR mode\n'
-                            '2. On Wheel, Press \'Stop\' 6 times\n'
-                            '3. Check if Wheel enters PAIR mode\n'
-                            '4. In App, press \'Pair\'\n'    
+                            '1. Only 1 wheel at a time can be in \'PAIR\' mode\n'
+                            '2. On the wheel, press \'STOP\' 6 times\n'
+                            '3. Check LCD if the wheel enters \'PAIR\' mode\n'
+                            '4. In app, press \'PAIR\'\n'    
                         ),     
                       ],
                     ),
@@ -398,7 +411,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                   
                   // Monitor Info
                   Padding(
-                    padding: const EdgeInsets.only(top: 10,left: 8),
+                    padding: const EdgeInsets.only(top: 10,left: 8, right: 8),
                     child: MyTextHeader(text:"Monitor Info"),
                   ),
 
@@ -438,27 +451,31 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
               
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: InkWell(
-                            onTap: widget.onTapPair,
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.connected_tv,
-                                  size: 30,
-                                  color: settingService.isBaseStationConnected
-                                      ? Colors.lightBlueAccent
-                                      : Colors.grey ,
+                        child:  animatedActionButton(
+                          pressed: _pairButtonPressed,
+                          onTap: () => _animateTap(
+                            widget.onTapPair,
+                            (v) => _pairButtonPressed = v,
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.connected_tv,
+                                size: 30,
+                                color: settingService.isBaseStationConnected
+                                    ? Colors.lightBlueAccent
+                                    : Colors.grey ,
+                              ),
+                              const SizedBox(height: 10),
+                              Text("Pair",
+                                style: TextStyle(
+                                    color: settingService.isBaseStationConnected
+                                      ? Colors.white
+                                      : Colors.grey
                                 ),
-                                SizedBox(width: 10),
-                                Text("Pair",
-                                  style: TextStyle(
-                                      color: settingService.isBaseStationConnected
-                                        ? Colors.white
-                                        : Colors.grey
-                                  ),
-                                )
-                              ],
-                            )
+                              )
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -477,6 +494,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                       hintText: "none",
                       labelText: "Ticks per Meter",
                       onFieldSubmitted: widget.onChangedTicksPerM,
+                      inputType: TextInputType.numberWithOptions(decimal: true),
                     ),
                   ),
 
@@ -537,30 +555,21 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                           text:
                             '1. Enter the calibration distance\n'
                             '2. Pre measure this exact distance\n'
-                            '3. On Wheel, Press \'Start\' 6 times\n'
-                            '4. Check if Wheel enters calibration mode\n'
-                            '5. On the Wheel, press \'Start\'\n'
-                            '6. Move Wheel the exact distance\n'
-                            '7. On the Wheel, press \'Stop\'\n'
+                            '3. On the wheel, press \'START\' 6 times\n'
+                            '4. Check LCD if the wheel enters \'CALIBRATION\' mode\n'
+                            '5. On the wheel, press \'START\'\n'
+                            '6. Move the wheel the exact distance\n'
+                            '7. On the wheel, press \'STOP\'\n'
                             '8. Take wheel back into WIFI range\n'
-                            '9. In the App press \'Calibrate\'\n'    
+                            '9. In the App press \'CALIBRATE\'\n'    
                         ),     
                       ],
                     ),
                   ),
-                  
-                  // Status
-                  // Padding(
-                  //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  //   child: MyConnectionStatus(
-                  //     settings: settingService, 
-                  //     size: 14
-                  //     ),
-                  // ),
 
                   // Calibration Data Header
                   Padding(
-                    padding: const EdgeInsets.only(top: 10,left: 8),
+                    padding: const EdgeInsets.only(top: 10,left: 8, right: 8),
                     child: MyTextHeader(text:"Calibration Data"),
                   ),
                  
@@ -596,8 +605,12 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
 
                        Padding(
                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                         child: InkWell(
-                          onTap: widget.onTapCalibrate,
+                         child: animatedActionButton(
+                          pressed: _calibrateButtonPressed,
+                          onTap: () => _animateTap(
+                            widget.onTapCalibrate,
+                            (v) => _calibrateButtonPressed = v,
+                          ),
                           child: Column(
                             children: [
                               Icon(
@@ -609,7 +622,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                                         : Colors.lightBlueAccent
                                     : Colors.grey,
                               ),
-                              const SizedBox(width: 10),
+                              const SizedBox(height: 10),
                               Text(
                                 "Calibrate",
                                 style: TextStyle(
@@ -620,7 +633,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                               ),
                             ],
                           ),
-                                               ),
+                         ),
                        ),
                     
                     ],
@@ -681,8 +694,8 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                           fontsize: 14,
                           color: Colors.grey,
                           text:
-                            '1. Press \'Connect\' to start the live monitor\n'
-                            '2. Move Wheel\n'
+                            '1. Press \'CONNECT\' to start the live monitor\n'
+                            '2. Move the wheel\n'
                         ),     
                       ],
                     ),
@@ -690,7 +703,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                    
                   // Live Monitor Header
                   Padding(
-                    padding: const EdgeInsets.only(top: 10,left: 8),
+                    padding: const EdgeInsets.only(top: 10,left: 8, right: 8),
                     child: MyTextHeader(text:"Live Data"),
                   ),
                  
@@ -714,8 +727,12 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                       // Connect Button
                       Padding(
                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                         child: InkWell(
-                          onTap: widget.onTapConnect,
+                         child: animatedActionButton(
+                          pressed: _connectButtonPressed,
+                          onTap: () => _animateTap(
+                            widget.onTapConnect,
+                            (v) => _connectButtonPressed = v,
+                          ),
                           child: Column(
                             children: [
                               Icon(
@@ -727,7 +744,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                                         : Colors.lightBlueAccent
                                     : Colors.grey,
                               ),
-                              const SizedBox(width: 10),
+                              const SizedBox(height: 10),
                               Text(
                                 "Connect",
                                 style: TextStyle(
@@ -738,7 +755,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                               ),
                             ],
                           ),
-                                               ),
+                         ),
                        ),
                     
                     ],

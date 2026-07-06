@@ -26,6 +26,8 @@ class OperatorEditPageState extends State<OperatorEditPage> {
   TextEditingController? _controllerName;
   TextEditingController? _controllerSurname;
   TextEditingController? _controllerTag;
+  TextEditingController? _controllerRate;
+
   bool tagRequested = false;
   bool listenerStarted = false;
   Timer? _timeout;
@@ -38,6 +40,7 @@ class OperatorEditPageState extends State<OperatorEditPage> {
 
   late FocusNode _focusNodeName;
   late FocusNode _focusNodeSurname;
+  late FocusNode _focusNodeRate;
 
   @override
   void initState() {
@@ -46,12 +49,15 @@ class OperatorEditPageState extends State<OperatorEditPage> {
     _controllerName = TextEditingController(text: widget.operatorData?.name ?? '');
     _controllerSurname = TextEditingController(text: widget.operatorData?.surname ?? '');
     _controllerTag = TextEditingController(text: widget.operatorData?.tagId ?? '');
+    _controllerRate = TextEditingController(text: widget.operatorData?.rate.toString() ?? '0.0');
 
     _focusNodeName = FocusNode();
     _focusNodeSurname = FocusNode();
+    _focusNodeRate = FocusNode();
 
     _focusNodeName.addListener(() => _handleFocusChange(_focusNodeName, 'name'));
     _focusNodeSurname.addListener(() => _handleFocusChange(_focusNodeSurname, 'surname'));
+    _focusNodeRate.addListener(() => _handleFocusChange(_focusNodeRate, 'rate'));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -196,6 +202,7 @@ class OperatorEditPageState extends State<OperatorEditPage> {
       setState(() {
         if (field == 'name')  widget.operatorData!.name = _controllerName!.text;
         if (field == 'surname')  widget.operatorData!.surname = _controllerSurname!.text;
+        if (field == 'rate')  widget.operatorData!.rate = double.parse(_controllerRate!.text);
 
         if(oldName == widget.operatorData!.name && oldSurname == widget.operatorData!.surname) return;
         context.read<OperatorService>().save(widget.operatorData!);
@@ -403,7 +410,7 @@ return Consumer<BaseStationService>(
 
                     // Name
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
                       child: MyTextFormField(
                         focusNode: _focusNodeName,
                         backgroundColor: colorAppBackground,
@@ -421,7 +428,7 @@ return Consumer<BaseStationService>(
 
                     // Surname
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
                       child: MyTextFormField(
                         focusNode: _focusNodeSurname,
                         backgroundColor: colorAppBackground,
@@ -437,9 +444,28 @@ return Consumer<BaseStationService>(
                       ),
                     ),
 
+                    // Rate
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
+                      child: MyTextFormField(
+                        focusNode: _focusNodeRate,
+                        backgroundColor: colorAppBackground,
+                        foregroundColor: Colors.white,
+                        controller: _controllerRate,
+                        labelText: "Rate",
+                        inputType: TextInputType.numberWithOptions(decimal: true),
+                        onFieldSubmitted: (value){
+                          setState(() {
+                            widget.operatorData!.rate = double.parse(value);
+                          });
+                          context.read<OperatorService>().save(widget.operatorData!);
+                        },
+                      ),
+                    ),
+
                     // Tag ID  + Get Button
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
                       child: Row(
                         children: [
 

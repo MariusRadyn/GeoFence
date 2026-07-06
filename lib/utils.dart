@@ -13,6 +13,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -201,7 +202,9 @@ const fireIotDistance = 'distance';
 const fireIotLines = 'lines';
 const fireIotTicks = 'ticks';
 const fireIotOperator = 'operator';
+const fireIotOperatorDocId = 'operatorDocId';
 const fireIotSupervisor = 'supervisor';
+const fireIotSupervisorDocId = 'supervisorDocId';
 const fireIotTimestamp = 'timestamp';
 const fireIotImg = 'image';
 
@@ -374,6 +377,8 @@ ImageProvider<Object> getMonitorImage(MonitorSettings monitor) {
     return AssetImage(iconNoImage);
   }
 }
+
+final nrFormatter = NumberFormat('0.00', 'en_US');
 
 //--Class-----------------------------------------------------------------------
 class Point {
@@ -1625,6 +1630,50 @@ class ClientIdManager {
     return id;
   }
 }
+
+const prefDateRangeWages = 'wages_summary';
+const prefDateRangeIotData = 'iot_data_summary';
+const prefDateRangeTracking = 'tracking_history';
+
+class DateRangePreferences {
+  static String _fromKey(String pageKey) => 'date_range_from_$pageKey';
+  static String _toKey(String pageKey) => 'date_range_to_$pageKey';
+
+  static DateTime _startOfDay(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+
+  static Future<({DateTime? from, DateTime? to})> load(String pageKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final fromMillis = prefs.getInt(_fromKey(pageKey));
+    final toMillis = prefs.getInt(_toKey(pageKey));
+
+    return (
+      from: fromMillis != null
+          ? DateTime.fromMillisecondsSinceEpoch(fromMillis)
+          : null,
+      to: toMillis != null
+          ? DateTime.fromMillisecondsSinceEpoch(toMillis)
+          : null,
+    );
+  }
+
+  static Future<void> save(
+    String pageKey,
+    DateTime from,
+    DateTime to,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      _fromKey(pageKey),
+      _startOfDay(from).millisecondsSinceEpoch,
+    );
+    await prefs.setInt(
+      _toKey(pageKey),
+      _startOfDay(to).millisecondsSinceEpoch,
+    );
+  }
+}
+
 class MyDropdown extends StatelessWidget {
   final ValueChanged<String?>? onChange;
   final String value;
@@ -2470,59 +2519,6 @@ class MonitorSettingsService extends ChangeNotifier {
       MyGlobalSnackBar.show('Cloud Error: $e');
     }
   }
-  // Future<int> recalculateIotDataForTicksPerM({required String monDocId, required double oldTicksPerM, required double newTicksPerM,}) async {
-  //   if (monDocId.isEmpty || newTicksPerM <= 0 || oldTicksPerM <= 0) {
-  //     return 0;
-  //   }
-  //   if (oldTicksPerM == newTicksPerM) return 0;
-
-  //   final uid = FirebaseAuth.instance.currentUser?.uid;
-  //   if (uid == null) return 0;
-
-  //   final snapshot = await FirebaseFirestore.instance
-  //       .collectionGroup(collectionIotData)
-  //       .where(fireIotUserDocId, isEqualTo: uid)
-  //       .where(fireIotMonDocId, isEqualTo: monDocId)
-  //       .get();
-
-  //   if (snapshot.docs.isEmpty) return 0;
-
-  //   WriteBatch batch = FirebaseFirestore.instance.batch();
-  //   int batchCount = 0;
-  //   int updated = 0;
-
-  //   for (final doc in snapshot.docs) {
-  //     final data = doc.data();
-  //     num ticks = (data[fireIotTicks] as num?) ?? 0;
-
-  //     if (ticks <= 0) {
-  //       final double oldDistance =
-  //           (data[fireIotDistance] as num?)?.toDouble() ?? 0;
-  //       if (oldDistance <= 0) continue;
-  //       ticks = oldDistance * oldTicksPerM;
-  //     }
-
-  //     final double newDistance = ticks / newTicksPerM;
-  //     batch.update(doc.reference, {
-  //       fireIotDistance: newDistance,
-  //       fireIotTicks: ticks,
-  //     });
-  //     batchCount++;
-  //     updated++;
-
-  //     if (batchCount >= 450) {
-  //       await batch.commit();
-  //       batch = FirebaseFirestore.instance.batch();
-  //       batchCount = 0;
-  //     }
-  //   }
-
-  //   if (batchCount > 0) {
-  //     await batch.commit();
-  //   }
-
-  //   return updated;
-  // }
 
   void setMonitors(List<MonitorSettings> list) {
     _monitors
@@ -2554,6 +2550,15 @@ class MonitorSettingsService extends ChangeNotifier {
     final mon = _monitors.firstWhere((m) => m.monitorId == id);
     mon.isConnectingToIot = value;
     notifyListeners();
+  }
+
+ MonitorSettings? getMonitorById(String monitorDocId) {
+    if (operatorDocId.isEmpty) return null;
+    
+    for (final mon in _monitors) {
+      if (mon.monDocId == monitorDocId) return mon;
+    }
+    return null;
   }
 }
 
@@ -2836,6 +2841,8 @@ class OperatorData{
   String? imageURL;
   String? imageFilename;
   String? thumbURL;
+  double rate = 0.0;
+  
 
   // Local-only (NOT saved)
   String docId;
@@ -2848,6 +2855,7 @@ class OperatorData{
     this.imageURL,
     this.imageFilename,
     this.thumbURL,
+    this.rate = 0.0,
 
     // Local
     this.docId = ""
@@ -2863,6 +2871,7 @@ class OperatorData{
       imageURL: map['photoURL'] ?? "",
       imageFilename: map['photoFilename'] ?? "",
       thumbURL: map['thumbURL'] ?? "",
+      rate: map['rate'] ?? 0.0,
     );
   }
   Map<String, dynamic> toMap(){
@@ -2875,6 +2884,7 @@ class OperatorData{
       'photoURL': imageURL,
       'photoFilename': imageFilename,
       'thumbURL': thumbURL,
+      'rate': rate,
     };
   }
   OperatorData copyWith({
@@ -2885,6 +2895,7 @@ class OperatorData{
     String? tagID,
     String? photoURL,
     String? photoFilename,
+    double? rate,
   }){
     return OperatorData(
       docId: docID ?? docId,
@@ -2894,6 +2905,7 @@ class OperatorData{
       tagId: tagID ?? tagId,
       imageURL: photoURL ?? imageURL,
       imageFilename: photoFilename ?? imageFilename,
+      rate: rate ?? this.rate,
     );
   }
 }
@@ -3055,6 +3067,15 @@ class OperatorService extends ChangeNotifier {
         .doc(uid).set({
       operatorVersion: newVersion
     },SetOptions(merge: true));
+  }
+
+  OperatorData? getOperatorById(String operatorDocId) {
+    if (operatorDocId.isEmpty) return null;
+    
+    for (final op in _lstOps) {
+      if (op.docId == operatorDocId) return op;
+    }
+    return null;
   }
 }
 
@@ -3309,7 +3330,25 @@ Widget myConnectionStatus({
     ],
   );
 }
-
+Widget animatedActionButton({
+    required bool pressed,
+    required VoidCallback onTap,
+    required Widget child,
+  }) {
+    return AnimatedScale(
+      scale: pressed ? 0.85 : 1.0,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeInOut,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        splashColor: Colors.lightBlueAccent.withValues(alpha: 0.3),
+        highlightColor: Colors.white.withValues(alpha: 0.1),
+        child: child,
+      ),
+    );
+  }
+  
 //--Styles----------------------------------------------------------------------
 ButtonStyle myButtonStyle(Color backgroundColor) {
   return TextButton.styleFrom(

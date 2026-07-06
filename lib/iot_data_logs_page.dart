@@ -29,16 +29,17 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
   late SettingsService settings;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final nrFormatter = NumberFormat('0.00', 'en_US');
-  
+  late OperatorService operatorService;
   @override
   void initState() {
-    super.initState();
+    super.initState(); 
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     settings = context.read<SettingsService>();
+    operatorService = context.read<OperatorService>();
   }
 
   void _delete(String desc, String? userDocId, String? monDocId, String iotDocId) async {
@@ -187,11 +188,11 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
         color: colorAppBackground,
         child:  StreamBuilder<QuerySnapshot>(
           stream: widget.streamIotData,
-          builder: (context, monitorSnapshot) {
-            if (monitorSnapshot.connectionState == ConnectionState.waiting ) {
+          builder: (context, iotSnapshot) {
+            if (iotSnapshot.connectionState == ConnectionState.waiting ) {
             return Center(child: myProgressCircle());
           }
-            var docs = monitorSnapshot.data!.docs;
+            var docs = iotSnapshot.data!.docs;
 
             return Column(
               children: [
@@ -199,13 +200,17 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                   child: ListView.builder(
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
-                      var monitorData = docs[index];
+                      var iotData = docs[index];
 
-                      String operator = monitorData[fireIotOperator];
-                      String sup = monitorData[fireIotSupervisor];
-                      num nrOfItems = monitorData[fireIotLines];
-                      String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(monitorData[fireMonitorTimestamp].toDate());
-                      String dist = (nrOfItems * widget.monitor.ticksPerM).toStringAsFixed(2);
+                      final operatorName = operatorService.getOperatorById(iotData.get(fireIotOperatorDocId) ?? '') ?.name ?? '';
+                      final operatorSurname = operatorService.getOperatorById(iotData.get(fireIotOperatorDocId) ?? '') ?.surname ?? '';
+                      
+                      final supervisorName = operatorService.getOperatorById(iotData.get(fireIotSupervisorDocId) ?? '') ?.name ?? '';
+                      final supervisorSurname = operatorService.getOperatorById(iotData.get(fireIotSupervisorDocId) ?? '') ?.surname ?? '';
+                    
+                      num lines = iotData.get(fireIotLines) ?? 0;
+                      String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(iotData.get(fireMonitorTimestamp)?.toDate() ?? DateTime.now());
+                      String dist = (lines * (iotData.get(fireIotTicks) / widget.monitor.ticksPerM)).toStringAsFixed(2);
 
                       // ignore: unused_local_variable
                       String image;
@@ -219,13 +224,13 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 8.0),
                             child: MySlidableTile(
                               header: date,
-                              subtext: 'Operator: $operator\nSupervisor: $sup\nLines: $nrOfItems\nDistance: $dist m',
+                              subtext: 'Operator: $operatorName $operatorSurname\nSupervisor: $supervisorName $supervisorSurname\nLines: $lines\nDistance: $dist m',
                               onTapDelete: () {
                                 _delete(
                                   '${widget.monitor.monitorName}\n$date', 
                                   widget.userDocId, 
                                   widget.monitor.monDocId, 
-                                  monitorData.id
+                                  iotData.id
                                 );
                               },
                          
