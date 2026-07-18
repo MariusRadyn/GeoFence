@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 //import 'package:geofence/iot_data_logs_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/wages_logs_page.dart';
-import 'package:intl/intl.dart';
+//import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 class WagesPage extends StatefulWidget {

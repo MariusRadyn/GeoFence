@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geofence/utils.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
@@ -15,6 +16,7 @@ class MqttService {
   late String ipAdr;
   late int port;
   late String myDeviceId;
+  String? _baseId;
 
   bool isConnected = false;
   bool _listenerStarted = false;
@@ -36,7 +38,9 @@ class MqttService {
   // -----------------------------------------------------------
   // Initialize
   // -----------------------------------------------------------
-  Future<bool> startService(String ip) async{
+  Future<bool> startService(String ip, {String? baseId}) async{
+    if (baseId != null) _baseId = baseId;
+
     bool ok = true;
 
     if(!_initialized) ok = await _init(ip);
@@ -65,8 +69,10 @@ class MqttService {
     }
   }
 
-  Future<bool> restartService(String ip) async {
+  Future<bool> restartService(String ip, {String? baseId}) async {
     try {
+      if (baseId != null) _baseId = baseId;
+
       if (!await isBrokerReachable(ip)) {
         return false;
       }
@@ -146,12 +152,60 @@ class MqttService {
     try {
       if(client == null) return false;
 
-      client!.connectionMessage = MqttConnectMessage()
+      var connectMessage = MqttConnectMessage()
           .withClientIdentifier(myDeviceId)
           .startClean()
           .withWillTopic(mqttTopicLastWill)
           .withWillMessage('offline')
           .withWillQos(MqttQos.atLeastOnce);
+
+      final savedCreds = await MqttCredentialsPreferences.loadForConnect(_baseId);
+      String? user = savedCreds.user;
+      String? password = savedCreds.password;
+      var credentialSource = 'prefs';
+
+      if (user == null ||
+          user.isEmpty ||
+          password == null ||
+          password.isEmpty) {
+        if (_baseId != null && _baseId!.isNotEmpty) {
+          final synced =
+              await MqttCredentialsPreferences.syncFromFirestore(_baseId!);
+          if (synced) {
+            final firestoreCreds =
+                await MqttCredentialsPreferences.load(_baseId!);
+            user = firestoreCreds.user;
+            password = firestoreCreds.password;
+            credentialSource = 'firestore';
+          }
+        }
+      }
+
+      if (user == null ||
+          user.isEmpty ||
+          password == null ||
+          password.isEmpty) {
+        final firebaseUser = FirebaseAuth.instance.currentUser;
+        if (firebaseUser != null) {
+          user = firebaseUser.uid;
+          password = await firebaseUser.getIdToken();
+          credentialSource = 'firebase';
+        } else {
+          credentialSource = 'none';
+        }
+      }
+
+      if (user != null &&
+          user.isNotEmpty &&
+          password != null &&
+          password.isNotEmpty) {
+        connectMessage = connectMessage.authenticateAs(user, password);
+        printDebugMsg('MQTT connecting with $credentialSource user: $user');
+      } else {
+        printDebugMsg('MQTT connecting without credentials (user not logged in)');
+      }
+
+      client!.connectionMessage = connectMessage;
 
       printDebugMsg("Connecting to MQTT broker... $ipAdr");
       await client!.connect().timeout(
@@ -163,7 +217,8 @@ class MqttService {
         printDebugMsg("Connected successfully!");
         return true;
       } else {
-        printDebugMsg("Connection failed");
+        final returnCode = client!.connectionStatus?.returnCode;
+        printDebugMsg("Connection failed (return code: $returnCode)");
       }
 
     } on TimeoutException {
@@ -191,22 +246,25 @@ class MqttService {
     client!.subscribe(topic0, MqttQos.atLeastOnce);
     printDebugMsg("Subscribing: $topic");
   }
-  void _disconnect() async {
+  void _disconnect() {
     if (client == null) return;
 
-    if (_initialized && client!.connectionStatus?.state == MqttConnectionState.connected) {
-      client!.disconnect();
+    // Disable built-in auto-reconnect BEFORE disconnect, otherwise the old
+    // client keeps reconnecting with the same client ID and fights a new one.
+    client!.autoReconnect = false;
+    autoReconnect = false;
+    _reconnectTimer?.cancel();
+
+    try {
+      if (client!.connectionStatus?.state == MqttConnectionState.connected ||
+          client!.connectionStatus?.state == MqttConnectionState.connecting) {
+        client!.disconnect();
+      }
+    } catch (e) {
+      printDebugMsg('MQTT disconnect error: $e');
     }
+
     client = null;
-
-    // Cancel the updates listener
-    //await _updatesSubscription?.cancel();
-    //_updatesSubscription = null;
-
-     // Disconnect the client
-     _reconnectTimer?.cancel();
-    // client.disconnect();
-    //
     isConnected = false;
   }
 
@@ -215,11 +273,10 @@ class MqttService {
   // -----------------------------------------------------------
   void _onConnected() {
     isConnected = true;
-
+    _subscribedTopics.clear();
     _subscribe(mqttTopicToAndroid);
-
+    _reconnectTimer?.cancel();
     printDebugMsg("MQTT Connected");
-    _reconnectTimer?.cancel(); // stop reconnection attempts
   }
   void _onSuscribed(String topic) {
     printDebugMsg("Subscribed to $topic");
@@ -227,12 +284,17 @@ class MqttService {
   void _onDisconnected() {
     isConnected = false;
     printDebugMsg("MQTT Disconnected");
-    if(autoReconnect) _scheduleReconnect(); // auto schedule reconnect manually
+    // Do NOT schedule a manual reconnect when client.autoReconnect is enabled —
+    // that causes a dual-reconnect loop (same client ID fights itself).
   }
   void _onAutoReconnect() {
     printDebugMsg("MQTT Auto-reconnecting…");
   }
   void _onAutoReconnected() {
+    isConnected = true;
+    _subscribedTopics.clear();
+    _subscribe(mqttTopicToAndroid);
+    _reconnectTimer?.cancel();
     printDebugMsg("Auto-reconnected successfully");
   }
   void _rxStreamListener() {
@@ -299,19 +361,8 @@ class MqttService {
   // -----------------------------------------------------------
   // Methods
   // -----------------------------------------------------------
-  void _scheduleReconnect() {
-    if (_reconnectTimer?.isActive ?? false) return;
-
-    _reconnectTimer = Timer.periodic(Duration(seconds: 5), (t) {
-      _connect();
-      printDebugMsg("Reconnecting to MQTT…");
-    });
-  }
   void listenForSettings(void Function(Map<String, dynamic>) onSettingsReceived) {
       _subscribe(mqttTopicToAndroid);
-      //final topic = "$MQTT_TOPIC_RESPONSE/$_clientId";
-      //client.subscribe(topic, MqttQos.atLeastOnce);
-      //print("Subscribing: $MQTT_TOPIC_RESPONSE");
       if(client?.updates == null) return;
 
       printDebugMsg("Listening: $mqttTopicToAndroid");

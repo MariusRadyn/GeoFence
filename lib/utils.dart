@@ -190,6 +190,7 @@ const fireMonitorTicks = 'ticks';
 const fireMonitorCalibrationDistance = 'calibrationDistance';
 const fireMonitorTimestamp = 'timestamp';
 const fireMonitorLastLogTimestamp = 'lastLogTimestamp';
+const fireMonitorMarkedToDelete = 'markedToDelete';
 
 // firebase - Iot Data
 const fireIotMonDocId = 'monDocId';
@@ -218,6 +219,8 @@ const fireTrackingVehicleDocId = 'vehicle_id';
 
 // Clients Settings
 const settingClientIpAdr = 'IPAdress';
+const settingClientMqttUser = 'mqttUser';
+const settingClientMqttPw = 'mqttPw';
 
 // MQTT Topics
 const mqttTopicFromIot = "mqtt/from/iot";
@@ -249,6 +252,8 @@ const mqttJsonCmd = "cmd";
 const mqttJsonWheelDistance = "wheel_distance";
 const mqttJsonWheelTicks = "ticks";
 const mqttJsonTagData = "tag_data";
+const mqttJsonMqttUser = "mqttUser";
+const mqttJsonMqttPw = "mqttPw";
 
 // JSON Settings
 const mqttJsonMonitorId = "monId";
@@ -1631,6 +1636,106 @@ class ClientIdManager {
   }
 }
 
+class MqttCredentialsPreferences {
+  static const _lastBaseIdKey = 'mqtt_last_base_id';
+  static String _userKey(String baseId) => 'mqtt_user_$baseId';
+  static String _pwKey(String baseId) => 'mqtt_pw_$baseId';
+
+  static Future<void> save({
+    required String baseId,
+    required String user,
+    required String password,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userKey(baseId), user);
+    await prefs.setString(_pwKey(baseId), password);
+    await prefs.setString(_lastBaseIdKey, baseId);
+  }
+
+  static Future<({String? user, String? password})> load(String baseId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return (
+      user: prefs.getString(_userKey(baseId)),
+      password: prefs.getString(_pwKey(baseId)),
+    );
+  }
+
+  static Future<String?> loadLastBaseId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lastBaseIdKey);
+  }
+
+  static Future<({String? user, String? password})> loadForConnect([
+    String? baseId,
+  ]) async {
+    final id = baseId ?? await loadLastBaseId();
+    if (id == null || id.isEmpty) {
+      return (user: null, password: null);
+    }
+    return load(id);
+  }
+
+  static Future<bool> saveFromPayload({
+    required dynamic payload,
+    required String baseId,
+  }) async {
+    if (payload is! Map) return false;
+
+    final mqttUser = payload[mqttJsonMqttUser]?.toString();
+    final mqttPw = payload[mqttJsonMqttPw]?.toString();
+    if (mqttUser == null ||
+        mqttUser.isEmpty ||
+        mqttPw == null ||
+        mqttPw.isEmpty) {
+      return false;
+    }
+
+    await save(baseId: baseId, user: mqttUser, password: mqttPw);
+    return true;
+  }
+
+  static Future<bool> syncFromFirestore(String baseId) async {
+    if (baseId.isEmpty) return false;
+
+    final client = await ClientCloudService.load(baseId);
+    final mqttUser = client.mqttUser;
+    final mqttPw = client.mqttPw;
+    if (mqttUser == null ||
+        mqttUser.isEmpty ||
+        mqttPw == null ||
+        mqttPw.isEmpty) {
+      return false;
+    }
+
+    await save(baseId: baseId, user: mqttUser, password: mqttPw);
+    return true;
+  }
+}
+
+class ClientCloudService {
+  static Future<({
+    String? ip,
+    String? mqttUser,
+    String? mqttPw,
+  })> load(String bluetoothName) async {
+    final docSnap = await FirebaseFirestore.instance
+        .collection(collectionClients)
+        .doc(bluetoothName)
+        .get();
+
+    if (!docSnap.exists) {
+      return (ip: null, mqttUser: null, mqttPw: null);
+    }
+
+    final data = docSnap.data() ?? {};
+    return (
+      ip: data[settingClientIpAdr]?.toString(),
+      mqttUser: data[settingClientMqttUser]?.toString(),
+      mqttPw: data[settingClientMqttPw]?.toString(),
+    );
+  }
+}
+
 const prefDateRangeWages = 'wages_summary';
 const prefDateRangeIotData = 'iot_data_summary';
 const prefDateRangeTracking = 'tracking_history';
@@ -2377,6 +2482,7 @@ class MonitorSettings {
   String? imageFilename;
   double ticksPerM;
   int ticks;
+  bool markedToDelete;
 
   // Local-only (NOT saved)
   bool isLoading;
@@ -2403,6 +2509,7 @@ class MonitorSettings {
     this.ticksPerM = 20,
     this.ticks = 0,
     this.calibrationDistance = 0,
+    this.markedToDelete = false,
 
     // Local
     this.isLoading = false,
@@ -2431,6 +2538,7 @@ class MonitorSettings {
       calibrationDistance: (map[fireMonitorCalibrationDistance] as num?)?.toInt() ?? 0,
       imageURL: map[fireMonitorImageUrl] ?? '',
       imageFilename: map[fireMonitorImageFilename] ?? '',
+      markedToDelete: map[fireMonitorMarkedToDelete] == true,
     );
   }
 
@@ -2449,7 +2557,8 @@ class MonitorSettings {
       fireMonitorTicks: ticks,
       fireMonitorImageUrl: imageURL,
       fireMonitorImageFilename: imageFilename,
-      fireMonitorCalibrationDistance: calibrationDistance
+      fireMonitorCalibrationDistance: calibrationDistance,
+      fireMonitorMarkedToDelete: markedToDelete,
     };
   }
 }
@@ -2471,7 +2580,8 @@ class MonitorSettingsService extends ChangeNotifier {
         .get();
 
     final list = snapshot.docs
-        .map((doc) => MonitorSettings.fromMap(doc.data(),doc.id, uid))
+        .map((doc) => MonitorSettings.fromMap(doc.data(), doc.id, uid))
+        .where((m) => !m.markedToDelete)
         .toList();
 
     try {

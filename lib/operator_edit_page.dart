@@ -104,7 +104,7 @@ class OperatorEditPageState extends State<OperatorEditPage> {
   void _mqttStartListener() {
     if(_mqttSubscription != null) _mqttSubscription?.cancel();
 
-    _mqttSubscription = MqttService().messageStream.listen((msg) {
+    _mqttSubscription = MqttService().messageStream.listen((msg) async {
       if(!mounted) return;
       debugPrint('MQTT RX: $msg');
 
@@ -149,6 +149,15 @@ class OperatorEditPageState extends State<OperatorEditPage> {
         var base = context.read<BaseStationService>().lstBaseStations.firstWhere((x) => x.ipAddress == ip);
         base.isConnected = true;
 
+        final payload = jsonData[mqttJsonPayload];
+        final savedCreds = await MqttCredentialsPreferences.saveFromPayload(
+          payload: payload,
+          baseId: base.bluetoothName,
+        );
+        if (savedCreds) {
+          printDebugMsg('MQTT credentials saved for ${base.bluetoothName}');
+        }
+
         MyGlobalSnackBar.show("Connected: $ip");
       }
 
@@ -177,13 +186,24 @@ class OperatorEditPageState extends State<OperatorEditPage> {
     }
 
     BaseStationData base = context.read<BaseStationService>().lstBaseStations.firstWhere((x)  => x.bluetoothName == deviceId);
-    bool isReady = await MqttService().restartService(ip);
+
+    await MqttCredentialsPreferences.syncFromFirestore(base.bluetoothName);
+
+    bool isReady = await MqttService().restartService(
+      ip,
+      baseId: base.bluetoothName,
+    );
 
     if(isReady) {
       _mqttStartListener();
       _startTimeout(5);
 
-      MqttService().tx(base.bluetoothName, mqttCmdConnectBase, {} ,mqttTopicFromAndroid);
+      MqttService().tx(
+        base.bluetoothName,
+        mqttCmdConnectBase,
+        {fireUid: FirebaseAuth.instance.currentUser?.uid},
+        mqttTopicFromAndroid,
+      );
       return true;
     }
 

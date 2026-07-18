@@ -119,7 +119,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
 
   // MQTT
   void _mqttStartListener() {
-    _mqttSubscription = MqttService().messageStream.listen((msg) {
+    _mqttSubscription = MqttService().messageStream.listen((msg) async {
       if(!mounted) return;
 
       debugPrint('MQTT RX: $msg');
@@ -140,6 +140,13 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
           return;
         }
 
+        final payload = jsonData[mqttJsonPayload];
+        final savedCreds = await MqttCredentialsPreferences.saveFromPayload(
+          payload: payload,
+          baseId: base.bluetoothName,
+        );
+        if (!mounted) return;
+
         context.read<SettingsService>().updateFireSettingsFields({
           settingConnectedDevice : base.baseName,
           settingConnectedDeviceIp : base.ipAddress,
@@ -152,6 +159,12 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
           base.isConnected = true;
         });
 
+        // Creds are cached for the next connect. Do not restartService here —
+        // reconnecting while already connected causes an auto-reconnect storm.
+        if (savedCreds) {
+          printDebugMsg('MQTT credentials saved for ${base.bluetoothName}');
+        }
+
         MyGlobalSnackBar.show("Connected: ${base.ipAddress}");
       }
     });
@@ -160,7 +173,12 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
     await _mqttSubscription?.cancel();
     _mqttSubscription = null;
 
-    bool isReady = await MqttService().restartService(base.ipAddress);
+    await MqttCredentialsPreferences.syncFromFirestore(base.bluetoothName);
+
+    bool isReady = await MqttService().restartService(
+      base.ipAddress,
+      baseId: base.bluetoothName,
+    );
 
     if(isReady) {
       _mqttStartListener();
@@ -732,32 +750,35 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                                       return;
                                     }
 
-                                    final docSnap = await FirebaseFirestore.instance
-                                        .collection(collectionClients)
-                                        .doc(bluetoothName)
-                                        .get();
+                                    final clientData =
+                                        await ClientCloudService.load(bluetoothName);
 
-                                    if(docSnap.data() == null){
+                                    if (clientData.ip == null || clientData.ip!.isEmpty) {
                                       MyGlobalSnackBar.show('No IP Address Found for: $bluetoothName');
                                       return;
                                     }
 
-                                    final ipAdr = docSnap.get(settingClientIpAdr);
-                                    if(ipAdr == ""){
-                                      MyGlobalSnackBar.show('No IP Address Found');
-                                      return;
+                                    if (clientData.mqttUser != null &&
+                                        clientData.mqttUser!.isNotEmpty &&
+                                        clientData.mqttPw != null &&
+                                        clientData.mqttPw!.isNotEmpty) {
+                                      await MqttCredentialsPreferences.save(
+                                        baseId: bluetoothName,
+                                        user: clientData.mqttUser!,
+                                        password: clientData.mqttPw!,
+                                      );
                                     }
 
-                                    printDebugMsg('IP Address: $ipAdr');
-                                    MyGlobalSnackBar.show('IP Address: $ipAdr');
+                                    printDebugMsg('IP Address: ${clientData.ip}');
+                                    MyGlobalSnackBar.show('IP Address: ${clientData.ip}');
 
                                     setState(() {
-                                      currentBase.ipAddress = ipAdr;
+                                      currentBase.ipAddress = clientData.ip!;
                                       _saveBase(currentBase);
 
                                       settings.updateFireSettingsFields({
                                         settingConnectedDevice : currentBase.baseName,
-                                        settingConnectedDeviceIp : ipAdr,
+                                        settingConnectedDeviceIp : clientData.ip!,
                                         settingConnectedDeviceId: currentBase.bluetoothName
                                       });
                                     });

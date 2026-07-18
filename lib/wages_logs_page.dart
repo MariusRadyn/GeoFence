@@ -169,7 +169,7 @@ class WagesLogsPageState extends State<WagesLogsPage> {
               return Center(child: myProgressCircle());
             }
 
-            var docs = iotSnapshot.data!.docs;
+            //var docs = iotSnapshot.data!.docs;
             
             var lstMonitorSettings = context.watch<MonitorSettingsService>().lstMonitors;
             if (lstMonitorSettings.isEmpty) {

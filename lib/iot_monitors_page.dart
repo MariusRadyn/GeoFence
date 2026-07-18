@@ -96,7 +96,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   void _mqttStartListener() {
     if(_mqttSubscription != null) _mqttSubscription?.cancel();
 
-    _mqttSubscription = MqttService().messageStream.listen((msg) {
+    _mqttSubscription = MqttService().messageStream.listen((msg) async {
       debugPrint('MQTT RX(IOT): $msg');
 
       final jsonData = jsonDecode(msg);
@@ -222,6 +222,15 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         var base = context.read<BaseStationService>().lstBaseStations.firstWhere((x) => x.ipAddress == ip);
         base.isConnected = true;
 
+        final payload = jsonData[mqttJsonPayload];
+        final savedCreds = await MqttCredentialsPreferences.saveFromPayload(
+          payload: payload,
+          baseId: base.bluetoothName,
+        );
+        if (savedCreds) {
+          printDebugMsg('MQTT credentials saved for ${base.bluetoothName}');
+        }
+
         MyGlobalSnackBar.show("Connected: $ip");
       }
     });
@@ -264,13 +273,23 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       return false;
     }
 
-    bool isReady = await MqttService().restartService(ip);
+    await MqttCredentialsPreferences.syncFromFirestore(base.bluetoothName);
+
+    bool isReady = await MqttService().restartService(
+      ip,
+      baseId: base.bluetoothName,
+    );
 
     if(isReady) {
       _mqttStartListener();
       _startTimeout(5);
 
-      MqttService().tx(base.bluetoothName, mqttCmdConnectBase, {} ,mqttTopicFromAndroid);
+      MqttService().tx(
+        base.bluetoothName,
+        mqttCmdConnectBase,
+        {fireUid: FirebaseAuth.instance.currentUser?.uid},
+        mqttTopicFromAndroid,
+      );
       return true;
     }
 
@@ -348,6 +367,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     }
     return true;
   }
+
   void _onBotNavBarTap(int index, MonitorSettingsService monService) {
     // Add
     if(index == 0)_addMonitor();
@@ -362,7 +382,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           header: "Delete",
           message: "${mon.monitorName}\n${mon.reg}\n\nAre you sure?",
           onPress: (){
-            _deleteMonitor(mon);
+            _markMonitorForDelete(mon);
           }
       );
     }
@@ -410,22 +430,22 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       }
     }
   }
-  Future<void> _deleteMonitor(MonitorSettings monitor) async {
+  Future<void> _markMonitorForDelete(MonitorSettings monitor) async {
     try {
-      User? user = FirebaseAuth.instance.currentUser;
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
 
-      // 1️⃣ Delete from Firestore
       await FirebaseFirestore.instance
           .collection(collectionUsers)
-          .doc(user?.uid)
+          .doc(user.uid)
           .collection(collectionMonitors)
           .doc(monitor.monDocId)
-          .delete();
+          .set({fireMonitorMarkedToDelete: true}, SetOptions(merge: true));
 
-      if(!mounted) return;
+      if (!mounted) return;
       final monitorService = context.read<MonitorSettingsService>();
       await monitorService.load();
-      
+
       setState(() {
         _tabController?.dispose();
 
@@ -435,7 +455,6 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
             vsync: this,
           );
 
-          // 5️⃣ Ensure a safe tab is selected
           int newIndex = 0;
           if (_tabController!.index >= monitorService.lstMonitors.length) {
             newIndex = monitorService.lstMonitors.length - 1;
@@ -447,16 +466,17 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           _tabController = null;
         }
       });
+
+      MyGlobalSnackBar.show('Marked for delete');
     } catch (e) {
-      printDebugMsg('Error deleting vehicle: $e');
-      if(mounted){
+      printDebugMsg('Error marking monitor for delete: $e');
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete Failed: $e')),
+          SnackBar(content: Text('Delete Failed: $e')),
         );
       }
     }
   }
-
   void _updateTabs(int length) {
     if (length == 0) {
       if (_scrollControllers.isNotEmpty) {
