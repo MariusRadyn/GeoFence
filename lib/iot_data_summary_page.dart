@@ -275,6 +275,8 @@ class IotDataPageState extends State<IotDataPage> {
     }
  
     // Create Summary  
+    summaryWheel.clear();
+    
     for (var doc in iotSnapshot.data!.docs) {
       String monId = doc.get(fireIotMonDocId);
 

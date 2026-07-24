@@ -252,9 +252,9 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   bool _calibrateButtonPressed = false;
   bool _connectButtonPressed = false;
   
-  Color colorSetupTile = colorAppBar;
-  Color colorCalibrateTile = colorAppBar;
-  Color colorLiveTile = colorAppBar;
+  Color colorSetupTile = colorAppBackground;
+  Color colorCalibrateTile = colorAppBackground;
+  Color colorLiveTile = colorAppBackground;
   
   @override
   void initState() {
@@ -300,6 +300,33 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   @override
   void didUpdateWidget(covariant IotDistanceWheelType oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Keep text fields in sync when parent updates monitor data (e.g. pair/swap).
+    if (!_focusNodeID.hasFocus &&
+        _controllerId.text != widget.monitorData.monitorId) {
+      _controllerId.text = widget.monitorData.monitorId;
+    }
+    if (!_focusNodeName.hasFocus &&
+        _controllerName.text != widget.monitorData.monitorName) {
+      _controllerName.text = widget.monitorData.monitorName;
+    }
+    if (!_focusNodeTicksPerM.hasFocus &&
+        _controllerTicksPerM.text != widget.monitorData.ticksPerM.toString()) {
+      _controllerTicksPerM.text = widget.monitorData.ticksPerM.toString();
+    }
+    if (!_focusNodeCalDistance.hasFocus &&
+        _controllerCalDistance.text !=
+            widget.monitorData.calibrationDistance.toString()) {
+      _controllerCalDistance.text =
+          widget.monitorData.calibrationDistance.toString();
+    }
+    if (_controllerTicks.text != widget.monitorData.ticks.toString()) {
+      _controllerTicks.text = widget.monitorData.ticks.toString();
+    }
+    if (_controllerDistance.text !=
+        widget.monitorData.wheelDistance.toString()) {
+      _controllerDistance.text = widget.monitorData.wheelDistance.toString();
+    }
   }
 
   @override
@@ -402,8 +429,9 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                           text:
                             '1. Only 1 wheel at a time can be in \'PAIR\' mode\n'
                             '2. On the wheel, press \'STOP\' 6 times\n'
-                            '3. Check LCD if the wheel enters \'PAIR\' mode\n'
-                            '4. In app, press \'PAIR\'\n'    
+                            '3. Allow wheel to connect to Base\n'
+                            '4. Wait until LCD says \'Click PAIR in App\'\n'
+                            '5. Click \'PAIR\' button\n'    
                         ),     
                       ],
                     ),
