@@ -43,6 +43,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   //final ImagePicker _imagePicker = ImagePicker();
   bool _pairRequest = false;
   bool _connectRequest = false;
+  bool _swapDialogOpen = false;
   //bool _isUploading = false;
   //double _uploadProgress = 0.0;
   List<BluetoothDevice> lstPairedDevices = [
@@ -110,65 +111,62 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       if (cmd == mqttCmdDiscover) {
         scanBusy = false;
         final monitor = monitorService.lstMonitors[_tabController!.index];
+        final String iotId = fromId.toString();
 
         MonitorSettings? monitorOld;
         for (final m in monitorService.lstMonitors) {
-          if (m.monitorId == fromId) {
+          if (m.monitorId == iotId) {
             monitorOld = m;
             break;
           }
         }
 
-        if (monitorOld != null) {
-          if(monitorOld.monitorId != monitor.monitorId){
-            // Swap Monitor
-            myQuestionAlertBox(
-              context: context,
-              header: "Monitor Alert",
-              message:
-              "$fromId exists in Monitor: '${monitorOld.monitorName}'.\n"
-                  "Do you want to change the monitor to this one?\n"
-                  "The other monitor will be disconnected",
-              onPress: () {
-                setState(() {
-                  monitor.monitorId = fromId;
-                  monitorOld!.monitorId = "none";
-                });
-                _saveMonitor(monitor);
-                _saveMonitor(monitorOld!);
-              },
-            );
-          }
-          else{
-            // Nothing changed
-            MyGlobalMessage.show("Device found", fromId, MyMessageType.info);   
-          }
-         
-        }
-        else {
-          // New Monitor
+        final bool needsSwap =
+            monitorOld != null && monitorOld.monDocId != monitor.monDocId;
+
+        // Always answer IoT immediately so swap / new / same behave the same.
+        if (!needsSwap && monitorOld == null) {
           setState(() {
-            monitor.monitorId = fromId;
+            monitor.monitorId = iotId;
           });
           _saveMonitor(monitor);
-          MyGlobalMessage.show("Device Found", fromId, MyMessageType.info);
         }
 
-        final payload =  {
-          mqttJsonUserDocId: context.read<UserDataService>().userdata!.userID,
-          mqttJsonMonitorDocId: monitor.monDocId,
-          mqttJsonIotName: monitor.monitorName,
-          mqttJsonIotType: monitor.monitorType,
-          mqttJsonTicksPerM: monitor.ticksPerM,
-        };
+        _replyFoundMonitor(monitor, iotId);
 
-        // Reply - Found Monitor
-        MqttService().tx(
-          monitor.monitorId,
-          mqttCmdFoundMonitor,
-          payload,
-          mqttTopicFromAndroid,
-        );
+        if (needsSwap) {
+          if (_swapDialogOpen) return;
+          _swapDialogOpen = true;
+          final MonitorSettings otherMonitor = monitorOld;
+
+          myQuestionAlertBox(
+            context: context,
+            header: "Monitor Alert",
+            message:
+            "$iotId exists in Monitor: '${otherMonitor.monitorName}'.\n"
+                "Do you want to change the monitor to this one?\n"
+                "The other monitor will be disconnected",
+            onPress: () async {
+              setState(() {
+                monitor.monitorId = iotId;
+                otherMonitor.monitorId = "none";
+              });
+
+              final service = context.read<MonitorSettingsService>();
+              await service.save(monitor, showSavedMessage: false);
+              await service.save(otherMonitor, showSavedMessage: false);
+
+              if (!mounted) return;
+              MyGlobalMessage.show("Device Found", iotId, MyMessageType.info);
+              _swapDialogOpen = false;
+            },
+          ).whenComplete(() {
+            _swapDialogOpen = false;
+          });
+          return;
+        }
+
+        MyGlobalMessage.show("Device Found", iotId, MyMessageType.info);
       }
 
       // Calibration Mode
@@ -338,6 +336,29 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     }
     return true;
   }
+
+  void _replyFoundMonitor(MonitorSettings monitor, String toDeviceId) {
+    if (!MqttService().isConnected) return;
+    if (toDeviceId.isEmpty || toDeviceId == 'none') return;
+
+    final userId = context.read<UserDataService>().userdata?.userID;
+    if (userId == null) return;
+
+    final payload = {
+      mqttJsonUserDocId: userId,
+      mqttJsonMonitorDocId: monitor.monDocId,
+      mqttJsonIotName: monitor.monitorName,
+      mqttJsonIotType: monitor.monitorType,
+      mqttJsonTicksPerM: monitor.ticksPerM,
+    };
+
+    MqttService().tx(
+      toDeviceId,
+      mqttCmdFoundMonitor,
+      payload,
+      mqttTopicFromAndroid,
+    );
+  }
   Future<bool> _connectIot(String ip, MonitorSettings monitor)async{
     final settingService = context.read<SettingsService>();
     if(settingService.isBaseStationConnected == false){
@@ -393,10 +414,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   void _saveMonitor(MonitorSettings monitor) async {
     if (_tabController == null) return;
     final monitorService = context.read<MonitorSettingsService>();
-    monitorService.save(monitor);
-    await monitorService.load();
-
-    MyGlobalSnackBar.show('Saved');
+    await monitorService.save(monitor);
   }
   void _addMonitor() async {
     if (!mounted) return;

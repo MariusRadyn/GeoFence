@@ -2593,7 +2593,7 @@ class MonitorSettingsService extends ChangeNotifier {
       notifyListeners();   // ✅ NOTIFY HERE
     }
   }
-  Future<void> save(MonitorSettings monitor) async{
+  Future<void> save(MonitorSettings monitor, {bool showSavedMessage = true}) async{
     try{
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
@@ -2623,7 +2623,9 @@ class MonitorSettingsService extends ChangeNotifier {
         );
       }
       await load();
-      MyGlobalSnackBar.show('Saved');
+      if (showSavedMessage) {
+        MyGlobalSnackBar.show('Saved');
+      }
     }
     catch (e){
       MyGlobalSnackBar.show('Cloud Error: $e');
@@ -3387,10 +3389,10 @@ Future<T?> myQuestionAlertBox<T> ({
                 ),
 
                 onPressed: () {
+                  Navigator.pop(context);
                   if(onPress != null){
                     onPress();
                   }
-                  Navigator.pop(context);
                 }
             ),
           ],
