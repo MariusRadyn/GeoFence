@@ -4,9 +4,11 @@ import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geofence/mqtt_service.dart';
 import 'package:geofence/edit_profile_pic_page.dart';
+import 'package:geofence/network_avatar.dart';
 import 'package:geofence/utils.dart';
 //import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -388,12 +390,24 @@ return Consumer<BaseStationService>(
                       child: CircleAvatar(
                         radius: 55,
                         backgroundColor: Colors.white,
-                        child: CircleAvatar(
-                          backgroundImage:  widget.operatorData?.imageURL != null &&  widget.operatorData!.imageURL!.isNotEmpty
-                              ? CachedNetworkImageProvider(widget.operatorData!.imageURL!) as ImageProvider
-                              : AssetImage(iconProfile),
-                          radius: 50,
-                        ),
+                        child: kIsWeb
+                            ? NetworkCircleAvatar(
+                                imageUrl: widget.operatorData?.imageURL,
+                                radius: 50,
+                                backgroundColor: Colors.grey.shade300,
+                              )
+                            : CircleAvatar(
+                                backgroundImage:
+                                    widget.operatorData?.imageURL != null &&
+                                            widget.operatorData!.imageURL!
+                                                .isNotEmpty
+                                        ? CachedNetworkImageProvider(
+                                            widget.operatorData!.imageURL!,
+                                          ) as ImageProvider
+                                        : const AssetImage(iconProfile)
+                                            as ImageProvider,
+                                radius: 50,
+                              ),
                       ),
                     ),
 

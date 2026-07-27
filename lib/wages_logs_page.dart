@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:geofence/network_avatar.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -40,72 +42,6 @@ class WagesLogsPageState extends State<WagesLogsPage> {
     settings = context.read<SettingsService>();
     operatorService = context.read<OperatorService>();
   }
-
-  // void _delete(String desc, String? userDocId, String? monDocId, String iotDocId) async {
-  //   showDialog(
-  //       context: context,
-  //       builder: (context){
-  //         return AlertDialog(
-  //           shape: RoundedRectangleBorder(
-  //             borderRadius: BorderRadius.circular(10),
-  //             side: const BorderSide(
-  //               color: Colors.blue, // Border color
-  //               width: 2, // Border width
-  //             ),
-  //           ),
-  //           backgroundColor: colorAppTitle,
-  //           shadowColor: Colors.black,
-  //           title: const Text(
-  //             "Delete",
-  //             style: TextStyle(color: Colors.white),
-  //           ),
-  //           content: Text(
-  //             desc,
-  //             //"${DateFormat('yyyy-MM-dd – kk:mm').format(session['start_time'].toDate())}\n${vehicle}\n${reg}\n\nAre you sure?",
-  //             style: const TextStyle(
-  //               color: Colors.grey,
-  //               fontSize: 18,
-  //             ),
-  //           ),
-  //           actions: [
-  //             TextButton(
-  //               child: const Text(
-  //                 'No',
-  //                 style: TextStyle(
-  //                   color:  Colors.white,
-  //                   fontFamily: "Poppins",
-  //                   fontSize: 20,
-  //                 ),
-  //               ),
-  //               onPressed: () => Navigator.pop(context),
-  //             ),
-  //             TextButton(
-  //               child: const Text(
-  //                 'Yes',
-  //                 style: TextStyle(
-  //                   color:  Colors.white,
-  //                   fontFamily: "Poppins",
-  //                   fontSize: 20,
-  //                 ),
-  //               ),
-  //               onPressed: () async {
-  //               _firestore
-  //                 .collection(collectionUsers)
-  //                 .doc(userDocId)
-  //                 .collection(collectionMonitors)
-  //                 .doc(monDocId)
-  //                 .collection(collectionIotData)
-  //                 .doc(iotDocId)
-  //                 .delete();
-
-  //                 Navigator.pop(context);
-  //               }
-  //             ),
-  //           ],
-  //         );
-  //       }
-  //   );
-  // }
   
   // Summaries
   void createSummaryWages(QueryDocumentSnapshot doc) {
@@ -169,8 +105,6 @@ class WagesLogsPageState extends State<WagesLogsPage> {
               return Center(child: myProgressCircle());
             }
 
-            //var docs = iotSnapshot.data!.docs;
-            
             var lstMonitorSettings = context.watch<MonitorSettingsService>().lstMonitors;
             if (lstMonitorSettings.isEmpty) {
               return Center(child: myProgressCircle());
@@ -208,34 +142,45 @@ class WagesLogsPageState extends State<WagesLogsPage> {
                       double cost = iotData['cost'] ?? 0.0;
                       double rate = iotData['rate'] ?? 0.0;
                     
-                      // ignore: unused_local_variable
-                      String image;
-                      String img = iotData['image'] ?? '';
-                      img.isEmpty ? image = iconWheel : image = img;
+                      final String img = (iotData['image'] as String?) ?? '';
+                      final bool hasOperatorPhoto = img.isNotEmpty;
 
                       return Column(
                         children: [
                           SizedBox(height: 10),
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 1),
-                            child:    MyTextTileWithEditDelete(
-                            image: image.isNotEmpty
-                                ? CachedNetworkImageProvider(image)
-                                : getMonitorImage(widget.monitor),
-                            header: opName,
-                            subtext:
-                              'Distance: ${nrFormatter.format(totalDistance)} m\n'
-                              'Rate: R${nrFormatter.format(rate)}\n'
-                              'Logs: $logs\n'
-                              'Total: R${nrFormatter.format(cost)}',
-                            headerColor: Colors.white,
-                            textColor: Colors.grey,
-                            backgroundColor: colorAppBar,
-                          
-                            onTapTile: (){
-                              
-                            },
-                          ),
+                            child: MyTextTileWithEditDelete(
+                              // Android: CachedNetworkImageProvider via [image]
+                              // Web: NetworkAvatar via [imageWidget]
+                              image: kIsWeb
+                                  ? null
+                                  : (hasOperatorPhoto
+                                      ? CachedNetworkImageProvider(img)
+                                          as ImageProvider
+                                      : getMonitorImage(widget.monitor)),
+                              imageWidget: kIsWeb
+                                  ? (hasOperatorPhoto
+                                      ? NetworkAvatar(
+                                          imageUrl: img,
+                                          size: 80,
+                                        )
+                                      : Image(
+                                          image: getMonitorImage(widget.monitor),
+                                          fit: BoxFit.cover,
+                                        ))
+                                  : null,
+                              header: opName,
+                              subtext:
+                                'Distance: ${nrFormatter.format(totalDistance)} m\n'
+                                'Rate: R${nrFormatter.format(rate)}\n'
+                                'Logs: $logs\n'
+                                'Total: R${nrFormatter.format(cost)}',
+                              headerColor: Colors.white,
+                              textColor: Colors.grey,
+                              backgroundColor: colorAppBar,
+                              onTapTile: (){},
+                            ),
                           ),
                         ],
                       );

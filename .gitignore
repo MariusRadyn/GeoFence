@@ -32,6 +32,8 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+.chrome-debug-profile/
+.edge-debug-profile/
 
 # Symbolication related
 app.*.symbols

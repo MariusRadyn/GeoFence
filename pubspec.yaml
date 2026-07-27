@@ -112,6 +112,8 @@ flutter:
     - assets/track_history_icon.png
     - assets/generator_icon.png
     - assets/trailer_icon.png
+    - assets/operators_icon.png
+    - assets/wages_icon.png
 
     - assets/profile.png
     - assets/google_icon.png

@@ -2,25 +2,64 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "GeoFence (debug)",
-      "request": "launch",
-      "type": "dart",
-      "program": "lib/main.dart"
-    },
-    {
-      "name": "GeoFence (Android)",
+      "name": "Full (debug)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
-      "toolArgs": ["-d", "android"]
+      "toolArgs": ["--dart-define=APP_FLAVOR=full"]
     },
     {
-      "name": "GeoFence (profile)",
+      "name": "Full (Android)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": ["-d", "android", "--dart-define=APP_FLAVOR=full"]
+    },
+    {
+      "name": "Reporting (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "toolArgs": [
+        "--dart-define=APP_FLAVOR=reporting",
+        "--web-port=50000",
+        "--web-browser-flag=--user-data-dir=${workspaceFolder}/.chrome-debug-profile"
+      ]
+    },
+    {
+      "name": "Reporting (Edge)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "edge",
+      "toolArgs": [
+        "--dart-define=APP_FLAVOR=reporting",
+        "--web-port=50000",
+        "--web-browser-flag=--user-data-dir=${workspaceFolder}/.edge-debug-profile"
+      ]
+    },
+    {
+      "name": "Reporting (Windows)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": ["-d", "windows", "--dart-define=APP_FLAVOR=reporting"]
+    },
+    {
+      "name": "Reporting (debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": ["--dart-define=APP_FLAVOR=reporting"]
+    },
+    {
+      "name": "Full (profile)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
       "flutterMode": "profile",
-      "toolArgs": ["-d", "android"]
+      "toolArgs": ["-d", "android", "--dart-define=APP_FLAVOR=full"]
     }
   ]
 }

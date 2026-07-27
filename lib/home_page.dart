@@ -3,10 +3,11 @@ import 'dart:async';
 //import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:geofence/app_flavor.dart';
 import 'package:geofence/iot_data_summary_page.dart';
-import 'package:geofence/mqtt_service.dart';
 //import 'package:geofence/firebase.dart';
 import 'package:geofence/login_page.dart';
+import 'package:geofence/network_avatar.dart';
 import 'package:geofence/operators_page.dart';
 import 'package:geofence/Tracking_page.dart';
 import 'package:geofence/base_station_page.dart';
@@ -27,7 +28,6 @@ class HomePage extends StatefulWidget {
 }
 
 class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
-  final mqttService = MqttService();
   late AnimationController _controllerDraw;
   late Animation<double> _animationDraw;
   final double drawerWidth = 250;
@@ -90,6 +90,218 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
       _controllerDraw.forward();
     }
   }
+  List<Widget> _buildHomeTiles() {
+    final tiles = <Widget>[];
+
+    void addTile(Widget tile) {
+      if (tiles.isNotEmpty) tiles.add(const SizedBox(height: 10));
+      tiles.add(tile);
+    }
+
+    if (AppConfig.showLiveTracking) {
+      addTile(
+        MyCustomTileWithPic(
+          imagePath: iconFleet,
+          header: 'Track',
+          description:
+              'Track your vehicle as it moves inside and outside of your GeoFences',
+          widget: TrackingPage(),
+        ),
+      );
+    }
+
+    if (AppConfig.showGeoFenceSetup) {
+      addTile(
+        const MyCustomTileWithPic(
+          imagePath: iconGeoFence,
+          header: 'GeoFence',
+          description:
+              'Set all the fence perimeters where you would like to record refundable tax rebate',
+          widget: GeoFencePage(),
+        ),
+      );
+    }
+
+    if (AppConfig.showBaseStations) {
+      addTile(
+        MyCustomTileWithPic(
+          imagePath: iconBase,
+          header: 'Base Stations',
+          description:
+              'Add multiple base stations that acts as master network controllers.',
+          widget: BaseStationPage(),
+        ),
+      );
+    }
+
+    if (AppConfig.showIotMonitors) {
+      addTile(
+        const MyCustomTileWithPic(
+          imagePath: iconIot,
+          header: 'iOT Monitors',
+          description: 'Add multiple iOT monitors for various use cases',
+          widget: IotMonitorsPage(),
+        ),
+      );
+    }
+
+    if (AppConfig.showIotDataReport) {
+      addTile(
+        const MyCustomTileWithPic(
+          imagePath: iconReport,
+          header: 'iOT Data Report',
+          description: 'View all the iOT data history',
+          widget: IotDataPage(),
+        ),
+      );
+    }
+
+    if (AppConfig.addWages) {
+      addTile(
+        MyCustomTileWithPic(
+          imagePath: iconWages,
+          header: 'Wages',
+          description: 'View operator wage summaries from IoT distance logs',
+          widget: const WagesPage(),
+        ),
+      );
+    }
+
+    if (AppConfig.addTrackingHistory) {
+      addTile(
+        MyCustomTileWithPic(
+          imagePath: iconFleet,
+          header: 'Tracking History',
+          description: 'View past tracking sessions and rebate summaries',
+          widget: const TrackingHistoryPage(),
+        ),
+      );
+    }
+
+    return tiles;
+  }
+
+  List<Widget> _buildDrawerItems(UserDataService user) {
+    final items = <Widget>[];
+
+    void open(Widget page) {
+      toggleDrawer();
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => page),
+      );
+    }
+
+    ListTile drawerTile({
+      required IconData icon,
+      required String title,
+      required VoidCallback onTap,
+    }) {
+      return ListTile(
+        leading: Icon(icon, color: colorMenuIcons),
+        title: Text(title, style: TextStyle(color: colorMenuText)),
+        onTap: onTap,
+      );
+    }
+
+    Widget heading(String text, {bool first = false}) {
+      return Padding(
+        padding: first
+            ? const EdgeInsets.only(top: 10, left: 10)
+            : const EdgeInsets.fromLTRB(10, 20, 10, 0),
+        child: MyTextHeader(
+          text: text,
+          color: colorMenuHeader,
+          fontsize: 18,
+          linecolor: colorAppBackground,
+        ),
+      );
+    }
+
+    final showTrackingSection = AppConfig.showLiveTracking ||
+        AppConfig.showGeoFenceSetup ||
+        AppConfig.showTrackingHistory;
+    if (showTrackingSection) {
+      items.add(heading('Tracking', first: true));
+      if (AppConfig.showLiveTracking) {
+        items.add(drawerTile(
+          icon: Icons.gps_fixed,
+          title: 'Track',
+          onTap: () => open(TrackingPage()),
+        ));
+      }
+      if (AppConfig.showGeoFenceSetup) {
+        items.add(drawerTile(
+          icon: Icons.fence,
+          title: 'GeoFence',
+          onTap: () => open(const GeoFencePage()),
+        ));
+      }
+      if (AppConfig.showTrackingHistory) {
+        items.add(drawerTile(
+          icon: Icons.history,
+          title: 'Tracking History',
+          onTap: () => open(const TrackingHistoryPage()),
+        ));
+      }
+    }
+
+    final showIotSection = AppConfig.showBaseStations ||
+        AppConfig.showIotMonitors ||
+        AppConfig.showIotDataReport ||
+        AppConfig.showWages;
+    if (showIotSection) {
+      items.add(heading('iOT', first: !showTrackingSection));
+      if (AppConfig.showBaseStations) {
+        items.add(drawerTile(
+          icon: Icons.cell_tower,
+          title: 'Base Station',
+          onTap: () => open(BaseStationPage()),
+        ));
+      }
+      if (AppConfig.showIotMonitors) {
+        items.add(drawerTile(
+          icon: Icons.monitor,
+          title: 'iOT Monitors',
+          onTap: () => open(const IotMonitorsPage()),
+        ));
+      }
+      if (AppConfig.showIotDataReport) {
+        items.add(drawerTile(
+          icon: Icons.dataset,
+          title: 'iOT Data',
+          onTap: () => open(const IotDataPage()),
+        ));
+      }
+      if (AppConfig.showWages) {
+        items.add(drawerTile(
+          icon: Icons.attach_money_sharp,
+          title: 'Wages',
+          onTap: () => open(const WagesPage()),
+        ));
+      }
+    }
+
+    items.add(heading('Setup', first: !showTrackingSection && !showIotSection));
+    if (AppConfig.showOperators) {
+      items.add(drawerTile(
+        icon: Icons.person,
+        title: 'Operators',
+        onTap: () => open(const OperatorsPage()),
+      ));
+    }
+    if (AppConfig.showSettings) {
+      items.add(drawerTile(
+        icon: Icons.settings,
+        title: 'Settings',
+        onTap: () => open(SettingsPage(userId: user.userdata!.userID)),
+      ));
+    }
+
+    items.add(const SizedBox(height: 5));
+    return items;
+  }
+
   Future<void> _login({
     required bool isLoading,
     required bool userLoggedIn,
@@ -646,16 +858,25 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
     }
   }
   void _startTimeout(int sec) {
-    _loadingTimer?.cancel();
+    // Already armed — don't restart on every rebuild.
+    if (_loadingTimer != null) return;
 
-    _loadingTimer = Timer(Duration(seconds: sec), () async {
-      if (FirebaseAuth.instance.currentUser != null) {
-        await FirebaseAuth.instance.signOut();
-      }
+    _loadingTimer = Timer(Duration(seconds: sec), () {
+      if (!mounted) return;
+      // Never sign out on a load timeout — that forced re-login on web.
+      setState(() {
+        busyLoggingIn = false;
+      });
+      MyGlobalMessage.show(
+        "Timeout",
+        "Loading took too long. Try again.",
+        MyMessageType.warning,
+      );
     });
   }
   void _cancelLoadingTimeout() {
     _loadingTimer?.cancel();
+    _loadingTimer = null;
   }
 
   @override
@@ -675,14 +896,6 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                 String image = "";
                 if (user.userdata != null) {
                   image = user.userdata!.imageURL ?? "";
-                }
-
-                ImageProvider profileImage;
-
-                if (!isLoading && userLoggedIn && image.isNotEmpty == true) {
-                  profileImage = NetworkImage(image);
-                } else {
-                  profileImage = AssetImage(iconProfile);
                 }
 
                 if (isLoading) {
@@ -754,11 +967,10 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                                   ),
                                                 ],
                                               ),
-                                              child: CircleAvatar(
+                                              child: NetworkCircleAvatar(
+                                                imageUrl: userLoggedIn ? image : null,
                                                 radius: 18,
-                                                // Total size remains ~20 with the border
                                                 backgroundColor: colorIceBlue,
-                                                backgroundImage: profileImage,
                                               ),
                                             ),
                                           ),
@@ -798,56 +1010,10 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                       mainAxisAlignment: MainAxisAlignment.start,
                                       children: [
                                         const SizedBox(height: 20),
-                                
-                                        // Track Vehicle
-                                        MyCustomTileWithPic(
-                                          imagePath: iconFleet,
-                                          header: 'Track',
-                                          description: 'Track your vehicle as it moves inside and outside of your GeoFences',
-                                          widget: TrackingPage(),
-                                        ),
-                                
-                                        const SizedBox(height: 10),
-                                
-                                        // GeoFence
-                                        const MyCustomTileWithPic(
-                                          imagePath: iconGeoFence,
-                                          header: 'GeoFence',
-                                          description: 'Set all the fence perimeters where you would like to record refundable tax rebate',
-                                          widget: GeoFencePage(),
-                                        ),
-                                
-                                        const SizedBox(height: 10),
-                                
-                                        // Base Stations
-                                        MyCustomTileWithPic(
-                                          imagePath: iconBase,
-                                          header: 'Base Stations',
-                                          description: 'Add multiple base stations that acts as master network controllers.',
-                                          widget: BaseStationPage(),
-                                        ),
-                                
-                                        const SizedBox(height: 10),
-                                
-                                        // iOT Monitors
-                                        const MyCustomTileWithPic(
-                                          imagePath: iconIot,
-                                          header: 'iOT Monitors',
-                                          description: 'Add multiple iOT monitors for various use cases',
-                                          widget: IotMonitorsPage(),
-                                        ),
-                                
-                                        const SizedBox(height: 10),
-                                
-                                        // Iot Report
-                                        const MyCustomTileWithPic(
-                                          imagePath: iconReport,
-                                          header: 'iOT Data Report',
-                                          description: 'View all the iOT data history',
-                                          widget: IotDataPage(),
-                                        ),
-                                
-                                        SizedBox(height: 15)
+
+                                        ..._buildHomeTiles(),
+
+                                        const SizedBox(height: 15),
                                       ],
                                     ),
                                   ),
@@ -978,264 +1144,7 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                                       ),
                                                       child: ListView(
                                                     padding: EdgeInsets.zero,
-                                                    children: [
-
-                                                      // -------------------------
-                                                      // (HEADING) Tracking
-                                                      // -------------------------
-                                                      Padding(
-                                                        padding: const EdgeInsets.only(top: 10, left: 10),
-                                                        child: MyTextHeader(
-                                                          text: "Tracking",
-                                                          color: colorMenuHeader,
-                                                          fontsize: 18,
-                                                          linecolor: colorAppBackground,
-                                                        ),
-                                                      ),
-
-                                                      // Track
-                                                      ListTile(
-                                                        leading: Icon(
-                                                            Icons.gps_fixed,
-                                                            color: colorMenuIcons
-                                                        ),
-                                                        title: Text("Track",
-                                                          style: TextStyle(
-                                                              color: colorMenuText
-                                                              ),
-                                                        ),
-                                                        onTap: () {
-                                                          toggleDrawer();
-                                                          Navigator.push(
-                                                            context,
-                                                            MaterialPageRoute(
-                                                                builder: (
-                                                                    context) =>
-                                                                    TrackingPage()),
-                                                          );
-                                                        },
-                                                      ),
-
-                                                      // GeoFence
-                                                      ListTile(
-                                                        leading: Icon(
-                                                          Icons.fence,
-                                                            color: colorMenuIcons
-                                                        ),
-                                                        title: Text("GeoFence",
-                                                            style: TextStyle(
-                                                                color: colorMenuText)
-                                                        ),
-                                                        onTap: () {
-                                                          toggleDrawer();
-                                                          Navigator.push(
-                                                            context,
-                                                            MaterialPageRoute(
-                                                                builder: (
-                                                                    context) =>
-                                                                    GeoFencePage()),
-                                                          );
-                                                        },
-                                                      ),
-
-                                                      // Tracking History
-                                                      ListTile(
-                                                        leading: Icon(
-                                                            Icons.history,
-                                                            color: colorMenuIcons
-                                                        ),
-                                                        title: Text(
-                                                            "Tracking History",
-                                                            style: TextStyle(
-                                                                color: colorMenuText)
-                                                        ),
-                                                        onTap: () {
-                                                          toggleDrawer();
-                                                          Navigator.push(
-                                                            context,
-                                                            MaterialPageRoute(
-                                                                builder: (
-                                                                    context) =>
-                                                                    TrackingHistoryPage()),
-                                                          );
-                                                        },
-                                                      ),
-
-
-                                                      // -------------------------
-                                                      // (HEADING) IOT Monitor
-                                                      // -------------------------
-                                                      
-                                                      // Heading
-                                                      Padding(
-                                                        padding: const EdgeInsets
-                                                            .fromLTRB(
-                                                            10, 20, 10, 0),
-                                                        child: MyTextHeader(
-                                                          text: "iOT",
-                                                          color: colorMenuHeader,
-                                                          fontsize: 18,
-                                                          linecolor: colorAppBackground,
-                                                        ),
-                                                      ),
-
-                                                      // Base Station
-                                                      ListTile(
-                                                        leading: Icon(
-                                                            Icons.cell_tower,
-                                                            color: colorMenuIcons
-                                                        ),
-                                                        title: Text(
-                                                            "Base Station",
-                                                            style: TextStyle(
-                                                                color: colorMenuText)
-                                                        ),
-                                                        onTap: () {
-                                                          toggleDrawer();
-                                                          Navigator.push(
-                                                            context,
-                                                            MaterialPageRoute(
-                                                                builder: (
-                                                                    context) =>
-                                                                    BaseStationPage()),
-                                                          );
-                                                        },
-                                                      ),
-
-                                                      // IOT Monitors
-                                                      ListTile(
-                                                        leading: Icon(
-                                                            Icons.monitor,
-                                                            color: colorMenuIcons
-                                                        ),
-                                                        title: Text(
-                                                          "iOT Monitors",
-                                                          style: TextStyle(
-                                                              color: colorMenuText),
-                                                        ),
-                                                        onTap: () {
-                                                          toggleDrawer();
-                                                          Navigator.push(
-                                                            context,
-                                                            MaterialPageRoute(
-                                                                builder: (
-                                                                    context) =>
-                                                                    IotMonitorsPage()),
-                                                          );
-                                                        },
-                                                      ),
-
-                                                      // IOT Data
-                                                      ListTile(
-                                                        leading: Icon(
-                                                            Icons.dataset,
-                                                            color: colorMenuIcons
-                                                        ),
-                                                        title: Text("iOT Data",
-                                                          style: TextStyle(
-                                                              color: colorMenuText),
-                                                        ),
-                                                        onTap: () {
-                                                          toggleDrawer();
-                                                          Navigator.push(
-                                                            context,
-                                                            MaterialPageRoute(
-                                                                builder: (
-                                                                    context) =>
-                                                                    IotDataPage()),
-                                                          );
-                                                        },
-                                                      ),
-
-                                                      // Wages
-                                                      ListTile(
-                                                        leading: Icon(
-                                                            Icons.attach_money_sharp,
-                                                            color: colorMenuIcons
-                                                        ),
-                                                        title: Text("Wages",
-                                                          style: TextStyle(
-                                                              color: colorMenuText),
-                                                        ),
-                                                        onTap: () {
-                                                          toggleDrawer();
-                                                          Navigator.push(
-                                                            context,
-                                                            MaterialPageRoute(
-                                                                builder: (
-                                                                    context) =>
-                                                                    WagesPage()),
-                                                          );
-                                                        },
-                                                      ),
-
-                                                      // -------------------------
-                                                      // (HEADING) Setup
-                                                      // -------------------------
-                                                      
-                                                      // Heading
-                                                      Padding(
-                                                        padding: const EdgeInsets
-                                                            .fromLTRB(
-                                                            10, 20, 10, 0),
-                                                        child: MyTextHeader(
-                                                          text: "Setup",
-                                                          color: colorMenuHeader,
-                                                          fontsize: 18,
-                                                          linecolor: colorAppBackground,
-                                                        ),
-                                                      ),
-
-                                                      // Operator Data
-                                                      ListTile(
-                                                        leading: Icon(
-                                                            Icons.person,
-                                                            color: colorMenuIcons
-                                                        ),
-                                                        title: Text("Operators",
-                                                          style: TextStyle(
-                                                              color: colorMenuText),
-                                                        ),
-                                                        onTap: () {
-                                                          toggleDrawer();
-                                                          Navigator.push(
-                                                            context,
-                                                            MaterialPageRoute(
-                                                                builder: (
-                                                                    context) =>
-                                                                    OperatorsPage()),
-                                                          );
-                                                        },
-                                                      ),
-
-                                                      // Settings
-                                                      ListTile(
-                                                        leading: Icon(
-                                                            Icons.settings,
-                                                            color: colorMenuIcons
-                                                        ),
-                                                        title: Text("Settings",
-                                                            style: TextStyle(
-                                                                color: colorMenuText)
-                                                        ),
-                                                        onTap: () {
-                                                          toggleDrawer();
-                                                          Navigator.push(
-                                                            context,
-                                                            MaterialPageRoute(
-                                                                builder: (
-                                                                    context) =>
-                                                                    SettingsPage(
-                                                                        userId: user
-                                                                            .userdata!
-                                                                            .userID)
-                                                            ),
-                                                          );
-                                                        },
-                                                      ),
-
-                                                      SizedBox(height: 5,)
-                                                    ],
+                                                    children: _buildDrawerItems(user),
                                                   ),
                                                     ),
                                                   ),

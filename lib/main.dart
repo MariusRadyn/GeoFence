@@ -1,6 +1,8 @@
-
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:geofence/app_flavor.dart';
 import 'package:geofence/splash_screen.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/firebase_options.dart';
@@ -9,30 +11,33 @@ import 'package:provider/provider.dart';
 import 'mqtt_service.dart';
 import 'gps_services.dart';
 import 'mqtt_lifecycle_handler.dart';
-late AppLifecycleHandler lifecycleHandler;
+
+AppLifecycleHandler? lifecycleHandler;
 
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
 
-     await Firebase.initializeApp(
-       options: DefaultFirebaseOptions.currentPlatform,
-     );
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    // Keep auth across browser refreshes (web only).
+    if (kIsWeb) {
+      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    }
 
     await initializeGoogleSignIn();
-    await initializeGpsService();
 
-    final mqttService = MqttService();
-    lifecycleHandler = AppLifecycleHandler(mqttService);
-    lifecycleHandler.init();
+    if (AppConfig.enableFieldServices) {
+      await initializeGpsService();
 
-    // Web app
-    //if(kIsWeb){
-    //  await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-    //  print("Web App");
-    //}else print("Android App");
+      final mqttService = MqttService();
+      lifecycleHandler = AppLifecycleHandler(mqttService);
+      lifecycleHandler!.init();
+    }
 
-    //runApp(MyApp());
+    printDebugMsg('Starting flavor: ${AppConfig.flavor.name}');
 
     runApp(
       MultiProvider(
@@ -43,11 +48,10 @@ Future<void> main() async {
           ChangeNotifierProvider(create: (_) => BaseStationService()..load()),
           ChangeNotifierProvider(create: (_) => OperatorService()..load()),
         ],
-        child: MyApp(),
+        child: const MyApp(),
       ),
     );
-  }
-  catch(e){
+  } catch (e) {
     printDebugMsg('StartUp Error: $e');
   }
 }
@@ -63,12 +67,13 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        navigatorKey: navigatorKey,
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          primaryColor: Colors.blueGrey,
-        ),
-        home: SplashScreen(),
+      title: AppConfig.appTitle,
+      navigatorKey: navigatorKey,
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primaryColor: Colors.blueGrey,
+      ),
+      home: const SplashScreen(),
     );
   }
 }

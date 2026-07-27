@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:geofence/network_avatar.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'edit_profile_pic_page.dart';
@@ -171,12 +173,22 @@ class ProfilePageState extends State<ProfilePage> {
                     child: CircleAvatar(
                       radius: 55,
                       backgroundColor: Colors.white,
-                      child: CircleAvatar(
-                        backgroundImage:  user.userdata?.imageURL != null &&  user.userdata!.imageURL!.isNotEmpty
-                            ? CachedNetworkImageProvider(user.userdata!.imageURL!) as ImageProvider
-                            : AssetImage(iconProfile),
-                        radius: 50,
-                      ),
+                      child: kIsWeb
+                          ? NetworkCircleAvatar(
+                              imageUrl: user.userdata?.imageURL,
+                              radius: 50,
+                              backgroundColor: Colors.grey.shade300,
+                            )
+                          : CircleAvatar(
+                              backgroundImage: user.userdata?.imageURL != null &&
+                                      user.userdata!.imageURL!.isNotEmpty
+                                  ? CachedNetworkImageProvider(
+                                      user.userdata!.imageURL!,
+                                    ) as ImageProvider
+                                  : const AssetImage(iconProfile)
+                                      as ImageProvider,
+                              radius: 50,
+                            ),
                     ),
                   ),
                 ],

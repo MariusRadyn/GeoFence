@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:geofence/firebase.dart';
+import 'package:geofence/network_avatar.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
@@ -59,6 +60,8 @@ const String iconGeoFence = 'assets/geofence_icon.png';
 const String iconIot = 'assets/iot_monitor_icon.png';
 const String iconBase = 'assets/base_station_icon.png';
 const String iconReport = 'assets/track_history_icon.png';
+const String iconWages = 'assets/wages_icon.png';
+const String iconOperators = 'assets/operators_icon.png';
 
 const String iconLimitlessLogo = 'assets/limitless_logo.png';
 const String iconLimitlessWord = 'assets/limitlessIotWord.png';
@@ -976,6 +979,8 @@ class MyTextTileWithEditDelete extends StatelessWidget {
   final Color headerColor;
   final Color textColor;
   final ImageProvider<Object>? image;
+  /// Prefer this on web (e.g. [NetworkAvatar]); falls back to [image] on Android.
+  final Widget? imageWidget;
   final double? height;
 
   MyTextTileWithEditDelete({
@@ -990,6 +995,7 @@ class MyTextTileWithEditDelete extends StatelessWidget {
     this.headerColor = Colors.white,
     this.textColor = Colors.white,
     this.image,
+    this.imageWidget,
     this.height,
     super.key
   }) : gradient = gradient ?? myTileGradient();
@@ -998,6 +1004,30 @@ class MyTextTileWithEditDelete extends StatelessWidget {
   Widget build(BuildContext context) {
 
     double imgHeight = height == null ? 80 : height! - 30;
+
+    Widget? leadingImage;
+    if (imageWidget != null) {
+      leadingImage = ClipRRect(
+        borderRadius: const BorderRadius.all(Radius.elliptical(30, 30)),
+        child: SizedBox(
+          height: imgHeight,
+          width: imgHeight,
+          child: imageWidget,
+        ),
+      );
+    } else if (image != null) {
+      leadingImage = Container(
+        height: imgHeight,
+        width: imgHeight,
+        decoration: BoxDecoration(
+          borderRadius: const BorderRadius.all(Radius.elliptical(30, 30)),
+          image: DecorationImage(
+            image: image!,
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
 
     return GestureDetector(
       onTap: () {
@@ -1049,23 +1079,13 @@ class MyTextTileWithEditDelete extends StatelessWidget {
                 ),
 
                 // Image
-                image == null
-                    ? SizedBox()
+                leadingImage == null
+                    ? const SizedBox()
                     : Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      height: imgHeight,
-                      width: imgHeight,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.all(Radius.elliptical(30, 30)),
-                        image: DecorationImage(
-                          image: image!,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
+                    leadingImage,
                   ],
                 ),
 
@@ -1172,24 +1192,31 @@ class MyOperatorTile extends StatelessWidget {
                     ),
                     child: operator.imageURL != null &&
                             operator.imageURL!.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: operator.imageURL!,
-                            width: 60,
-                            height: 60,
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) => Image.asset(
-                              iconProfile,
-                              width: 60,
-                              height: 60,
-                              fit: BoxFit.cover,
-                            ),
-                            errorWidget: (_, __, ___) => Image.asset(
-                              iconProfile,
-                              width: 60,
-                              height: 60,
-                              fit: BoxFit.cover,
-                            ),
-                          )
+                        ? (kIsWeb
+                            // Web: HTML <img> (CORS-safe)
+                            ? NetworkAvatar(
+                                imageUrl: operator.imageURL,
+                                size: 60,
+                              )
+                            // Android: CachedNetworkImage
+                            : CachedNetworkImage(
+                                imageUrl: operator.imageURL!,
+                                width: 60,
+                                height: 60,
+                                fit: BoxFit.cover,
+                                placeholder: (_, __) => Image.asset(
+                                  iconProfile,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                ),
+                                errorWidget: (_, __, ___) => Image.asset(
+                                  iconProfile,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                ),
+                              ))
                         : Image.asset(
                             iconProfile,
                             width: 60,

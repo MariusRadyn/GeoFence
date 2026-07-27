@@ -302,8 +302,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
     super.didUpdateWidget(oldWidget);
 
     // Keep text fields in sync when parent updates monitor data (e.g. pair/swap).
-    if (!_focusNodeID.hasFocus &&
-        _controllerId.text != widget.monitorData.monitorId) {
+    if (_controllerId.text != widget.monitorData.monitorId) {
       _controllerId.text = widget.monitorData.monitorId;
     }
     if (!_focusNodeName.hasFocus &&
@@ -408,33 +407,35 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 5 ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   
                   // Setup
-                  MyText(
-                    text: "Setup", 
-                    fontsize: 18
+                  Center(
+                    child: MyText(
+                      text: "Setup", 
+                      fontsize: 18
+                    ),
                   ),
 
-                   SizedBox(height: 15),
+                  SizedBox(height: 15),
 
+                  // Instructions
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const MyText(
-                          fontsize: 14,
-                          color: Colors.grey,
-                          text:
-                            '1. Only 1 wheel at a time can be in \'PAIR\' mode\n'
-                            '2. On the wheel, press \'STOP\' 6 times\n'
-                            '3. Allow wheel to connect to Base\n'
-                            '4. Wait until LCD says \'Click PAIR in App\'\n'
-                            '5. Click \'PAIR\' button\n'    
-                        ),     
-                      ],
-                    ),
+                    child: const Align(
+                      alignment: Alignment.centerLeft,
+                      child: MyText(
+                        fontsize: 14,
+                        color: Colors.grey,
+                        text:
+                          '1. Only 1 wheel at a time can be in \'PAIR\' mode\n'
+                          '2. On the wheel, press \'STOP\' 6 times\n'
+                          '3. Allow wheel to connect to Base\n'
+                          '4. Wait until LCD says \'Click PAIR in App\'\n'
+                          '5. Click \'PAIR\'\n',
+                      ),
+                     ),
                   ),
                   
                   // Monitor Info

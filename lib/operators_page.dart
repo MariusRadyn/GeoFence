@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:geofence/network_avatar.dart';
 import 'package:geofence/operator_edit_page.dart';
 import 'package:geofence/utils.dart';
 //import 'package:http/http.dart';
@@ -38,6 +40,26 @@ class OperatorsPageState extends State<OperatorsPage> {
 
 
   Widget getAvatar(String photoUrl, {double size = 48}) {
+    if (photoUrl.isEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size / 2),
+        child: Image.asset(
+          iconProfile,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+
+    // Web vs Android switch
+    if (kIsWeb) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size / 2),
+        child: NetworkAvatar(imageUrl: photoUrl, size: size),
+      );
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(size / 2),
       child: CachedNetworkImage(
@@ -56,7 +78,6 @@ class OperatorsPageState extends State<OperatorsPage> {
           color: const Color(0xFFEEEEEE),
           child: const Icon(Icons.person_outline),
         ),
-        // Optional: cache key override if you add versioning manually
       ),
     );
   }

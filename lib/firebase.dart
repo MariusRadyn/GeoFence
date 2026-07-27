@@ -14,10 +14,11 @@ FirebaseStorage fireStorageInstance = FirebaseStorage.instance;
 List<Reference> fireAllSongsRef = [];
 final gsis.GoogleSignIn googleSignIn = gsis.GoogleSignIn.instance;
 
-/// google_sign_in 7.x must be initialized once before use.
-/// On Android, [serverClientId] is read automatically from `google-services.json`
-/// (Gradle generates `default_web_client_id` — no need to duplicate it in Dart).
+/// google_sign_in 7.x must be initialized once before use on mobile/desktop.
+/// Web uses Firebase Auth [signInWithPopup] instead (no clientId / GIS needed).
+/// On Android, [serverClientId] is read automatically from `google-services.json`.
 Future<void> initializeGoogleSignIn() async {
+  if (kIsWeb) return;
   await googleSignIn.initialize();
 }
 
