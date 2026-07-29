@@ -42,8 +42,7 @@ class AppConfig {
   static bool get isReporting => flavor == AppFlavor.reporting;
 
   /// Product name shown in UI for this flavor.
-  static String get appTitle =>
-      isReporting ? 'Limitless Reports' : 'Limitless IoT';
+  static String get appTitle => 'Limitless IOT';
 
   // ---- Feature flags (reporting vs full) ----
 
@@ -63,7 +62,9 @@ class AppConfig {
   // ---- Web Features ----
   static bool get addTrackingHistory => isReporting;
   static bool get addWages => isReporting;
-  
+
+  /// BLE is Android/iOS only — never on web (not supported / not published).
+  static bool get enableBluetooth => !kIsWeb;
 
   /// Field / device services (MQTT, GPS background) only for full flavor.
   static bool get enableFieldServices => isFull;

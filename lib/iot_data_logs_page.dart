@@ -1,9 +1,10 @@
-
 //import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 //import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:geofence/network_avatar.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -62,7 +63,6 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
             ),
             content: Text(
               desc,
-              //"${DateFormat('yyyy-MM-dd – kk:mm').format(session['start_time'].toDate())}\n${vehicle}\n${reg}\n\nAre you sure?",
               style: const TextStyle(
                 color: Colors.grey,
                 fontSize: 18,
@@ -108,8 +108,44 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
     );
   }
 
+  Widget _monitorAppBarAvatar() {
+    final hasPhoto = widget.monitor.imageURL != null &&
+        widget.monitor.imageURL!.isNotEmpty;
+    if (kIsWeb) {
+      return hasPhoto
+          ? NetworkCircleAvatar(
+              imageUrl: widget.monitor.imageURL,
+              version: widget.monitor.imageFilename,
+              radius: 18,
+              backgroundColor: Colors.white,
+            )
+          : CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.white,
+              backgroundImage: getMonitorImage(widget.monitor),
+            );
+    }
+    final url = resolvedNetworkImageUrl(
+      widget.monitor.imageURL,
+      version: widget.monitor.imageFilename,
+    );
+    return CircleAvatar(
+      radius: 18,
+      backgroundColor: Colors.white,
+      backgroundImage: hasPhoto
+          ? CachedNetworkImageProvider(url) as ImageProvider
+          : getMonitorImage(widget.monitor),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hasPhoto = widget.monitor.imageURL != null &&
+        widget.monitor.imageURL!.isNotEmpty;
+    final imgUrl = widget.monitor.imageURL ?? '';
+    final imgFile = widget.monitor.imageFilename ?? '';
+    final displayUrl = resolvedNetworkImageUrl(imgUrl, version: imgFile);
+
     return Scaffold(
       backgroundColor: colorAppBackground,
       appBar: AppBar(
@@ -121,7 +157,6 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Profile Pic
               Padding(
                 padding: const EdgeInsets.only( right: 10, top: 2, bottom: 2),
                 child: Container(
@@ -130,7 +165,6 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                     border: Border.all(
                         color: Colors.white,
                         width: 0.5),
-                    // Clean white border
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black
@@ -140,50 +174,13 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                       ),
                     ],
                   ),
-                  child: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.white,
-                    backgroundImage: widget.monitor.imageURL != null && widget.monitor.imageURL!.isNotEmpty
-                        ? CachedNetworkImageProvider(widget.monitor.imageURL!)
-                        : getMonitorImage(widget.monitor),
-                  ),
+                  child: _monitorAppBarAvatar(),
                 ),
               ),
             ],
           ),
         ],
       ),
-      // body: Container(
-      //   color: colorAppBackground,
-      //   child:  ListView.builder(
-      //     itemCount: widget.snapshot.length,
-      //     itemBuilder: (context, index) {
-      //       var monitorData = widget.snapshot[index];
-      //       return Column(
-      //         children: [
-      //           MyTextTileWithEditDelete(
-      //             header: monitorData[fireIotTimestamp].toDate().toString(),
-      //             subtext: 'Operator: ${monitorData[fireIotOperator]}\nSupervisor: ${monitorData[fireIotSupervisor]}\nLines: ${monitorData[fireIotLines]}\nDistance: ${monitorData[fireIotDistance]} m',
-      //             headerColor: Colors.white,
-      //             textColor: Colors.white,
-      //             backgroundColor: colorAppBar,
-      //             onTapDelete: () {
-      //               _delete('${widget.monitor.monitorName}\n${monitorData[fireIotTimestamp].toDate().toString()}', widget.userDocId, widget.monitor.monDocId, monitorData.id);
-      //             },
-      //           ),
-      //         ],
-          // stream: 
-          // _firestore
-          //   .collection(collectionUsers).doc(FirebaseAuth.instance.currentUser?.uid)
-          //   .collection(collectionMonitors).doc(widget.monitor.monDocId)
-          //   .collection(collectionIotData)
-          //   .snapshots(),
-      // builder: (context, monitorSnapshot) {
-          //   if (monitorSnapshot.connectionState == ConnectionState.waiting ) {
-          //   return Center(child: MyProgressCircle());
-          // }
-           // var docs = monitorSnapshot.data!.docs;
-
       body: Container(
         color: colorAppBackground,
         child:  StreamBuilder<QuerySnapshot>(
@@ -212,17 +209,31 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                       String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(iotData.get(fireMonitorTimestamp)?.toDate() ?? DateTime.now());
                       String dist = (lines * (iotData.get(fireIotTicks) / widget.monitor.ticksPerM)).toStringAsFixed(2);
 
-                      // ignore: unused_local_variable
-                      String image;
-                      String img = widget.monitor.imageURL ?? '';
-                      img.isEmpty ? image = iconWheel : image = img;
-
                       return Column(
                         children: [
                           SizedBox(height: 20),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 8.0),
                             child: MySlidableTile(
+                              // Android: CachedNetworkImageProvider; Web: NetworkAvatar
+                              image: kIsWeb
+                                  ? null
+                                  : (hasPhoto
+                                      ? CachedNetworkImageProvider(displayUrl)
+                                          as ImageProvider
+                                      : getMonitorImage(widget.monitor)),
+                              imageWidget: kIsWeb
+                                  ? (hasPhoto
+                                      ? NetworkAvatar(
+                                          imageUrl: imgUrl,
+                                          version: imgFile,
+                                          size: 56,
+                                        )
+                                      : Image(
+                                          image: getMonitorImage(widget.monitor),
+                                          fit: BoxFit.cover,
+                                        ))
+                                  : null,
                               header: date,
                               subtext: 'Operator: $operatorName $operatorSurname\nSupervisor: $supervisorName $supervisorSurname\nLines: $lines\nDistance: $dist m',
                               onTapDelete: () {
@@ -233,7 +244,6 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                                   iotData.id
                                 );
                               },
-                         
                             ),
                           ),
                         ],

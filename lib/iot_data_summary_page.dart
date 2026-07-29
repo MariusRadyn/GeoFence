@@ -2,8 +2,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geofence/iot_data_logs_page.dart';
+import 'package:geofence/network_avatar.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
 //import 'trackingHistoryMap.dart';
@@ -35,6 +37,34 @@ class IotDataPageState extends State<IotDataPage> {
     return _firestore
         .collectionGroup(collectionIotData)
         .where(mqttJsonUserDocId, isEqualTo: uid)
+        .where(
+          fireIotTimestamp,
+          isGreaterThanOrEqualTo: Timestamp.fromDate(rangeStart),
+        )
+        .where(
+          fireIotTimestamp,
+          isLessThan: Timestamp.fromDate(rangeEndExclusive),
+        )
+        .orderBy(fireIotTimestamp, descending: true)
+        .snapshots();
+  }
+
+  /// Logs for one monitor only (used when opening [IotDataLogsPage]).
+  Stream<QuerySnapshot> _iotDataStreamForMonitor(
+    DateTime from,
+    DateTime to,
+    String monDocId,
+  ) {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    final DateTime rangeStart = _startOfDay(from);
+    final DateTime rangeEndExclusive = _endOfDayExclusive(to);
+
+    return _firestore
+        .collection(collectionUsers)
+        .doc(uid)
+        .collection(collectionMonitors)
+        .doc(monDocId)
+        .collection(collectionIotData)
         .where(
           fireIotTimestamp,
           isGreaterThanOrEqualTo: Timestamp.fromDate(rangeStart),
@@ -139,7 +169,8 @@ class IotDataPageState extends State<IotDataPage> {
           'totalDistance': 0.0,
           'totalLines': 0,
           'logCount': 0,
-          'image': monitor.imageURL  ?? ""
+                      'image': monitor.imageURL  ?? "",
+          'imageFilename': monitor.imageFilename ?? "",
         };
       }
 
@@ -161,6 +192,7 @@ class IotDataPageState extends State<IotDataPage> {
               itemBuilder: (context, index) {
                 var iotSummary = summaryList[index];
                 String image = iotSummary['image'] ?? "";
+                String imageFilename = iotSummary['imageFilename'] ?? "";
                 String monId = summaryWheel.keys.elementAt(index);
 
                 var actualMonitor = lstMonitorSettings.firstWhere(
@@ -168,14 +200,35 @@ class IotDataPageState extends State<IotDataPage> {
                     orElse: () => lstMonitorSettings.first // Fallback to first if not found
                 );
 
+                final displayUrl = resolvedNetworkImageUrl(
+                  image,
+                  version: imageFilename,
+                );
+
                 return Column(
                   children: [
                     SizedBox(height: 20),
 
                     MyTextTileWithEditDelete(
-                      image: image.isNotEmpty
-                          ? CachedNetworkImageProvider(image)
-                          : getMonitorImage(actualMonitor),
+                      // Android: CachedNetworkImageProvider; Web: NetworkAvatar
+                      image: kIsWeb
+                          ? null
+                          : (displayUrl.isNotEmpty
+                              ? CachedNetworkImageProvider(displayUrl)
+                                  as ImageProvider
+                              : getMonitorImage(actualMonitor)),
+                      imageWidget: kIsWeb
+                          ? (displayUrl.isNotEmpty
+                              ? NetworkAvatar(
+                                  imageUrl: image,
+                                  version: imageFilename,
+                                  size: 80,
+                                )
+                              : Image(
+                                  image: getMonitorImage(actualMonitor),
+                                  fit: BoxFit.cover,
+                                ))
+                          : null,
                       header: iotSummary['name'],
                       subtext:
                         'Logs: ${iotSummary['logCount']}\n'
@@ -190,8 +243,11 @@ class IotDataPageState extends State<IotDataPage> {
                           context,
                           MaterialPageRoute(builder: (context) => IotDataLogsPage(
                             monitor: actualMonitor,
-                            //snapshot: iotSummary['logs'].cast<QueryDocumentSnapshot>(),
-                            streamIotData: _iotDataStream(fromDate, toDate),
+                            streamIotData: _iotDataStreamForMonitor(
+                              fromDate,
+                              toDate,
+                              actualMonitor.monDocId,
+                            ),
                             userDocId: FirebaseAuth.instance.currentUser?.uid ,
                           )),
                         );

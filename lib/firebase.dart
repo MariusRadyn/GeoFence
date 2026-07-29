@@ -280,10 +280,25 @@ class FirebaseAuthService {
   }
   Future<bool> fireAuthResetPassword(BuildContext context, String email) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email);
+      final trimmed = email.trim();
+      await _auth.sendPasswordResetEmail(email: trimmed);
       return true;
     } on FirebaseAuthException catch (e) {
-      debugPrint("Firebase Error: ${e.code}");
+      debugPrint("Firebase Reset Error: ${e.code} ${e.message}");
+      final msg = switch (e.code) {
+        'user-not-found' =>
+          'No account found for this email. If you signed in with Google, use Google Sign-In instead.',
+        'invalid-email' => 'Invalid email address.',
+        'invalid-credential' =>
+          'No password account for this email. Try Google Sign-In.',
+        'too-many-requests' => 'Too many attempts. Wait a few minutes and try again.',
+        'network-request-failed' => 'Network error. Check your connection.',
+        _ => e.message ?? e.code,
+      };
+      MyGlobalMessage.show('Reset failed', msg, MyMessageType.error);
+      return false;
+    } catch (e) {
+      MyGlobalMessage.show('Reset failed', '$e', MyMessageType.error);
       return false;
     }
   }

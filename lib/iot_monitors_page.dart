@@ -3,10 +3,13 @@ import 'dart:convert';
 //import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
 //import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:geofence/app_flavor.dart';
 import 'package:geofence/iot_list_page.dart';
 import 'package:geofence/iot_monitors_types.dart';
+import 'package:geofence/network_avatar.dart';
 //import 'package:google_maps_flutter/google_maps_flutter.dart';
 //import 'package:http/http.dart' as http;
 //import 'dart:io';
@@ -60,7 +63,9 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _getBluetoothDevices();
+      if (AppConfig.enableBluetooth) {
+        _getBluetoothDevices();
+      }
     });
   }
 
@@ -409,6 +414,10 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     }
   }
   Future<void> _getBluetoothDevices() async {
+    if (!AppConfig.enableBluetooth) {
+      lstPairedDevices = [];
+      return;
+    }
     lstPairedDevices = await getBluetoothDevices();
   }
   void _saveMonitor(MonitorSettings monitor) async {
@@ -791,123 +800,152 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
               children: List.generate(monitors.lstMonitors.length, (index){
                 final monitor = monitors.lstMonitors[index];
 
-                      return ListView(
-                        controller: _scrollControllers[index],
-                        padding: const EdgeInsets.symmetric( vertical: 20, horizontal: 0),
-                        children: [
+                  return ListView(
+                    controller: _scrollControllers[index],
+                    padding: const EdgeInsets.symmetric( vertical: 20, horizontal: 0),
+                    children: [
 
-                          // Picture header Container
-                          Center(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.transparent,
-                                border: Border.all( color: Colors.transparent, width: 1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Stack(
-                                  children: [
+                      // Picture header Container
+                      Center(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            border: Border.all( color: Colors.transparent, width: 1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Stack(
+                              children: [
 
-                                    // iOT Monitor Picture
-                                    Center(
-                                      child: Container(
-                                        padding: const EdgeInsets.all(1), // border thickness
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue, // border color
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child:GestureDetector(
-                                          onTap: () async {
-                                            final (ProfilePicData? profilePic) = await Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => EditProfilePicPage(
-                                                  docId: monitor.monDocId,
-                                                  imageURL: monitor.imageURL,
-                                                  imageFilename: monitor.imageFilename,
-                                                  profileType: profileTypeOperator,
-                                                ),
-                                              ),
-                                            );
-                                            if(profilePic?.imageURL != null && profilePic!.update){
-                                              setState(() {
-                                                monitor.imageURL = profilePic.imageURL;
-                                                monitor.imageFilename = profilePic.imageFilename;
-
-                                              });
-                                              context.read<MonitorSettingsService>().save(monitor);
-                                            }
-                                          },
-                                          child: CircleAvatar(
-                                            radius: 55,
-                                            backgroundColor: Colors.transparent,
-                                            child: CircleAvatar(
-                                              radius: 55,
-                                              backgroundImage:  monitor.imageURL != null &&  monitor.imageURL!.isNotEmpty
-                                                  ? CachedNetworkImageProvider(monitor.imageURL!) as ImageProvider
-                                                  : getMonitorImage(monitor),
-
+                                // iOT Monitor Picture
+                                Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(1), // border thickness
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue, // border color
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child:GestureDetector(
+                                      onTap: () async {
+                                        final (ProfilePicData? profilePic) = await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => EditProfilePicPage(
+                                              docId: monitor.monDocId,
+                                              imageURL: monitor.imageURL,
+                                              imageFilename: monitor.imageFilename,
+                                              profileType: profileTypeOperator,
                                             ),
                                           ),
-                                        ),
-                                      )
+                                        );
+                                        if(profilePic?.imageURL != null && profilePic!.update){
+                                          setState(() {
+                                            monitor.imageURL = profilePic.imageURL;
+                                            monitor.imageFilename = profilePic.imageFilename;
+
+                                          });
+                                          context.read<MonitorSettingsService>().save(monitor);
+                                        }
+                                      },
+                                      child: Builder(
+                                        builder: (context) {
+                                          final hasPhoto = monitor.imageURL !=
+                                                  null &&
+                                              monitor.imageURL!.isNotEmpty;
+                                          // Web: HTML <img> (CORS). Android: CachedNetworkImage.
+                                          if (kIsWeb) {
+                                            return hasPhoto
+                                                ? NetworkCircleAvatar(
+                                                    imageUrl: monitor.imageURL,
+                                                    version:
+                                                        monitor.imageFilename,
+                                                    radius: 55,
+                                                    backgroundColor:
+                                                        Colors.transparent,
+                                                  )
+                                                : CircleAvatar(
+                                                    radius: 55,
+                                                    backgroundColor:
+                                                        Colors.transparent,
+                                                    backgroundImage:
+                                                        getMonitorImage(
+                                                            monitor),
+                                                  );
+                                          }
+                                          final displayUrl =
+                                              resolvedNetworkImageUrl(
+                                            monitor.imageURL,
+                                            version: monitor.imageFilename,
+                                          );
+                                          return CircleAvatar(
+                                            radius: 55,
+                                            backgroundColor: Colors.transparent,
+                                            backgroundImage: hasPhoto
+                                                ? CachedNetworkImageProvider(
+                                                    displayUrl,
+                                                  ) as ImageProvider
+                                                : getMonitorImage(monitor),
+                                          );
+                                        },
+                                      ),
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          SizedBox(height: 15),
-
-                          // Select Monitor Type
-                          GestureDetector(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                MyText(text: monitor.monitorType!, fontsize: 20),
-
-                                Icon(
-                                  Icons.arrow_drop_down,
-                                  color: Colors.white,
-                                  size: 30,
+                                  )
                                 ),
                               ],
                             ),
-                            onTap: () async {
-                              final selectedType = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                builder: (context) => IotListPage()
-                                ),
-                              );
-
-                              // Only update if the user actually picked something
-                              // (prevents errors if they hit the back button)
-                              if (selectedType != null && selectedType is String) {
-                                setState(() {
-                                  monitor.monitorType = selectedType;
-
-                                  // Optional: Save the change to your service/database immediately
-                                  context.read<MonitorSettingsService>().save(monitor);
-                                });
-                              }
-                            },
                           ),
+                        ),
+                      ),
 
-                          Padding(
-                            padding: const EdgeInsets.only(left: 10, right: 10, bottom: 10),
-                            child: Divider(color: Colors.blue,thickness: 1,),
-                          ),
+                      SizedBox(height: 15),
 
-                          //--------------------------------------------------------------
-                          // Monitor Types
-                          //--------------------------------------------------------------
-                          if(_tabKeys.isNotEmpty) _buildBody(monitor,_tabKeys[index])
-                        ],
-                      );
+                      // Select Monitor Type
+                      GestureDetector(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            MyText(text: monitor.monitorType!, fontsize: 20),
 
+                            Icon(
+                              Icons.arrow_drop_down,
+                              color: Colors.white,
+                              size: 30,
+                            ),
+                          ],
+                        ),
+                        onTap: () async {
+                          final selectedType = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                            builder: (context) => IotListPage()
+                            ),
+                          );
+
+                          // Only update if the user actually picked something
+                          // (prevents errors if they hit the back button)
+                          if (selectedType != null && selectedType is String) {
+                            setState(() {
+                              monitor.monitorType = selectedType;
+
+                              // Optional: Save the change to your service/database immediately
+                              context.read<MonitorSettingsService>().save(monitor);
+                            });
+                          }
+                        },
+                      ),
+
+                      Padding(
+                        padding: const EdgeInsets.only(left: 10, right: 10, bottom: 10),
+                        child: Divider(color: Colors.blue,thickness: 1,),
+                      ),
+
+                      //--------------------------------------------------------------
+                      // Monitor Types
+                      //--------------------------------------------------------------
+                      if(_tabKeys.isNotEmpty) _buildBody(monitor,_tabKeys[index])
+                    ],
+                  );
                 },
               ).toList(),
             ),

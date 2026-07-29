@@ -61,9 +61,30 @@ flutter run -d chrome --web-port=50000 --web-browser-flag="--user-data-dir=$PWD/
 # Or explicitly:
 flutter run -d chrome --dart-define=APP_FLAVOR=reporting --web-port=50000 --web-browser-flag="--user-data-dir=$PWD/.chrome-debug-profile"
 
-# Production build → output in build/web (host on Firebase Hosting, IIS, S3, etc.)
-flutter build web --dart-define=APP_FLAVOR=reporting
+# Production build → output in build/web
+flutter build web --release --dart-define=APP_FLAVOR=reporting --no-wasm-dry-run
+
+# Deploy to Firebase Hosting (project limitless-iot-17e8f)
+firebase use limitless-iot-17e8f
+firebase deploy --only hosting
 ```
+
+Live site: https://limitless-iot-17e8f.web.app
+
+### Custom domain (e.g. trinityglobal.co.za)
+
+Firebase Hosting custom domains are set in the Console (DNS must be edited at your registrar):
+
+1. Open [Firebase Hosting](https://console.firebase.google.com/project/limitless-iot-17e8f/hosting/sites) → **Add custom domain**.
+2. Enter `trinityglobal.co.za` (optionally also add `www.trinityglobal.co.za`).
+3. Add the **TXT** record Firebase shows (domain ownership).
+4. After Verify succeeds, add the **A** (and any **AAAA**) records Firebase shows — use exactly those IPs from the console.
+5. Wait for status **Connected** (SSL is automatic; can take minutes to 24h).
+6. Firebase Console → **Authentication → Settings → Authorized domains** → add:
+   - `trinityglobal.co.za`
+   - `www.trinityglobal.co.za` (if used)
+
+If DNS is on Cloudflare, set records to **DNS only** (grey cloud) until Firebase shows Connected, then you can re-enable proxy if desired.
 
 In Cursor: **Run and Debug** → **Reporting (Chrome)** → F5.
 

@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:geofence/app_flavor.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -98,7 +100,9 @@ class SettingsPageState extends State<SettingsPage> with TickerProviderStateMixi
     _tabControllerMain?.dispose();
     _tabControllerServers?.dispose();
 
-    FlutterBluePlus.stopScan();
+    if (!kIsWeb) {
+      FlutterBluePlus.stopScan();
+    }
 
     if (_didInitListeners) {
      //_settingsService.removeListener(_updateControllerValues);
@@ -231,6 +235,14 @@ class SettingsPageState extends State<SettingsPage> with TickerProviderStateMixi
     }
   }
   void connectBluetoothDevice(String mac) async {
+    if (!AppConfig.enableBluetooth) {
+      MyGlobalMessage.show(
+        'Bluetooth',
+        'Bluetooth is not available in the web app.',
+        MyMessageType.info,
+      );
+      return;
+    }
     FlutterBluePlus.startScan(timeout: Duration(seconds: 4));
     printDebugMsg("Connecting... Bluetooth $mac");
 

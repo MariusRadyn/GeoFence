@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 
@@ -195,6 +196,16 @@ const fireMonitorTimestamp = 'timestamp';
 const fireMonitorLastLogTimestamp = 'lastLogTimestamp';
 const fireMonitorMarkedToDelete = 'markedToDelete';
 
+/// Append a cache-buster so browsers / CachedNetworkImage pick up replaced photos.
+String resolvedNetworkImageUrl(String? url, {String? version}) {
+  final u = url?.trim() ?? '';
+  if (u.isEmpty) return u;
+  final v = version?.trim() ?? '';
+  if (v.isEmpty) return u;
+  final sep = u.contains('?') ? '&' : '?';
+  return '$u${sep}v=${Uri.encodeComponent(v)}';
+}
+
 // firebase - Iot Data
 const fireIotMonDocId = 'monDocId';
 const fireIotUserDocId = 'userDocId';
@@ -270,6 +281,9 @@ const mqttJsonUserDocId = "userDocId";
 const bluetoothServiceUuid = 'f3a1c2d0-6b4e-4e9a-9f3e-8d2f1c9b7a1e';
 const bluetoothCharUuid = 'c7b2e3f4-1a5d-4c3b-8e2f-9a6b1d8c2f3a';
 Future<List<BluetoothDevice>> getBluetoothDevices() async {
+  // BLE is not available on web — skip entirely when publishing/running web.
+  if (kIsWeb) return [];
+
   try {
     final statuses = await [
       Permission.bluetoothScan,
@@ -1252,6 +1266,8 @@ class MySlidableTile extends StatelessWidget {
   final String subtext;
   final VoidCallback? onTapDelete;
   final VoidCallback? onTapTile;
+  final ImageProvider<Object>? image;
+  final Widget? imageWidget;
 
   const MySlidableTile({
     super.key,
@@ -1259,13 +1275,37 @@ class MySlidableTile extends StatelessWidget {
     required this.subtext,
     this.onTapDelete,
     this.onTapTile,
+    this.image,
+    this.imageWidget,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Slidable(
-      //key: ValueKey(operator.docId),
+    const double imgSize = 56;
 
+    Widget? leading;
+    if (imageWidget != null) {
+      leading = ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: imgSize,
+          height: imgSize,
+          child: imageWidget,
+        ),
+      );
+    } else if (image != null) {
+      leading = ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image(
+          image: image!,
+          width: imgSize,
+          height: imgSize,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+
+    return Slidable(
       // This defines the actions that appear when swiping from right to left
       endActionPane: ActionPane(
         motion: const ScrollMotion(),
@@ -1303,8 +1343,12 @@ class MySlidableTile extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                         
-                // Operator name
+                if (leading != null) ...[
+                  leading,
+                  const SizedBox(width: 8),
+                ],
+
+                // Text
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2593,33 +2637,72 @@ class MonitorSettingsService extends ChangeNotifier {
   final List<MonitorSettings> _monitors = [];
   MonitorSettings? _selected;
   bool isLoading = true;
+  StreamSubscription<QuerySnapshot>? _monitorsSub;
+  StreamSubscription<User?>? _authSub;
   List<MonitorSettings> get lstMonitors => List.unmodifiable(_monitors);
+
+  MonitorSettingsService() {
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user == null) {
+        _monitorsSub?.cancel();
+        _monitorsSub = null;
+        _monitors.clear();
+        isLoading = false;
+        notifyListeners();
+      } else {
+        load();
+      }
+    });
+  }
 
   Future<void> load() async {
     isLoading = true;
-    String? uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    notifyListeners();
 
-    final snapshot = await FirebaseFirestore.instance
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      isLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    await _monitorsSub?.cancel();
+    _monitorsSub = FirebaseFirestore.instance
         .collection(collectionUsers)
         .doc(uid)
         .collection(collectionMonitors)
-        .get();
+        .snapshots()
+        .listen(
+      (snapshot) {
+        final list = snapshot.docs
+            .map((doc) => MonitorSettings.fromMap(doc.data(), doc.id, uid))
+            .where((m) => !m.markedToDelete)
+            .toList();
 
-    final list = snapshot.docs
-        .map((doc) => MonitorSettings.fromMap(doc.data(), doc.id, uid))
-        .where((m) => !m.markedToDelete)
-        .toList();
-
-    try {
-      setMonitors(list);
-    } catch (e) {
-      printDebugMsg(e.toString());
-    } finally {
-      isLoading = false;   // ✅ CLEAR HERE
-      notifyListeners();   // ✅ NOTIFY HERE
-    }
+        try {
+          setMonitors(list);
+        } catch (e) {
+          printDebugMsg(e.toString());
+        } finally {
+          isLoading = false;
+          notifyListeners();
+        }
+      },
+      onError: (e) {
+        printDebugMsg('Monitors listener error: $e');
+        isLoading = false;
+        notifyListeners();
+      },
+    );
   }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    _monitorsSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> save(MonitorSettings monitor, {bool showSavedMessage = true}) async{
     try{
       final uid = FirebaseAuth.instance.currentUser?.uid;

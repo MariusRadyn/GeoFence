@@ -1,11 +1,11 @@
 {
-    "name": "Limitless Reports",
-    "short_name": "Reports",
+    "name": "Limitless IOT",
+    "short_name": "Limitless IOT",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Limitless IoT reports and tracking summaries",
+    "description": "Limitless IOT reports and tracking summaries",
     "orientation": "any",
     "prefer_related_applications": false,
     "icons": [

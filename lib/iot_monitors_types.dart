@@ -2,6 +2,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:geofence/app_flavor.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 
@@ -99,111 +100,113 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
 
         SizedBox(height: 5),
 
-        // Help text
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          child: Text('Use bluetooth connection in the monitor to get monitor ID. '
-              'Select which bluetooth connection to use in the monitor. '
-              'If the list is empty you need to pair to a bluetooth device first. '
-              'The list is of paired devices, NOT connected devices ',
-            softWrap: true,
-            style: TextStyle(
-                fontSize: 12,
-                color: Colors.white
-            ),
-          ),
-        ),
-
-        SizedBox(height: 10),
-
-        // Test Bluetooth
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15.0),
-          child: GestureDetector(
-            child: Text("Test Bluetooth Connection",
+        if (AppConfig.enableBluetooth) ...[
+          // Help text
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            child: Text('Use bluetooth connection in the monitor to get monitor ID. '
+                'Select which bluetooth connection to use in the monitor. '
+                'If the list is empty you need to pair to a bluetooth device first. '
+                'The list is of paired devices, NOT connected devices ',
+              softWrap: true,
               style: TextStyle(
-                color: Colors.blue,
-                fontSize: 14,
+                  fontSize: 12,
+                  color: Colors.white
               ),
             ),
-
-            onTap: (){
-              //testBluetooth();
-            },
           ),
-        ),
 
-        SizedBox(height: 5),
+          SizedBox(height: 10),
 
-        // Select Bluetooth
-        Padding( padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 20),
-          child: Theme(
-            data: Theme.of(context).copyWith(canvasColor: colorAppTitle),
-            child: DropdownButtonFormField<BluetoothDevice>(
-              initialValue: (() {
-
-                // Find the matching paired device
-                return widget.lstPairedDevices.firstWhereOrNull(
-                      (d) => d.remoteId.toString() == widget.monitorData.bluetoothMac,
-                );
-              })(),
-
-              style: TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                isDense: false,
-                labelText: 'Select Bluetooth',
-                labelStyle: TextStyle(color: Colors.grey),
-                fillColor: colorAppBackground,
-                filled: true,
-                prefixIcon: const Icon(
-                  Icons.bluetooth,
-                  color: Colors.blueAccent,
+          // Test Bluetooth
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 15.0),
+            child: GestureDetector(
+              child: Text("Test Bluetooth Connection",
+                style: TextStyle(
+                  color: Colors.blue,
+                  fontSize: 14,
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.grey),
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey),
-                ),
-                //contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
               ),
-              hint: Text(widget.lstPairedDevices.isEmpty ? 'No paired devices' : 'Choose a paired device',
-                style: TextStyle(color: Colors.grey),
-              ),
-              items: widget.lstPairedDevices.map((BluetoothDevice device) {
-                return DropdownMenuItem<BluetoothDevice>(
-                  value: device,
-                  child: Row(
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            device.platformName.isNotEmpty
-                                ? device.platformName
-                                : 'Unknown Device',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+
+              onTap: (){
+                //testBluetooth();
+              },
+            ),
+          ),
+
+          SizedBox(height: 5),
+
+          // Select Bluetooth
+          Padding( padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 20),
+            child: Theme(
+              data: Theme.of(context).copyWith(canvasColor: colorAppTitle),
+              child: DropdownButtonFormField<BluetoothDevice>(
+                initialValue: (() {
+
+                  // Find the matching paired device
+                  return widget.lstPairedDevices.firstWhereOrNull(
+                        (d) => d.remoteId.toString() == widget.monitorData.bluetoothMac,
+                  );
+                })(),
+
+                style: TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  isDense: false,
+                  labelText: 'Select Bluetooth',
+                  labelStyle: TextStyle(color: Colors.grey),
+                  fillColor: colorAppBackground,
+                  filled: true,
+                  prefixIcon: const Icon(
+                    Icons.bluetooth,
+                    color: Colors.blueAccent,
                   ),
-                );
-              }).toList(),
-              onChanged: widget.onChangedBluetooth,
-              isExpanded: true,
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey),
+                  ),
+                  //contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                ),
+                hint: Text(widget.lstPairedDevices.isEmpty ? 'No paired devices' : 'Choose a paired device',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                items: widget.lstPairedDevices.map((BluetoothDevice device) {
+                  return DropdownMenuItem<BluetoothDevice>(
+                    value: device,
+                    child: Row(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              device.platformName.isNotEmpty
+                                  ? device.platformName
+                                  : 'Unknown Device',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: widget.onChangedBluetooth,
+                isExpanded: true,
+              ),
             ),
           ),
-        ),
+        ],
 
       ],
     );

@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "geofence-23924"
+    "default": "limitless-iot-17e8f",
+    "limitless": "limitless-iot-17e8f",
+    "geofence": "geofence-23924"
   }
 }

@@ -13,27 +13,76 @@ Widget buildWebNetworkImage({
   required double height,
   required BoxFit fit,
 }) {
-  final viewType =
-      'geofence-img-${url.hashCode}-${width.toInt()}-${height.toInt()}';
-
-  // Safe to re-register; last factory for this viewType wins.
-  ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
-    final img = html.ImageElement()
-      ..src = url
-      ..draggable = false
-      ..style.border = 'none'
-      ..style.width = '100%'
-      ..style.height = '100%'
-      ..style.objectFit = _cssObjectFit(fit)
-      ..style.display = 'block';
-    return img;
-  });
-
-  return SizedBox(
+  return _WebNetworkImage(
+    key: ValueKey(url),
+    url: url,
     width: width,
     height: height,
-    child: HtmlElementView(viewType: viewType),
+    fit: fit,
   );
+}
+
+class _WebNetworkImage extends StatefulWidget {
+  final String url;
+  final double width;
+  final double height;
+  final BoxFit fit;
+
+  const _WebNetworkImage({
+    super.key,
+    required this.url,
+    required this.width,
+    required this.height,
+    required this.fit,
+  });
+
+  @override
+  State<_WebNetworkImage> createState() => _WebNetworkImageState();
+}
+
+class _WebNetworkImageState extends State<_WebNetworkImage> {
+  late final String _viewType;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewType =
+        'geofence-img-${widget.url.hashCode}-${widget.width.toInt()}-${widget.height.toInt()}-${DateTime.now().microsecondsSinceEpoch}';
+    _register();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WebNetworkImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // URL change is handled by parent Key forcing a new State.
+  }
+
+  void _register() {
+    ui_web.platformViewRegistry.registerViewFactory(_viewType, (int viewId) {
+      final img = html.ImageElement()
+        ..src = widget.url
+        ..draggable = false
+        ..style.border = 'none'
+        ..style.width = '100%'
+        ..style.height = '100%'
+        ..style.objectFit = _cssObjectFit(widget.fit)
+        ..style.display = 'block';
+      return img;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      key: ValueKey(widget.url),
+      width: widget.width,
+      height: widget.height,
+      child: HtmlElementView(
+        key: ValueKey('html-${widget.url}'),
+        viewType: _viewType,
+      ),
+    );
+  }
 }
 
 String _cssObjectFit(BoxFit fit) {

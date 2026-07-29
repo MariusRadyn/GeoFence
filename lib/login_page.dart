@@ -269,29 +269,27 @@ class LoginPageState extends State<LoginPage> {
   }
   Future<bool> _resetPasswordWithEmail() async {
     UserDataService userService = context.read<UserDataService>();
+    final email = _emailController.text.trim();
 
-    if (_emailController.text.isEmpty) {
+    if (email.isEmpty) {
       MyGlobalMessage.show("Info", 'Please enter email address.', MyMessageType.info);
       return false;
     }
-    if (!_emailController.text.contains('@')) {
+    if (!email.contains('@')) {
       MyGlobalMessage.show("Info", 'Please enter a valid email address.', MyMessageType.info);
       return false;
     }
 
     try {
-      if(await firebaseAuthService.fireAuthResetPassword(context, _emailController.text)) {
-        if(userService.userdata != null){
+      if (await firebaseAuthService.fireAuthResetPassword(context, email)) {
+        if (userService.userdata != null) {
           userService.isUserLoggedIn = false;
         }
-        printDebugMsg('Password Reset');
+        printDebugMsg('Password Reset email requested for $email');
         return true;
       }
-      else {
-        MyGlobalMessage.show("Error", 'Failed to reset password', MyMessageType.error);
-        return false;
-      }
-
+      // fireAuthResetPassword already showed the Firebase error
+      return false;
     } catch (e) {
       MyGlobalMessage.show("Error", '$e', MyMessageType.error);
       return false;
@@ -626,10 +624,16 @@ class LoginPageState extends State<LoginPage> {
 
                       GestureDetector(
                         onTap: () async {
-                          if(await _resetPasswordWithEmail()){
-                            MyGlobalMessage.show("Check email", "Please check your email and follow the instructions", MyMessageType.info);
+                          if (await _resetPasswordWithEmail()) {
+                            MyGlobalMessage.show(
+                              "Check email",
+                              "If an email/password account exists for that address, "
+                              "We sent a reset link.\n\n"
+                              "Check spam/junk.\n"
+                              "If you only ever used Google Sign-In, there is no password to reset — use Google.",
+                              MyMessageType.info,
+                            );
                           }
-                          //Navigator.of(context).pop();
                         },
                         child: const Text(
                           "Reset",

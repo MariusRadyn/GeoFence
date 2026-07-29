@@ -3,8 +3,10 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:geofence/app_flavor.dart';
 import 'package:geofence/mqtt_service.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
@@ -63,7 +65,9 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
   @override
   void initState() {
     super.initState();
-    _getBluetoothDevices();
+    if (AppConfig.enableBluetooth) {
+      _getBluetoothDevices();
+    }
     _mqttStartListener();
     _initTts();
 
@@ -101,7 +105,9 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
     _tabController?.dispose();
     _mqttSubscription?.cancel();
 
-    FlutterBluePlus.stopScan();
+    if (!kIsWeb) {
+      FlutterBluePlus.stopScan();
+    }
     super.dispose();
   }
 
@@ -372,6 +378,10 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
     });
   }
   Future<void> _getBluetoothDevices() async {
+      if (!AppConfig.enableBluetooth) {
+        lstPairedBtDevices = [];
+        return;
+      }
       lstPairedBtDevices = await getBluetoothDevices();
 
       if(debug){
@@ -386,6 +396,14 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
       }
   }
   void _showBluetoothDevicesPopup(BaseStationData base) {
+    if (!AppConfig.enableBluetooth) {
+      MyGlobalMessage.show(
+        'Bluetooth',
+        'Bluetooth is not available in the web app. Enter the base ID manually, or use the Android app to pair.',
+        MyMessageType.info,
+      );
+      return;
+    }
     showDialog(
       context: context,
       barrierDismissible: true, // tap outside to close
@@ -679,38 +697,39 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                                   children: [
                                     Expanded(
                                       child: MyTextFormField(
-                                        isReadOnly: true,
+                                        isReadOnly: AppConfig.enableBluetooth,
                                         backgroundColor: colorAppBackground,
                                         foregroundColor: Colors.white,
                                         controller: controllerBluetooth,
                                         hintText: "Bluetooth Identification",
                                         labelText: "Identification",
-
                                         onFieldSubmitted: (value){
-
+                                          currentBase.bluetoothName = value;
+                                          _saveBase(currentBase);
                                         },
                                       ),
                                     ),
 
-                                    SizedBox(width: 10),
-
-                                    // Bluetooth Button
-                                    OutlinedButton(
-                                        style: OutlinedButton.styleFrom(
-                                          side: BorderSide(color: Colors.blue, width: 2),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(8),
+                                    if (AppConfig.enableBluetooth) ...[
+                                      SizedBox(width: 10),
+                                      // Bluetooth Button
+                                      OutlinedButton(
+                                          style: OutlinedButton.styleFrom(
+                                            side: BorderSide(color: Colors.blue, width: 2),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
                                           ),
+                                          onPressed: (){
+                                            oldBaseBluetoothId = currentBase.bluetoothName;
+                                            _showBluetoothDevicesPopup(currentBase);
+                                          },
+                                        child: Icon(
+                                          Icons.bluetooth,color:
+                                          Colors.lightBlueAccent
                                         ),
-                                        onPressed: (){
-                                          oldBaseBluetoothId = currentBase.bluetoothName;
-                                          _showBluetoothDevicesPopup(currentBase);
-                                        },
-                                      child: Icon(
-                                        Icons.bluetooth,color:
-                                        Colors.lightBlueAccent
                                       ),
-                                    )
+                                    ],
                                   ],
                                 ),
                               ),
