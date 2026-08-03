@@ -1,0 +1,734 @@
+import 'dart:typed_data';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:geofence/network_avatar.dart';
+import 'package:geofence/shop_page.dart';
+import 'package:geofence/utils.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+
+/// Developer-only catalog admin for Firestore `shop_products`.
+class ShopSetupPage extends StatelessWidget {
+  const ShopSetupPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: colorAppBackground,
+      appBar: AppBar(
+        backgroundColor: colorAppBar,
+        foregroundColor: Colors.white,
+        title: myAppbarTitle('Setup Shop'),
+      ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'seedShop',
+            backgroundColor: colorTileLight,
+            foregroundColor: Colors.white,
+            onPressed: () async {
+              try {
+                final n = await context
+                    .read<ShopCatalogService>()
+                    .seedDefaults(force: false);
+                if (!context.mounted) return;
+                MyGlobalSnackBar.show(
+                  n == 0
+                      ? 'Shop already has items'
+                      : 'Seeded $n demo products to Firestore',
+                );
+              } catch (e) {
+                MyGlobalSnackBar.show('Seed failed: $e');
+              }
+            },
+            icon: const Icon(Icons.cloud_upload_outlined),
+            label: const Text('Seed demo'),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'addShop',
+            backgroundColor: colorOrange,
+            foregroundColor: Colors.white,
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ShopProductEditPage(),
+                ),
+              );
+            },
+            child: const Icon(Icons.add),
+          ),
+        ],
+      ),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection(collectionShopProducts)
+            .orderBy('name')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            // Fallback without orderBy if index/rules block it.
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection(collectionShopProducts)
+                  .snapshots(),
+              builder: (context, snap2) {
+                if (snap2.hasError) {
+                  return Center(
+                    child: MyText(
+                      text: 'Could not load shop items:\n${snap2.error}',
+                      color: Colors.grey,
+                    ),
+                  );
+                }
+                if (!snap2.hasData) {
+                  return Center(child: myProgressCircle());
+                }
+                return _ProductList(docs: snap2.data!.docs);
+              },
+            );
+          }
+          if (!snapshot.hasData) {
+            return Center(child: myProgressCircle());
+          }
+          return _ProductList(docs: snapshot.data!.docs);
+        },
+      ),
+    );
+  }
+}
+
+class _ProductList extends StatelessWidget {
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+
+  const _ProductList({required this.docs});
+
+  @override
+  Widget build(BuildContext context) {
+    if (docs.isEmpty) {
+      return const Center(
+        child: MyText(
+          text: 'No shop items yet.\nTap + to add one.',
+          color: Colors.grey,
+        ),
+      );
+    }
+
+    final money = NumberFormat.currency(locale: 'en_ZA', symbol: 'R');
+    final products = docs
+        .map((d) => ShopProduct.fromMap(d.data(), d.id))
+        .toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+      itemCount: products.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final product = products[index];
+        return Material(
+          color: colorAppBar,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ShopProductEditPage(product: product),
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: ColoredBox(
+                      color: colorAppBar,
+                      child: SizedBox(
+                        width: 64,
+                        height: 64,
+                        child: product.primaryImageUrl != null
+                            ? NetworkAvatar(
+                                imageUrl: product.primaryImageUrl,
+                                size: 64,
+                                fit: BoxFit.cover,
+                                fallbackAsset: iconShopNoImage,
+                              )
+                            : Image.asset(
+                                iconShopNoImage,
+                                fit: BoxFit.contain,
+                              ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          product.description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${money.format(product.salePrice)}'
+                          '${product.discount > 0 ? ' · ${product.discount.round()}% off' : ''}'
+                          '${product.active ? '' : ' · inactive'}',
+                          style: TextStyle(
+                            color: product.active ? colorOrange : Colors.grey,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Colors.white38),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class ShopProductEditPage extends StatefulWidget {
+  final ShopProduct? product;
+
+  const ShopProductEditPage({super.key, this.product});
+
+  @override
+  State<ShopProductEditPage> createState() => _ShopProductEditPageState();
+}
+
+class _ShopProductEditPageState extends State<ShopProductEditPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _priceController = TextEditingController();
+  final _discountController = TextEditingController();
+  final _categoryController = TextEditingController();
+  final _picker = ImagePicker();
+
+  late String _docId;
+  final List<String> _imageUrls = [];
+  final List<Uint8List> _pendingBytes = [];
+  bool _active = true;
+  bool _freeDelivery = true;
+  bool _saving = false;
+
+  bool get _isEditing => widget.product != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.product;
+    _docId = p?.id.isNotEmpty == true
+        ? p!.id
+        : FirebaseFirestore.instance.collection(collectionShopProducts).doc().id;
+
+    if (p != null) {
+      _nameController.text = p.name;
+      _descriptionController.text = p.description;
+      // Always the catalog price from Firestore (unchanged by discount).
+      _priceController.text = p.price > 0 ? p.price.toStringAsFixed(2) : '';
+      _discountController.text =
+          p.discount > 0 ? p.discount.toStringAsFixed(0) : '';
+      _categoryController.text = p.category;
+      _imageUrls.addAll(p.imageUrls);
+      _active = p.active;
+      _freeDelivery = p.freeDelivery;
+    } else {
+      _categoryController.text = 'Hardware';
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _priceController.dispose();
+    _discountController.dispose();
+    _categoryController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final files = await _picker.pickMultiImage(
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+      if (files.isEmpty) return;
+      for (final file in files) {
+        final bytes = await file.readAsBytes();
+        _pendingBytes.add(bytes);
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      MyGlobalSnackBar.show('Gallery error: $e');
+    }
+  }
+
+  Future<void> _pickFromCamera() async {
+    try {
+      if (kIsWeb) {
+        await _pickFromGallery();
+        return;
+      }
+      final file = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      setState(() => _pendingBytes.add(bytes));
+    } catch (e) {
+      MyGlobalSnackBar.show('Camera error: $e');
+    }
+  }
+
+  Future<List<String>> _uploadPendingImages() async {
+    final uploaded = <String>[];
+    for (final bytes in _pendingBytes) {
+      final name = 'Image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child(collectionShopProducts)
+          .child(_docId)
+          .child(name);
+      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      uploaded.add(await ref.getDownloadURL());
+    }
+    return uploaded;
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final name = _nameController.text.trim();
+    final description = _descriptionController.text.trim();
+    final price = double.tryParse(_priceController.text.trim()) ?? 0;
+    final discount = double.tryParse(_discountController.text.trim()) ?? 0;
+    if (discount < 0 || discount >= 100) {
+      MyGlobalSnackBar.show('Discount must be between 0 and 99');
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final newUrls = await _uploadPendingImages();
+      final allUrls = [..._imageUrls, ...newUrls];
+
+      // Keep catalog [price] intact in Firestore. Discount is separate;
+      // sale price is computed in the app when discount > 0.
+      final product = ShopProduct(
+        id: _docId,
+        name: name,
+        description: description,
+        price: price,
+        discount: discount,
+        imageUrl: allUrls.isNotEmpty ? allUrls.first : null,
+        imageUrls: allUrls,
+        category: _categoryController.text.trim().isEmpty
+            ? 'General'
+            : _categoryController.text.trim(),
+        freeDelivery: _freeDelivery,
+        active: _active,
+      );
+
+      await FirebaseFirestore.instance
+          .collection(collectionShopProducts)
+          .doc(_docId)
+          .set({
+        ...product.toMap(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (!_isEditing) 'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (!mounted) return;
+      MyGlobalSnackBar.show('Shop item saved');
+      Navigator.pop(context);
+    } catch (e) {
+      MyGlobalSnackBar.show('Save failed: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _delete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colorAppTitle,
+        title: const MyText(text: 'Delete item?', color: Colors.white),
+        content: const MyText(
+          text: 'This removes the product from the shop catalog.',
+          color: Colors.grey,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const MyText(text: 'Cancel', color: Colors.white70),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const MyText(text: 'Delete', color: Colors.redAccent),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _saving = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection(collectionShopProducts)
+          .doc(_docId)
+          .delete();
+      if (!mounted) return;
+      MyGlobalSnackBar.show('Item deleted');
+      Navigator.pop(context);
+    } catch (e) {
+      MyGlobalSnackBar.show('Delete failed: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalImages = _imageUrls.length + _pendingBytes.length;
+
+    return Scaffold(
+      backgroundColor: colorAppBackground,
+      appBar: AppBar(
+        backgroundColor: colorAppBar,
+        foregroundColor: Colors.white,
+        title: myAppbarTitle(_isEditing ? 'Edit Shop Item' : 'Add Shop Item'),
+        actions: [
+          if (_isEditing)
+            IconButton(
+              tooltip: 'Delete',
+              onPressed: _saving ? null : _delete,
+              icon: const Icon(Icons.delete_outline),
+            ),
+        ],
+      ),
+      body: _saving
+          ? Center(child: myProgressCircle())
+          : Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                children: [
+                  const MyText(
+                    text: 'Photos',
+                    fontsize: 14,
+                    color: Colors.white70,
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 96,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        ...List.generate(_imageUrls.length, (i) {
+                          return _ImageThumb(
+                            url: _imageUrls[i],
+                            onRemove: () =>
+                                setState(() => _imageUrls.removeAt(i)),
+                          );
+                        }),
+                        ...List.generate(_pendingBytes.length, (i) {
+                          return _ImageThumb(
+                            bytes: _pendingBytes[i],
+                            onRemove: () =>
+                                setState(() => _pendingBytes.removeAt(i)),
+                          );
+                        }),
+                        _AddPhotoButton(
+                          label: 'Gallery',
+                          icon: Icons.photo_library_outlined,
+                          onTap: _pickFromGallery,
+                        ),
+                        _AddPhotoButton(
+                          label: kIsWeb ? 'Files' : 'Camera',
+                          icon: kIsWeb
+                              ? Icons.upload_file
+                              : Icons.photo_camera_outlined,
+                          onTap: _pickFromCamera,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, bottom: 14),
+                    child: Text(
+                      totalImages == 0
+                          ? 'Add one or more photos'
+                          : '$totalImages photo${totalImages == 1 ? '' : 's'}',
+                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  ),
+
+                  MyTextFormField(
+                    controller: _nameController,
+                    labelText: 'Item name',
+                    hintText: 'e.g. Distance Wheel',
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _descriptionController,
+                    maxLines: 4,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontFamily: 'Poppins',
+                    ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: colorAppBar,
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      alignLabelWithHint: true,
+                      labelText: 'Description',
+                      labelStyle: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 18,
+                        fontFamily: 'Poppins',
+                      ),
+                      hintText: 'Short product description',
+                      hintStyle: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 14,
+                        fontFamily: 'Poppins',
+                      ),
+                      contentPadding: EdgeInsets.fromLTRB(12, 20, 12, 12),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.blue),
+                      ),
+                      border: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  MyTextFormField(
+                    controller: _priceController,
+                    labelText: 'Price (ZAR)',
+                    hintText: 'Catalog price (not changed by discount)',
+                    inputType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
+                    validator: (v) {
+                      final n = double.tryParse(v?.trim() ?? '');
+                      if (n == null || n < 0) return 'Enter a valid price';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  MyTextFormField(
+                    controller: _discountController,
+                    labelText: 'Discount (%)',
+                    hintText: 'e.g. 20 — set 0 when special ends',
+                    inputType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return null;
+                      final n = double.tryParse(v.trim());
+                      if (n == null || n < 0 || n >= 100) {
+                        return 'Use 0–99';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  MyTextFormField(
+                    controller: _categoryController,
+                    labelText: 'Category',
+                    hintText: 'Hardware / Kits / Services',
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const MyText(text: 'Active in shop'),
+                    value: _active,
+                    activeThumbColor: colorOrange,
+                    onChanged: (v) => setState(() => _active = v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const MyText(text: 'Free delivery'),
+                    value: _freeDelivery,
+                    activeThumbColor: colorOrange,
+                    onChanged: (v) => setState(() => _freeDelivery = v),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colorOrange,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: _save,
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+class _ImageThumb extends StatelessWidget {
+  final String? url;
+  final Uint8List? bytes;
+  final VoidCallback onRemove;
+
+  const _ImageThumb({
+    this.url,
+    this.bytes,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: ColoredBox(
+              color: Colors.white,
+              child: SizedBox(
+                width: 88,
+                height: 88,
+                child: bytes != null
+                    ? Image.memory(bytes!, fit: BoxFit.cover)
+                    : NetworkAvatar(
+                        imageUrl: url,
+                        size: 88,
+                        fit: BoxFit.cover,
+                        fallbackAsset: iconShopNoImage,
+                      ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 2,
+            top: 2,
+            child: Material(
+              color: Colors.black54,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onRemove,
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close, size: 14, color: Colors.white),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddPhotoButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _AddPhotoButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 88,
+          height: 88,
+          decoration: BoxDecoration(
+            color: colorAppBar,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: colorOrange),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -1,12 +1,10 @@
 
-//import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-//import 'package:geofence/iot_data_logs_page.dart';
 import 'package:geofence/utils.dart';
+import 'package:geofence/wages_excel_export.dart';
 import 'package:geofence/wages_logs_page.dart';
-//import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 class WagesPage extends StatefulWidget {
@@ -16,11 +14,13 @@ class WagesPage extends StatefulWidget {
   State<WagesPage> createState() => WagesPageState();
 }
 
-class WagesPageState extends State<WagesPage> {
+class WagesPageState extends State<WagesPage> with SingleTickerProviderStateMixin {
   late SettingsService settings;
   late OperatorService operators;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+  late final TabController _tabController;
+  bool _exporting = false;
+
   DateTime _selectedDateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _selectedDateTo = DateTime.now();
 
@@ -28,7 +28,8 @@ class WagesPageState extends State<WagesPage> {
       DateTime(date.year, date.month, date.day);
   DateTime _endOfDayExclusive(DateTime date) =>
       _startOfDay(date).add(const Duration(days: 1));
-  Stream<QuerySnapshot> _iotDataStream(DateTime from, DateTime to) {
+
+  Query<Map<String, dynamic>> _iotDataQuery(DateTime from, DateTime to) {
     final String? uid = FirebaseAuth.instance.currentUser?.uid;
     final DateTime rangeStart = _startOfDay(from);
     final DateTime rangeEndExclusive = _endOfDayExclusive(to);
@@ -44,9 +45,11 @@ class WagesPageState extends State<WagesPage> {
           fireIotTimestamp,
           isLessThan: Timestamp.fromDate(rangeEndExclusive),
         )
-        .orderBy(fireIotTimestamp, descending: true)
-        .snapshots();
+        .orderBy(fireIotTimestamp, descending: true);
   }
+
+  Stream<QuerySnapshot> _iotDataStream(DateTime from, DateTime to) =>
+      _iotDataQuery(from, to).snapshots();
 
   // Summaries
   Map<String, Map<String, dynamic>> summaryWages = {};
@@ -54,7 +57,14 @@ class WagesPageState extends State<WagesPage> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _loadSavedDateRange();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSavedDateRange() async {
@@ -119,6 +129,69 @@ class WagesPageState extends State<WagesPage> {
     }
   }
 
+  Future<void> _exportWagesExcel() async {
+    if (_exporting) return;
+
+    final DateTime today = DateTime.now();
+    late final DateTime from;
+    late final DateTime to;
+    switch (_tabController.index) {
+      case 0:
+        from = today;
+        to = today;
+      case 1:
+        from = DateTime(today.year, today.month, 1);
+        to = today;
+      default:
+        from = _selectedDateFrom;
+        to = _selectedDateTo;
+    }
+
+    setState(() => _exporting = true);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final snapshot = await _iotDataQuery(from, to).get();
+      if (!mounted) return;
+
+      if (snapshot.docs.isEmpty) {
+        MyGlobalSnackBar.show('No wage data to export');
+        return;
+      }
+
+      final savedTo = await WagesExcelExport.exportAndShare(
+        from: from,
+        to: to,
+        docs: snapshot.docs,
+        operators: operators,
+        monitors: context.read<MonitorSettingsService>(),
+      );
+
+      if (!mounted) return;
+      if (savedTo == null) {
+        MyGlobalSnackBar.show('No wage data to export');
+        return;
+      }
+      MyGlobalSnackBar.show('Saved to $savedTo');
+    } catch (e) {
+      if (!mounted) return;
+      MyGlobalMessage.show(
+        'Export Failed',
+        '$e',
+        MyMessageType.error,
+      );
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() => _exporting = false);
+      }
+    }
+  }
+
   // Summaries
   void createSummaryWages(QueryDocumentSnapshot doc, MonitorSettings monitor) {
     double dist = 0.0;
@@ -126,7 +199,9 @@ class WagesPageState extends State<WagesPage> {
     num ticks = 0;
     double total = 0;
 
-    final operator = operators.getOperatorById(doc.get(fireIotOperatorDocId) ?? '');
+    final operator = operators.getOperatorById(
+      '${doc.get(fireIotOperatorDocId) ?? ''}',
+    );
 
     try {
       lines = doc.get(fireIotLines) ?? 0;
@@ -152,7 +227,6 @@ class WagesPageState extends State<WagesPage> {
     summaryWages[monitor.monitorType!]!['totalDistance'] += dist;
     summaryWages[monitor.monitorType!]!['cost'] += total;
   }
-
 
   Widget _buildWheelWages(List<MonitorSettings> lstMonitorSettings,DateTime fromDate, DateTime toDate){
   
@@ -276,7 +350,7 @@ class WagesPageState extends State<WagesPage> {
     // Create Summary
     summaryWages.clear();
     for (var doc in iotSnapshot.data!.docs) {
-      String monId = doc.get(fireIotMonDocId);
+      String monId = '${doc.get(fireIotMonDocId) ?? ''}';
 
       MonitorSettings? monitor;
       try {
@@ -303,76 +377,92 @@ class WagesPageState extends State<WagesPage> {
   Widget build(BuildContext context) {
     final DateTime today = DateTime.now();
 
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              myAppbarTitle('Wages'),
-              MyText(text: DateTime.now().toLocal().toString().split(' ')[0]),
-            ],
-          ),
-          backgroundColor: colorAppBar,
-          foregroundColor: Colors.white,
-          bottom: TabBar(
-              labelColor: Colors.white,
-              indicatorColor: Colors.blue,
-              unselectedLabelColor: Colors.grey,
-              tabs: [
-                Tab(text: "Today"),
-                Tab(text: "Month"),
-                Tab(text: "By Date"),
-              ]
-          ),
-        ),
-        body: TabBarView(
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            myAppbarTitle('Wages'),
+            MyText(text: DateTime.now().toLocal().toString().split(' ')[0]),
+          ],
+        ),
+        backgroundColor: colorAppBar,
+        foregroundColor: Colors.white,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white,
+          indicatorColor: Colors.blue,
+          unselectedLabelColor: Colors.grey,
+          tabs: const [
+            Tab(text: "Today"),
+            Tab(text: "Month"),
+            Tab(text: "By Date"),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: colorOrange,
+        foregroundColor: Colors.white,
+        onPressed: _exporting ? null : _exportWagesExcel,
+        icon: const Icon(Icons.file_download),
+        label: const Text('Export Excel'),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          // Today
+          Container(
+            color: colorAppBackground,
+            child: StreamBuilder<QuerySnapshot>(
+              key: const ValueKey('iot-data-today'),
+              stream: _iotDataStream(today, today),
+              builder: (context, iotSnapshot) =>
+                  _buildBody(iotSnapshot, today, today),
+            ),
+          ),
 
-            // Today
-            Container(
-              color: colorAppBackground,
-              child: StreamBuilder<QuerySnapshot>(
-                key: const ValueKey('iot-data-today'),
-                stream: _iotDataStream(today, today),
-                builder: (context, iotSnapshot) => _buildBody(iotSnapshot, today, today),
+          // Month
+          Container(
+            color: colorAppBackground,
+            child: StreamBuilder<QuerySnapshot>(
+              key: const ValueKey('iot-data-month'),
+              stream: _iotDataStream(
+                DateTime(today.year, today.month, 1),
+                today,
+              ),
+              builder: (context, iotSnapshot) => _buildBody(
+                iotSnapshot,
+                DateTime(today.year, today.month, 1),
+                today,
               ),
             ),
+          ),
 
-            // Month
-            Container(
-              color: colorAppBackground,
-              child: StreamBuilder<QuerySnapshot>(
-                key: const ValueKey('iot-data-month'),
-                stream: _iotDataStream(DateTime(today.year, today.month, 1), today),
-                builder: (context, iotSnapshot) => _buildBody(iotSnapshot, DateTime(today.year, today.month, 1), today),
-              ),
-            ),
-
-            // By Date
-            Container(
-              color: colorAppBackground,
-              child: Column(
-                children: [
-                  _buildDateSelector(),
-
-                  Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      key: ValueKey(
-                        'iot-data-range-'
-                        '${_selectedDateFrom.year}-${_selectedDateFrom.month}-${_selectedDateFrom.day}-'
-                        '${_selectedDateTo.year}-${_selectedDateTo.month}-${_selectedDateTo.day}',
-                      ),
-                      stream: _iotDataStream(_selectedDateFrom, _selectedDateTo),
-                      builder: (context, iotSnapshot) => _buildBody(iotSnapshot, _selectedDateFrom, _selectedDateTo),
+          // By Date
+          Container(
+            color: colorAppBackground,
+            child: Column(
+              children: [
+                _buildDateSelector(),
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot>(
+                    key: ValueKey(
+                      'iot-data-range-'
+                      '${_selectedDateFrom.year}-${_selectedDateFrom.month}-${_selectedDateFrom.day}-'
+                      '${_selectedDateTo.year}-${_selectedDateTo.month}-${_selectedDateTo.day}',
+                    ),
+                    stream: _iotDataStream(_selectedDateFrom, _selectedDateTo),
+                    builder: (context, iotSnapshot) => _buildBody(
+                      iotSnapshot,
+                      _selectedDateFrom,
+                      _selectedDateTo,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ]
-        ),
+          ),
+        ],
       ),
     );
   }

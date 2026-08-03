@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -393,6 +392,7 @@ return Consumer<BaseStationService>(
                         child: kIsWeb
                             ? NetworkCircleAvatar(
                                 imageUrl: widget.operatorData?.imageURL,
+                                version: widget.operatorData?.imageFilename,
                                 radius: 50,
                                 backgroundColor: Colors.grey.shade300,
                               )
@@ -401,9 +401,11 @@ return Consumer<BaseStationService>(
                                     widget.operatorData?.imageURL != null &&
                                             widget.operatorData!.imageURL!
                                                 .isNotEmpty
-                                        ? CachedNetworkImageProvider(
-                                            widget.operatorData!.imageURL!,
-                                          ) as ImageProvider
+                                        ? NetworkAvatar.imageProvider(
+                                            widget.operatorData!.imageURL,
+                                            version: widget
+                                                .operatorData!.imageFilename,
+                                          )
                                         : const AssetImage(iconProfile)
                                             as ImageProvider,
                                 radius: 50,

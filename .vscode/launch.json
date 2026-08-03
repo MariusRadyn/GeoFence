@@ -6,6 +6,7 @@
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
+      "preLaunchTask": "bump-app-version",
       "toolArgs": ["--dart-define=APP_FLAVOR=full"]
     },
     {
@@ -13,6 +14,7 @@
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
+      "preLaunchTask": "bump-app-version",
       "toolArgs": ["-d", "android", "--dart-define=APP_FLAVOR=full"]
     },
     {
@@ -21,6 +23,7 @@
       "type": "dart",
       "program": "lib/main.dart",
       "deviceId": "chrome",
+      "preLaunchTask": "bump-app-version",
       "toolArgs": [
         "--dart-define=APP_FLAVOR=reporting",
         "--web-port=50000",
@@ -33,6 +36,7 @@
       "type": "dart",
       "program": "lib/main.dart",
       "deviceId": "edge",
+      "preLaunchTask": "bump-app-version",
       "toolArgs": [
         "--dart-define=APP_FLAVOR=reporting",
         "--web-port=50000",
@@ -44,6 +48,7 @@
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
+      "preLaunchTask": "bump-app-version",
       "toolArgs": ["-d", "windows", "--dart-define=APP_FLAVOR=reporting"]
     },
     {
@@ -51,6 +56,7 @@
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
+      "preLaunchTask": "bump-app-version",
       "toolArgs": ["--dart-define=APP_FLAVOR=reporting"]
     },
     {
@@ -59,6 +65,7 @@
       "type": "dart",
       "program": "lib/main.dart",
       "flutterMode": "profile",
+      "preLaunchTask": "bump-app-version",
       "toolArgs": ["-d", "android", "--dart-define=APP_FLAVOR=full"]
     }
   ]

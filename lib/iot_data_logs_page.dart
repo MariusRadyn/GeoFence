@@ -30,17 +30,17 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
   late SettingsService settings;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final nrFormatter = NumberFormat('0.00', 'en_US');
-  late OperatorService operatorService;
-  @override
-  void initState() {
-    super.initState(); 
-  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     settings = context.read<SettingsService>();
-    operatorService = context.read<OperatorService>();
+  }
+
+  String _operatorLabel(OperatorService operators, dynamic rawId) {
+    final op = operators.getOperatorById('${rawId ?? ''}');
+    if (op == null) return '';
+    return '${op.name} ${op.surname}'.trim();
   }
 
   void _delete(String desc, String? userDocId, String? monDocId, String iotDocId) async {
@@ -140,6 +140,7 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final operatorService = context.watch<OperatorService>();
     final hasPhoto = widget.monitor.imageURL != null &&
         widget.monitor.imageURL!.isNotEmpty;
     final imgUrl = widget.monitor.imageURL ?? '';
@@ -186,9 +187,15 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
         child:  StreamBuilder<QuerySnapshot>(
           stream: widget.streamIotData,
           builder: (context, iotSnapshot) {
-            if (iotSnapshot.connectionState == ConnectionState.waiting ) {
+            if (iotSnapshot.connectionState == ConnectionState.waiting ||
+                operatorService.isLoading) {
             return Center(child: myProgressCircle());
           }
+            if (!iotSnapshot.hasData) {
+              return const Center(
+                child: MyText(text: 'No Data', color: Colors.grey),
+              );
+            }
             var docs = iotSnapshot.data!.docs;
 
             return Column(
@@ -199,14 +206,17 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                     itemBuilder: (context, index) {
                       var iotData = docs[index];
 
-                      final operatorName = operatorService.getOperatorById(iotData.get(fireIotOperatorDocId) ?? '') ?.name ?? '';
-                      final operatorSurname = operatorService.getOperatorById(iotData.get(fireIotOperatorDocId) ?? '') ?.surname ?? '';
-                      
-                      final supervisorName = operatorService.getOperatorById(iotData.get(fireIotSupervisorDocId) ?? '') ?.name ?? '';
-                      final supervisorSurname = operatorService.getOperatorById(iotData.get(fireIotSupervisorDocId) ?? '') ?.surname ?? '';
+                      final operatorLabel = _operatorLabel(
+                        operatorService,
+                        iotData.get(fireIotOperatorDocId),
+                      );
+                      final supervisorLabel = _operatorLabel(
+                        operatorService,
+                        iotData.get(fireIotSupervisorDocId),
+                      );
                     
                       num lines = iotData.get(fireIotLines) ?? 0;
-                      String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(iotData.get(fireMonitorTimestamp)?.toDate() ?? DateTime.now());
+                      String date = DateFormat('yyyy-MM-dd (kk:mm) ').format(iotData.get(fireIotTimestamp)?.toDate() ?? DateTime.now());
                       String dist = (lines * (iotData.get(fireIotTicks) / widget.monitor.ticksPerM)).toStringAsFixed(2);
 
                       return Column(
@@ -235,7 +245,7 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                                         ))
                                   : null,
                               header: date,
-                              subtext: 'Operator: $operatorName $operatorSurname\nSupervisor: $supervisorName $supervisorSurname\nLines: $lines\nDistance: $dist m',
+                              subtext: 'Operator: $operatorLabel\nSupervisor: $supervisorLabel\nLines: $lines\nDistance: $dist m',
                               onTapDelete: () {
                                 _delete(
                                   '${widget.monitor.monitorName}\n$date', 

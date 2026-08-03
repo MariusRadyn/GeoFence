@@ -1,6 +1,4 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geofence/network_avatar.dart';
 import 'package:geofence/utils.dart';
@@ -16,9 +14,8 @@ class WagesLogsPage extends StatefulWidget {
     required this.userDocId,
     required this.streamIotData,
     required this.monitor,
-    super.key
+    super.key,
   });
-
 
   @override
   State<WagesLogsPage> createState() => WagesLogsPageState();
@@ -26,172 +23,196 @@ class WagesLogsPage extends StatefulWidget {
 
 class WagesLogsPageState extends State<WagesLogsPage> {
   late SettingsService settings;
-  //final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final nrFormatter = NumberFormat('0.00', 'en_US');
-  late OperatorService operatorService;
   Map<String, Map<String, dynamic>> summary = {};
-
-  @override
-  void initState() {
-    super.initState(); 
-  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     settings = context.read<SettingsService>();
-    operatorService = context.read<OperatorService>();
   }
-  
-  // Summaries
-  void createSummaryWages(QueryDocumentSnapshot doc) {
+
+  void createSummaryWages(
+    QueryDocumentSnapshot doc,
+    OperatorService operatorService,
+    MonitorSettingsService monitors,
+  ) {
+    final monId = '${doc.get(fireIotMonDocId) ?? ''}';
+    final monitor = monitors.getMonitorById(monId);
+    if (monitor == null || monitor.monitorType != monitorTypeWheel) return;
+
+    final opId = '${doc.get(fireIotOperatorDocId) ?? ''}';
+    final operator = operatorService.getOperatorById(opId);
+
     double dist = 0.0;
     num lines = 0;
     num ticks = 0;
+    final double rate = operator?.rate ?? 0.0;
     double total = 0;
-
-    final operator = operatorService.getOperatorById(doc.get(fireIotOperatorDocId) ?? '');
-    final monitor = context.read<MonitorSettingsService>().getMonitorById(doc.get(fireIotMonDocId) ?? '');
-    if (operator == null || monitor == null) return;
 
     try {
       lines = doc.get(fireIotLines) ?? 0;
       ticks = doc.get(fireIotTicks) ?? 0;
-      dist = lines * (ticks / monitor.ticksPerM);
-      final rate = operator.rate;
+      if (monitor.ticksPerM != 0) {
+        dist = lines * (ticks / monitor.ticksPerM);
+      }
       total = dist * rate;
     } catch (e) {
       printDebugMsg('$e');
     }
 
-    String monType = monitor.monitorType ?? "";
-    String opName = operator.name;
-    String opSurname = operator.surname;
-    
-    if (!summary.containsKey(operator.docId)) {
-      summary[operator.docId] = {
-          'name': '$opName $opSurname',
-          'monitor': monType,
-          'totalDistance': 0.0,
-          'cost': 0.0,
-          'logs': 0,
-          'rate':operator.rate,
-          'image': operator.imageURL ?? '',
+    final String key = operator?.docId.isNotEmpty == true
+        ? operator!.docId
+        : (opId.isNotEmpty ? opId : 'unknown');
+    final String opName = operator == null
+        ? 'Unknown Operator'
+        : '${operator.name} ${operator.surname}'.trim();
+
+    if (!summary.containsKey(key)) {
+      summary[key] = {
+        'name': opName.isEmpty ? 'Unknown Operator' : opName,
+        'monitor': monitor.monitorType ?? '',
+        'totalDistance': 0.0,
+        'cost': 0.0,
+        'logs': 0,
+        'rate': rate,
+        'image': operator?.imageURL ?? '',
+        'imageFilename': operator?.imageFilename ?? '',
       };
+    } else {
+      // Keep photo in sync when OperatorService gets a live Firestore update.
+      summary[key]!['image'] = operator?.imageURL ?? summary[key]!['image'];
+      summary[key]!['imageFilename'] =
+          operator?.imageFilename ?? summary[key]!['imageFilename'];
+      summary[key]!['rate'] = rate;
+      if (opName.isNotEmpty) summary[key]!['name'] = opName;
     }
 
-    summary[operator.docId]!['totalDistance'] += dist;
-    summary[operator.docId]!['cost'] += total;
-    summary[operator.docId]!['logs'] ++;
+    summary[key]!['totalDistance'] += dist;
+    summary[key]!['cost'] += total;
+    summary[key]!['logs']++;
   }
 
   @override
   Widget build(BuildContext context) {
+    final operatorService = context.watch<OperatorService>();
+    final monitorService = context.watch<MonitorSettingsService>();
+
     return Scaffold(
       backgroundColor: colorAppBackground,
       appBar: AppBar(
-        title: MyText(text: 'Wages Logs', fontsize: 18,),
+        title: MyText(text: 'Wages Logs', fontsize: 18),
         backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
-       
       ),
-   
       body: Container(
         color: colorAppBackground,
-        child:  StreamBuilder<QuerySnapshot>(
+        child: StreamBuilder<QuerySnapshot>(
           stream: widget.streamIotData,
           builder: (context, iotSnapshot) {
-            if (iotSnapshot.connectionState == ConnectionState.waiting ) {
+            if (iotSnapshot.hasError) {
+              return Center(
+                child: MyText(
+                  text: 'Error loading wages',
+                  color: Colors.grey,
+                ),
+              );
+            }
+
+            if (iotSnapshot.connectionState == ConnectionState.waiting) {
               return Center(child: myProgressCircle());
             }
 
-            var lstMonitorSettings = context.watch<MonitorSettingsService>().lstMonitors;
-            if (lstMonitorSettings.isEmpty) {
+            if (monitorService.lstMonitors.isEmpty) {
               return Center(child: myProgressCircle());
             }
- 
-            // Create Summary
+
             summary.clear();
-            
-            for (var doc in iotSnapshot.data!.docs) {
-              if(doc.exists) {       
-                try {
-                  final MonitorSettings? monitor = context.read<MonitorSettingsService>().getMonitorById(doc.get(fireIotMonDocId) ?? '');
-      
-                  if(monitor != null && monitor.monitorType == monitorTypeWheel) createSummaryWages(doc);
-                } 
-                catch (e) {
-                  continue; // Skip logs for monitors that don't exist in settings
-                }
+            for (final doc in iotSnapshot.data?.docs ?? const []) {
+              if (!doc.exists) continue;
+              try {
+                createSummaryWages(doc, operatorService, monitorService);
+              } catch (e) {
+                printDebugMsg('$e');
               }
             }
-             
-            var summaryList = summary.values.toList();
+
+            final summaryList = summary.values.toList()
+              ..sort((a, b) =>
+                  '${a['name']}'.toLowerCase().compareTo('${b['name']}'.toLowerCase()));
+
+            if (summaryList.isEmpty) {
+              return const Center(
+                child: MyText(
+                  text: 'No Data',
+                  color: Colors.grey,
+                ),
+              );
+            }
 
             return Column(
               children: [
                 Expanded(
                   child: ListView.builder(
-                    itemCount: summary.length,
+                    itemCount: summaryList.length,
                     itemBuilder: (context, index) {
-                      var iotData = summaryList[index];
+                      final iotData = summaryList[index];
 
-                      String opName = iotData['name'] ?? '';
-                      double totalDistance =  iotData['totalDistance'].toDouble();
-                      int logs = iotData['logs'] ?? 0;
-                      double cost = iotData['cost'] ?? 0.0;
-                      double rate = iotData['rate'] ?? 0.0;
-                    
-                      final String img = (iotData['image'] as String?) ?? '';
+                      final String opName = iotData['name'] ?? '';
+                      final double totalDistance =
+                          (iotData['totalDistance'] as num).toDouble();
+                      final int logs = (iotData['logs'] as num?)?.toInt() ?? 0;
+                      final double cost =
+                          (iotData['cost'] as num?)?.toDouble() ?? 0.0;
+                      final double rate =
+                          (iotData['rate'] as num?)?.toDouble() ?? 0.0;
+
+                      final String img = '${iotData['image'] ?? ''}';
+                      final String imgFile =
+                          '${iotData['imageFilename'] ?? ''}';
                       final bool hasOperatorPhoto = img.isNotEmpty;
 
                       return Column(
                         children: [
-                          SizedBox(height: 10),
+                          const SizedBox(height: 10),
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 1),
                             child: MyTextTileWithEditDelete(
-                              // Android: CachedNetworkImageProvider via [image]
-                              // Web: NetworkAvatar via [imageWidget]
-                              image: kIsWeb
-                                  ? null
-                                  : (hasOperatorPhoto
-                                      ? CachedNetworkImageProvider(img)
-                                          as ImageProvider
-                                      : getMonitorImage(widget.monitor)),
-                              imageWidget: kIsWeb
-                                  ? (hasOperatorPhoto
-                                      ? NetworkAvatar(
-                                          imageUrl: img,
-                                          size: 80,
-                                        )
-                                      : Image(
-                                          image: getMonitorImage(widget.monitor),
-                                          fit: BoxFit.cover,
-                                        ))
-                                  : null,
+                              image: null,
+                              imageWidget: hasOperatorPhoto
+                                  ? NetworkAvatar(
+                                      imageUrl: img,
+                                      version: imgFile,
+                                      size: 80,
+                                    )
+                                  : Image.asset(
+                                      iconProfile,
+                                      fit: BoxFit.cover,
+                                      width: 80,
+                                      height: 80,
+                                    ),
                               header: opName,
                               subtext:
-                                'Distance: ${nrFormatter.format(totalDistance)} m\n'
-                                'Rate: R${nrFormatter.format(rate)}\n'
-                                'Logs: $logs\n'
-                                'Total: R${nrFormatter.format(cost)}',
+                                  'Distance: ${nrFormatter.format(totalDistance)} m\n'
+                                  'Rate: R${nrFormatter.format(rate)}\n'
+                                  'Logs: $logs\n'
+                                  'Total: R${nrFormatter.format(cost)}',
                               headerColor: Colors.white,
                               textColor: Colors.grey,
                               backgroundColor: colorAppBar,
-                              onTapTile: (){},
+                              onTapTile: () {},
                             ),
                           ),
                         ],
                       );
-                    }
+                    },
                   ),
                 ),
               ],
             );
-          }
+          },
         ),
-      ),  
+      ),
     );
-  } 
+  }
 }

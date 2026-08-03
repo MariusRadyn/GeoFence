@@ -628,28 +628,11 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                       final controllerIpAddress = _getControllerIpAdr(currentBase);
                       final controllerBluetooth = _getControllerBluetooth(currentBase);
 
-                      //if(selectedDevice != null){
-                      //  _controllerBluetooth.text = selectedDevice?.platformName ?? '';
-                      //}
-
                       return SingleChildScrollView(
                         padding: const EdgeInsets.all(5),
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-
-                              // Hint Text
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text("GeoFence supports multiple base stations. Each base station "
-                                    "has it's own server. In your phone bluetooth settingsService, connect to the server."
-                                    "Then select it from this list",
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,),
-                                  softWrap: true,
-                                ),
-                              ),
 
                               // Name
                               Padding(

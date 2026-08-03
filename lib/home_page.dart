@@ -14,6 +14,8 @@ import 'package:geofence/base_station_page.dart';
 import 'package:geofence/geo_fence_page.dart';
 import 'package:geofence/profile_page.dart';
 import 'package:geofence/settings_page.dart';
+import 'package:geofence/shop_page.dart';
+import 'package:geofence/shop_setup_page.dart';
 import 'package:geofence/tracking_history_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/wages_summary_page.dart';
@@ -167,6 +169,17 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
       );
     }
 
+    if (AppConfig.addShop) {
+      addTile(
+        const MyCustomTileWithPic(
+          imagePath: iconShop,
+          header: 'Online Shop',
+          description: 'Browse Limitless IoT products and checkout securely',
+          widget: ShopPage(),
+        ),
+      );
+    }
+
     if (AppConfig.addTrackingHistory) {
       addTile(
         MyCustomTileWithPic(
@@ -249,7 +262,8 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
     final showIotSection = AppConfig.showBaseStations ||
         AppConfig.showIotMonitors ||
         AppConfig.showIotDataReport ||
-        AppConfig.showWages;
+        AppConfig.showWages ||
+        AppConfig.showShop;
     if (showIotSection) {
       items.add(heading('iOT', first: !showTrackingSection));
       if (AppConfig.showBaseStations) {
@@ -280,6 +294,13 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
           onTap: () => open(const WagesPage()),
         ));
       }
+      if (AppConfig.showShop) {
+        items.add(drawerTile(
+          icon: Icons.storefront_outlined,
+          title: 'Online Shop',
+          onTap: () => open(const ShopPage()),
+        ));
+      }
     }
 
     items.add(heading('Setup', first: !showTrackingSection && !showIotSection));
@@ -295,6 +316,15 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
         icon: Icons.settings,
         title: 'Settings',
         onTap: () => open(SettingsPage(userId: user.userdata!.userID)),
+      ));
+    }
+    if (AppConfig.canSetupShop(
+      userIsDeveloper: user.userdata?.isDeveloper == true,
+    )) {
+      items.add(drawerTile(
+        icon: Icons.store_mall_directory_outlined,
+        title: 'Setup Shop',
+        onTap: () => open(const ShopSetupPage()),
       ));
     }
 
@@ -909,15 +939,39 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                 }
                 return Scaffold(
 
-                  backgroundColor: colorAppBackground,
+                  backgroundColor: const Color(0xFF020617),
                   body: Stack(
+                      fit: StackFit.expand,
                       children: [
+                        // Same full-bleed background as splash
+                        Image.asset(
+                          iconSplashBackground,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                        ),
+                        // Soft vignette matching splash
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: RadialGradient(
+                              center: const Alignment(0, -0.1),
+                              radius: 1.1,
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withValues(alpha: 0.35),
+                              ],
+                              stops: const [0.45, 1.0],
+                            ),
+                          ),
+                        ),
                         Positioned.fill(
                           child: Column(
                               children: [
                                 AppBar(
                                   iconTheme: IconThemeData(color: colorIceBlue),
-                                  backgroundColor: colorAppBar,
+                                  backgroundColor: Colors.transparent,
+                                  elevation: 0,
+                                  scrolledUnderElevation: 0,
                                   leading: GestureDetector(
                                     onTap: () {
                                       if (userLoggedIn) toggleDrawer();
@@ -1089,7 +1143,10 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                                         crossAxisAlignment: CrossAxisAlignment
                                                             .center,
                                                         children: [
-                                                          myAppbarTitle("Menu"),
+                                                          Padding(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                                                            child: myAppbarTitle("Menu"),
+                                                          ),
 
                                                           Image.asset(
                                                             iconLimitlessLogo,
@@ -1111,16 +1168,22 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                                             crossAxisAlignment: CrossAxisAlignment
                                                                 .start,
                                                             children: [
-                                                              MyText(
-                                                                text: APP_VERSION,
-                                                                color: Colors
-                                                                    .grey,
+                                                              Padding(
+                                                                padding: const EdgeInsets.symmetric(horizontal: 5.0),
+                                                                child: MyText(
+                                                                  text: APP_VERSION,
+                                                                  color: Colors
+                                                                      .grey,
+                                                                ),
                                                               ),
-                                                              MyText(
-                                                                text: user
-                                                                    .userdata!.displayName,
-                                                                color: Colors
-                                                                    .grey,
+                                                              Padding(
+                                                                padding: const EdgeInsets.symmetric(horizontal: 5.0),
+                                                                child: MyText(
+                                                                  text: user
+                                                                      .userdata!.displayName,
+                                                                  color: Colors
+                                                                      .grey,
+                                                                ),
                                                               ),
                                                             ],
                                                           ),

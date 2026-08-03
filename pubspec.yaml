@@ -69,6 +69,9 @@ dependencies:
   #network_info_plus: ^6.0.0
   path: any
   firebase_app_check: ^0.4.4+1
+  share_plus: ^13.3.0
+  syncfusion_flutter_xlsio: ^33.2.13
+  file_saver: ^0.4.0
 
 flutter_launcher_icons:
   android: true
@@ -114,6 +117,8 @@ flutter:
     - assets/trailer_icon.png
     - assets/operators_icon.png
     - assets/wages_icon.png
+    - assets/shop_icon.png
+    - assets/shop_no_image.png
 
     - assets/profile.png
     - assets/google_icon.png
@@ -125,6 +130,7 @@ flutter:
     - assets/noImage.jpg
     - assets/limitless_logo.png
     - assets/limitlessIotWord.png
+    - assets/splash_background.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

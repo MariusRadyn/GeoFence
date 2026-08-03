@@ -20,7 +20,6 @@ class OperatorsPageState extends State<OperatorsPage> {
   @override
   void initState() {
     super.initState();
-    context.read<OperatorService>().load();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -203,9 +202,12 @@ class OperatorsPageState extends State<OperatorsPage> {
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                             child: MyOperatorTile(
+                              key: ValueKey(
+                                '${operator.docId}_${operator.imageFilename}_${operator.imageURL}',
+                              ),
                               operator: operator,
                               onTapTile: () async{
-                                final image = await Navigator.push(
+                                await Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                       builder: (context) => OperatorEditPage(
@@ -213,8 +215,9 @@ class OperatorsPageState extends State<OperatorsPage> {
                                       ),
                                   ),
                                 );
-                                if(image != null){
-
+                                // Ensure list tiles remount after photo edits.
+                                if (mounted) {
+                                  context.read<OperatorService>().notifyListChanged();
                                 }
                               },
                               onTapDelete: (){

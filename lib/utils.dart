@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -23,8 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 
-// ignore: constant_identifier_names
-const APP_VERSION = "V1.0.1";
+export 'app_version.g.dart' show APP_VERSION, APP_BUILD;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 String debugLog = '';
@@ -50,6 +49,7 @@ const String iconVehicle = "assets/vehicle_icon.png";
 const String iconMachine = "assets/generator_icon.png";
 const String iconNoImage = 'assets/noImage.jpg';
 const String iconProfile = 'assets/profile.png';
+const String iconShopNoImage = 'assets/shop_no_image.png';
 const String iconFleet = 'assets/fleet_track_icon.png';
 const String iconTrailer = 'assets/trailer_icon.png';
 
@@ -62,10 +62,12 @@ const String iconIot = 'assets/iot_monitor_icon.png';
 const String iconBase = 'assets/base_station_icon.png';
 const String iconReport = 'assets/track_history_icon.png';
 const String iconWages = 'assets/wages_icon.png';
+const String iconShop = 'assets/shop_icon.png';
 const String iconOperators = 'assets/operators_icon.png';
 
 const String iconLimitlessLogo = 'assets/limitless_logo.png';
 const String iconLimitlessWord = 'assets/limitlessIotWord.png';
+const String iconSplashBackground = 'assets/splash_background.png';
 
 //-- Constants Colors ----------------------------------------------------------
 const colorIceBlue = Color.fromARGB(202, 139, 229, 245);
@@ -1206,31 +1208,14 @@ class MyOperatorTile extends StatelessWidget {
                     ),
                     child: operator.imageURL != null &&
                             operator.imageURL!.isNotEmpty
-                        ? (kIsWeb
-                            // Web: HTML <img> (CORS-safe)
-                            ? NetworkAvatar(
-                                imageUrl: operator.imageURL,
-                                size: 60,
-                              )
-                            // Android: CachedNetworkImage
-                            : CachedNetworkImage(
-                                imageUrl: operator.imageURL!,
-                                width: 60,
-                                height: 60,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) => Image.asset(
-                                  iconProfile,
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                ),
-                                errorWidget: (_, __, ___) => Image.asset(
-                                  iconProfile,
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                ),
-                              ))
+                        ? NetworkAvatar(
+                            key: ValueKey(
+                              '${operator.docId}_${operator.imageFilename}_${operator.imageURL}',
+                            ),
+                            imageUrl: operator.imageURL,
+                            version: operator.imageFilename,
+                            size: 60,
+                          )
                         : Image.asset(
                             iconProfile,
                             width: 60,
@@ -2101,6 +2086,7 @@ class UserData{
   String? imageFilename;
   bool hasError = false;
   bool emailValidated = false;
+  bool isDeveloper = false;
 
   UserData({
     this.displayName = "",
@@ -2110,6 +2096,7 @@ class UserData{
     this.imageURL,
     this.imageFilename,
     this.emailValidated = false,
+    this.isDeveloper = false,
   });
 
   factory UserData.fromMap(Map<String, dynamic> map){
@@ -2120,6 +2107,7 @@ class UserData{
       imageURL: map['photoURL'] ?? "",
       imageFilename: map['imageFilename'] ?? "",
       emailValidated: map['emailValidated'] ?? false,
+      isDeveloper: map['isDeveloper'] == true,
     );
   }
   Map<String, dynamic> toMap(){
@@ -2129,7 +2117,8 @@ class UserData{
       'email': email,
       'photoURL': imageURL,
       'imageFilename': imageFilename,
-      'emailValidated': emailValidated
+      'emailValidated': emailValidated,
+      'isDeveloper': isDeveloper,
     };
   }
   UserData copyWith({
@@ -2139,6 +2128,7 @@ class UserData{
     String? imageURL,
     String? imageFilename,
     bool? emailValidated,
+    bool? isDeveloper,
   }){
     return UserData(
       displayName: displayName ?? this.displayName,
@@ -2147,6 +2137,7 @@ class UserData{
       imageURL: imageURL ?? this.imageURL,
       imageFilename: imageFilename ?? this.imageFilename,
       emailValidated: emailValidated ?? this.emailValidated,
+      isDeveloper: isDeveloper ?? this.isDeveloper,
     );
   }
 }
@@ -2594,21 +2585,26 @@ class MonitorSettings {
 
   // From Firebase
   factory MonitorSettings.fromMap(Map<String, dynamic> map, String docId, String userId) {
+    String asString(dynamic value, [String fallback = '']) {
+      if (value == null) return fallback;
+      return value.toString();
+    }
+
     return MonitorSettings(
       monDocId: docId,
       userDocId: userId,
-      monitorId: map[fireMonitorDeviceId] ?? 'none',
-      monitorType: map[fireMonitorType] ?? 'none',
-      monitorName: map[fireMonitorName] ?? 'New Item',
-      reg: map[fireMonitorReg] ?? 'None',
+      monitorId: asString(map[fireMonitorDeviceId], 'none'),
+      monitorType: asString(map[fireMonitorType], 'none'),
+      monitorName: asString(map[fireMonitorName], 'New Item'),
+      reg: asString(map[fireMonitorReg], 'None'),
       fuelConsumption: (map[fireMonitorFuelConsumption] as num?)?.toDouble() ?? 0.0,
-      bluetoothDeviceName: map[fireMonitorBtName] ?? '',
-      bluetoothMac: map[fireMonitorBtMac] ?? '',
+      bluetoothDeviceName: asString(map[fireMonitorBtName]),
+      bluetoothMac: asString(map[fireMonitorBtMac]),
       ticksPerM: (map[fireMonitorTicksPerM] as num?)?.toDouble() ?? settingMonDefaultTicksPerM,
       ticks: (map[fireMonitorTicks] as num?)?.toInt() ?? 0,
       calibrationDistance: (map[fireMonitorCalibrationDistance] as num?)?.toInt() ?? 0,
-      imageURL: map[fireMonitorImageUrl] ?? '',
-      imageFilename: map[fireMonitorImageFilename] ?? '',
+      imageURL: asString(map[fireMonitorImageUrl]),
+      imageFilename: asString(map[fireMonitorImageFilename]),
       markedToDelete: map[fireMonitorMarkedToDelete] == true,
     );
   }
@@ -2775,8 +2771,8 @@ class MonitorSettingsService extends ChangeNotifier {
   }
 
  MonitorSettings? getMonitorById(String monitorDocId) {
-    if (operatorDocId.isEmpty) return null;
-    
+    if (monitorDocId.isEmpty) return null;
+
     for (final mon in _monitors) {
       if (mon.monDocId == monitorDocId) return mon;
     }
@@ -3084,16 +3080,27 @@ class OperatorData{
   });
 
   factory OperatorData.fromMap(Map<String, dynamic> map, String docId){
+    String asString(dynamic value, [String fallback = '']) {
+      if (value == null) return fallback;
+      return value.toString();
+    }
+
+    double asDouble(dynamic value, [double fallback = 0.0]) {
+      if (value == null) return fallback;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString()) ?? fallback;
+    }
+
     return OperatorData(
       docId: docId,
-      name: map['name'] ?? "",
-      surname: map['surname'] ?? "",
-      accessLevel: map['accessLevel'] ?? "",
-      tagId: map['tagId'] ?? "",
-      imageURL: map['photoURL'] ?? "",
-      imageFilename: map['photoFilename'] ?? "",
-      thumbURL: map['thumbURL'] ?? "",
-      rate: map['rate'] ?? 0.0,
+      name: asString(map['name']),
+      surname: asString(map['surname']),
+      accessLevel: asString(map['accessLevel']),
+      tagId: asString(map['tagId']),
+      imageURL: asString(map['photoURL']),
+      imageFilename: asString(map['photoFilename']),
+      thumbURL: asString(map['thumbURL']),
+      rate: asDouble(map['rate']),
     );
   }
   Map<String, dynamic> toMap(){
@@ -3137,6 +3144,9 @@ class OperatorService extends ChangeNotifier {
 
   bool isLoading = false;
   bool firebaseError = false;
+  StreamSubscription<QuerySnapshot>? _operatorsSub;
+  StreamSubscription<User?>? _authSub;
+  bool _notifyScheduled = false;
 
   final newOperator = OperatorData(
       docId: '',
@@ -3146,47 +3156,109 @@ class OperatorService extends ChangeNotifier {
       accessLevel: operatorTypeOperator
   );
 
+  OperatorService() {
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user == null) {
+        _operatorsSub?.cancel();
+        _operatorsSub = null;
+        _lstOps.clear();
+        isLoading = false;
+        _safeNotify();
+      } else {
+        // Defer so we never notify while the widget tree is building.
+        scheduleMicrotask(() => load());
+      }
+    });
+  }
+
+  /// Avoids "setState/markNeedsBuild during build" when Firestore
+  /// delivers a cached snapshot synchronously from [load].
+  void _safeNotify() {
+    if (_notifyScheduled) return;
+    _notifyScheduled = true;
+    final binding = WidgetsBinding.instance;
+    binding.addPostFrameCallback((_) {
+      _notifyScheduled = false;
+      notifyListeners();
+    });
+    // If we're outside a frame, schedule one so the callback still runs.
+    if (binding.schedulerPhase == SchedulerPhase.idle) {
+      binding.ensureVisualUpdate();
+    }
+  }
+
   void setOperators(List<OperatorData> list) {
     _lstOps
       ..clear()
       ..addAll(list);
-    notifyListeners();
+    _safeNotify();
   }
+
+  /// Force list UIs (e.g. web avatars) to rebuild after an in-place edit.
+  void notifyListChanged() => _safeNotify();
+
   Future<void> load() async {
     isLoading = true;
+    _safeNotify();
 
-    String? uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    try{
-
-      final snapshot = await FirebaseFirestore.instance
-        .collection(collectionUsers)
-        .doc(uid)
-        .collection(collectionOperators)
-        .get();
-
-      final list = snapshot.docs
-        .map((doc) => OperatorData.fromMap(doc.data(), doc.id))
-        .toList();
-
-      setOperators(list);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      isLoading = false;
+      _safeNotify();
+      return;
     }
-    catch (e) {
+
+    try {
+      await _operatorsSub?.cancel();
+      _operatorsSub = FirebaseFirestore.instance
+          .collection(collectionUsers)
+          .doc(uid)
+          .collection(collectionOperators)
+          .snapshots()
+          .listen(
+        (snapshot) {
+          final list = snapshot.docs
+              .map((doc) => OperatorData.fromMap(doc.data(), doc.id))
+              .toList();
+
+          _lstOps
+            ..clear()
+            ..addAll(list);
+          isLoading = false;
+          firebaseError = false;
+          _safeNotify();
+        },
+        onError: (e) {
+          MyGlobalSnackBar.show("Cloud Error: $e");
+          printDebugMsg(e.toString());
+          isLoading = false;
+          firebaseError = true;
+          _safeNotify();
+        },
+      );
+    } catch (e) {
       MyGlobalSnackBar.show("Cloud Error: $e");
       printDebugMsg(e.toString());
-    }
-    finally {
       isLoading = false;
-      notifyListeners();
+      firebaseError = true;
+      _safeNotify();
     }
   }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    _operatorsSub?.cancel();
+    super.dispose();
+  }
+
   Future<OperatorData?> addNew() async {
     try{
       String? uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return null;
 
-      isLoading = true; // Set loading state
-      notifyListeners();
+      isLoading = true;
+      _safeNotify();
 
       final ref = FirebaseFirestore.instance
           .collection(collectionUsers)
@@ -3198,7 +3270,7 @@ class OperatorService extends ChangeNotifier {
       await docRef.set(newOp.toMap());
 
       setNewOperatorVersion();
-      await load();
+      // Realtime listener will refresh the list.
 
       return newOp;
     }
@@ -3206,7 +3278,7 @@ class OperatorService extends ChangeNotifier {
       MyGlobalSnackBar.show('$e');
       isLoading = false;
       firebaseError = true;
-      notifyListeners();
+      _safeNotify();
       return null;
     }
   }
@@ -3241,8 +3313,17 @@ class OperatorService extends ChangeNotifier {
         );
       }
 
+      // Update local list immediately so web/Android UI doesn't wait on
+      // the snapshot (and so in-place edits remount image widgets).
+      final idx = _lstOps.indexWhere((o) => o.docId == operator.docId);
+      if (idx >= 0) {
+        _lstOps[idx] = operator;
+      } else {
+        _lstOps.add(operator);
+      }
+      _safeNotify();
+
       setNewOperatorVersion();
-      await load();
 
       MyGlobalSnackBar.show('Saved');
     }
@@ -3264,10 +3345,9 @@ class OperatorService extends ChangeNotifier {
 
 
       _lstOps.removeWhere((c) => c.docId == operator.docId);
-      notifyListeners();
+      _safeNotify();
 
       setNewOperatorVersion();
-      await load();
 
       if(operator.imageFilename != null && operator.imageFilename!.isNotEmpty){
         String path = "$profileTypeOperator/${operator.docId}/${operator.imageFilename}";
