@@ -21,7 +21,6 @@ class ShopProduct {
   final String description;
   final double price;
   final double? listPrice;
-  /// Percent discount (0–100). Does not change stored [price].
   final double discount;
   final String? imageUrl;
   final List<String> imageUrls;
@@ -31,6 +30,9 @@ class ShopProduct {
   final int reviewCount;
   final bool freeDelivery;
   final bool active;
+  final int stockCount;
+  /// When false, product is visible but not yet launched for purchase.
+  final bool isReady;
 
   const ShopProduct({
     required this.id,
@@ -47,6 +49,8 @@ class ShopProduct {
     this.reviewCount = 0,
     this.freeDelivery = true,
     this.active = true,
+    this.stockCount = 0,
+    this.isReady = true,
   });
 
   String? get primaryImageUrl {
@@ -54,14 +58,9 @@ class ShopProduct {
     if (imageUrls.isNotEmpty) return imageUrls.first;
     return null;
   }
-
-  /// [price] in Firestore is always the normal catalog price.
-  /// Discount is applied only for display / cart / checkout.
   bool get hasDeal => discount > 0 && discount < 100;
-
   double get salePrice =>
       hasDeal ? price * (1 - discount / 100) : price;
-
   int? get savePercent => hasDeal ? discount.round().clamp(1, 99) : null;
 
   factory ShopProduct.fromMap(Map<String, dynamic> map, String id) {
@@ -110,9 +109,10 @@ class ShopProduct {
       reviewCount: asInt(map['reviewCount']),
       freeDelivery: map['freeDelivery'] != false,
       active: map['active'] != false,
+      stockCount: asInt(map['stockCount']),
+      isReady: map['isReady'] != false,
     );
   }
-
   Map<String, dynamic> toMap() => {
         'name': name,
         'description': description,
@@ -127,8 +127,9 @@ class ShopProduct {
         'reviewCount': reviewCount,
         'freeDelivery': freeDelivery,
         'active': active,
+        'stockCount': stockCount,
+        'isReady': isReady,
       };
-
   ShopProduct copyWith({
     String? id,
     String? name,
@@ -144,6 +145,8 @@ class ShopProduct {
     int? reviewCount,
     bool? freeDelivery,
     bool? active,
+    int? stockCount,
+    bool? isReady,
   }) {
     return ShopProduct(
       id: id ?? this.id,
@@ -160,6 +163,8 @@ class ShopProduct {
       reviewCount: reviewCount ?? this.reviewCount,
       freeDelivery: freeDelivery ?? this.freeDelivery,
       active: active ?? this.active,
+      stockCount: stockCount ?? this.stockCount,
+      isReady: isReady ?? this.isReady,
     );
   }
 }
@@ -185,6 +190,8 @@ class ShopCartService extends ChangeNotifier {
   bool get isEmpty => _items.isEmpty;
 
   void add(ShopProduct product, {int qty = 1}) {
+    if (!product.isReady) return;
+    if (product.stockCount <= 0) return;
     final existing = _items[product.id];
     if (existing != null) {
       existing.quantity += qty;
@@ -215,68 +222,6 @@ class ShopCartService extends ChangeNotifier {
   }
 }
 
-/// Built-in catalog used only to seed Firestore from Setup Shop.
-List<ShopProduct> get defaultShopCatalog => [
-      ShopProduct(
-        id: 'distance_wheel',
-        name: 'Distance Wheel',
-        description:
-            'Precision distance measuring wheel with IoT logging for wage and rebate tracking.',
-        price: 2499.00,
-        discount: 17,
-        imageAsset: iconWheel,
-        category: 'Hardware',
-      ),
-      ShopProduct(
-        id: 'iot_monitor',
-        name: 'IoT Monitor',
-        description:
-            'Field IoT monitor for vehicles, machines, and site equipment.',
-        price: 3999.00,
-        discount: 11,
-        imageAsset: iconIot,
-        category: 'Hardware',
-      ),
-      ShopProduct(
-        id: 'base_station',
-        name: 'Base Station',
-        description:
-            'Master network controller for connecting multiple IoT monitors.',
-        price: 5499.00,
-        imageAsset: iconBase,
-        category: 'Hardware',
-      ),
-      ShopProduct(
-        id: 'geo_fence_kit',
-        name: 'GeoFence Starter Kit',
-        description:
-            'Setup pack for rebate tracking with geofence perimeters and reporting.',
-        price: 1899.00,
-        discount: 17,
-        imageAsset: iconGeoFence,
-        category: 'Kits',
-      ),
-      ShopProduct(
-        id: 'fleet_tracker',
-        name: 'Fleet Tracker',
-        description:
-            'Live tracking module for fleets moving in and out of geofences.',
-        price: 3299.00,
-        imageAsset: iconFleet,
-        category: 'Hardware',
-      ),
-      ShopProduct(
-        id: 'support_plan',
-        name: 'Annual Support Plan',
-        description:
-            'Priority support, remote diagnostics, and software updates for 12 months.',
-        price: 1200.00,
-        imageAsset: iconLimitlessLogo,
-        category: 'Services',
-        freeDelivery: false,
-      ),
-    ];
-
 /// Live Firestore catalog for `shop_products`.
 class ShopCatalogService extends ChangeNotifier {
   final List<ShopProduct> _rawProducts = [];
@@ -296,7 +241,6 @@ class ShopCatalogService extends ChangeNotifier {
 
   ShopProduct _withLiveRating(ShopProduct p) {
     if (!_reviewsReady) {
-      // Avoid flashing fake seeded 4.x★ before real reviews load.
       return p.copyWith(rating: 0, reviewCount: 0);
     }
     final agg = _reviewAgg[p.id];
@@ -396,38 +340,6 @@ class ShopCatalogService extends ChangeNotifier {
     }
   }
 
-  Future<void> seedDefaultsIfEmpty() async {
-    final existing = await FirebaseFirestore.instance
-        .collection(collectionShopProducts)
-        .limit(1)
-        .get();
-    if (existing.docs.isNotEmpty) return;
-    await seedDefaults(force: false);
-  }
-
-  Future<int> seedDefaults({bool force = false}) async {
-    final col = FirebaseFirestore.instance.collection(collectionShopProducts);
-    if (!force) {
-      final existing = await col.limit(1).get();
-      if (existing.docs.isNotEmpty) return 0;
-    }
-
-    final batch = FirebaseFirestore.instance.batch();
-    var count = 0;
-    for (final p in defaultShopCatalog) {
-      batch.set(col.doc(p.id), {
-        ...p.toMap(),
-        'rating': 0,
-        'reviewCount': 0,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      count++;
-    }
-    await batch.commit();
-    return count;
-  }
-
   @override
   void dispose() {
     _sub?.cancel();
@@ -442,7 +354,6 @@ class ShopPage extends StatefulWidget {
   @override
   State<ShopPage> createState() => _ShopPageState();
 }
-
 class _ShopPageState extends State<ShopPage> {
   final _money = NumberFormat.currency(locale: 'en_ZA', symbol: 'R');
   final _searchController = TextEditingController();
@@ -1166,7 +1077,7 @@ class _ShopPageState extends State<ShopPage> {
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
                   final product = filtered[i];
-                  return _TakealotProductCard(
+                  return _ProductCard(
                     product: product,
                     priceLabel: _money.format(product.salePrice),
                     listPriceLabel: product.hasDeal
@@ -1181,6 +1092,18 @@ class _ShopPageState extends State<ShopPage> {
                       );
                     },
                     onAdd: () {
+                      if (!product.isReady) {
+                        MyGlobalSnackBar.show(
+                          '${product.name} is coming soon',
+                        );
+                        return;
+                      }
+                      if (product.stockCount <= 0) {
+                        MyGlobalSnackBar.show(
+                          '${product.name} is out of stock',
+                        );
+                        return;
+                      }
                       cart.add(product);
                       MyGlobalSnackBar.show('${product.name} added to basket');
                     },
@@ -1194,16 +1117,14 @@ class _ShopPageState extends State<ShopPage> {
     );
   }
 }
-
-
-class _TakealotProductCard extends StatelessWidget {
+class _ProductCard extends StatelessWidget {
   final ShopProduct product;
   final String priceLabel;
   final String? listPriceLabel;
   final VoidCallback onOpen;
   final VoidCallback onAdd;
 
-  const _TakealotProductCard({
+  const _ProductCard({
     required this.product,
     required this.priceLabel,
     required this.listPriceLabel,
@@ -1252,7 +1173,45 @@ class _TakealotProductCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (product.hasDeal)
+                    if (!product.isReady)
+                      Positioned(
+                        left: -38,
+                        top: 14,
+                        child: Transform.rotate(
+                          angle: -math.pi / 4,
+                          child: Container(
+                            width: 130,
+                            padding: const EdgeInsets.symmetric(vertical: 5),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  colorDrawer,
+                                  colorDrawer.withValues(alpha: 0.85),
+                                  const Color(0xFF1E3A8A),
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: const Text(
+                              'COMING SOON',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (product.hasDeal)
                       Positioned(
                         left: -34,
                         top: 12,
@@ -1396,7 +1355,9 @@ class _TakealotProductCard extends StatelessWidget {
                         height: 32,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: colorOrange,
+                            backgroundColor: product.isReady
+                                ? colorOrange
+                                : Colors.white24,
                             foregroundColor: Colors.white,
                             elevation: 0,
                             padding: EdgeInsets.zero,
@@ -1406,10 +1367,17 @@ class _TakealotProductCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
-                          onPressed: onAdd,
-                          child: const Text(
-                            'Add to Cart',
-                            style: TextStyle(
+                          onPressed: product.isReady &&
+                                  product.stockCount > 0
+                              ? onAdd
+                              : null,
+                          child: Text(
+                            !product.isReady
+                                ? 'Coming Soon'
+                                : product.stockCount <= 0
+                                    ? 'Out of Stock'
+                                    : 'Add to Cart',
+                            style: const TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 11,
                             ),
@@ -1427,7 +1395,6 @@ class _TakealotProductCard extends StatelessWidget {
     );
   }
 }
-
 class _ProductThumb extends StatelessWidget {
   final ShopProduct product;
   final double size;

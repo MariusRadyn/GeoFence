@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Request deletion of your Limitless IOT account and associated data.">
+  <title>Delete Account — Limitless IOT</title>
+  <style>
+    :root {
+      --bg: #020617;
+      --panel: #063f52;
+      --panel2: #042c3a;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #2187d7;
+      --danger: #e11d48;
+      --orange: #f97316;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: linear-gradient(180deg, var(--panel2), var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.75rem;
+    }
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+    .card {
+      background: rgba(6, 63, 82, 0.85);
+      border: 1px solid rgba(33, 137, 215, 0.35);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.1rem;
+      color: #7dd3fc;
+    }
+    ul {
+      margin: 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+    li { margin-bottom: 6px; }
+    label {
+      display: block;
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: var(--panel2);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 11px 18px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+      width: 100%;
+      margin-top: 8px;
+    }
+    .btn-secondary {
+      background: transparent;
+      color: #7dd3fc;
+      border: 1px solid #334155;
+      margin-left: 8px;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .hidden { display: none; }
+    .msg {
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin-top: 12px;
+      font-size: 0.95rem;
+    }
+    .msg.info { background: rgba(33, 137, 215, 0.2); border: 1px solid var(--accent); }
+    .msg.ok { background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; }
+    .msg.err { background: rgba(225, 29, 72, 0.15); border: 1px solid var(--danger); }
+    .check {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin: 14px 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .check input { margin-top: 4px; }
+    a { color: #7dd3fc; }
+    .signed-in-as { color: var(--orange); font-weight: 600; }
+    footer {
+      margin-top: 28px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Delete account &amp; data</h1>
+    <p class="subtitle">Limitless IOT — account and data deletion request</p>
+
+    <div class="card">
+      <h2>What we delete</h2>
+      <ul>
+        <li>Your account profile (name, email, photo)</li>
+        <li>App settings and preferences</li>
+        <li>GeoFence zones, GPS tracking sessions, and location history</li>
+        <li>IoT monitors, base stations, operators, and IoT data logs</li>
+        <li>Shop order history linked to your account</li>
+        <li>Your Firebase Authentication sign-in</li>
+      </ul>
+      <p style="color: var(--muted); font-size: 0.9rem; margin: 12px 0 0;">
+        Some data required for legal, tax, or fraud prevention may be retained
+        for a limited period, then deleted.
+        To remove app data only, use
+        <a href="/delete-data.html">Delete my data</a>.
+      </p>
+    </div>
+
+    <div id="login-section" class="card">
+      <h2>Sign in to continue</h2>
+      <p style="color: var(--muted); font-size: 0.92rem; margin-top: 0;">
+        Sign in with the same email you use in the Limitless IOT app.
+      </p>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="Password">
+      <div class="row">
+        <button type="button" class="btn-primary" id="sign-in-btn">Sign in</button>
+      </div>
+      <div id="login-msg"></div>
+    </div>
+
+    <div id="delete-section" class="card hidden">
+      <h2>Confirm deletion</h2>
+      <p>Signed in as <span id="user-email" class="signed-in-as"></span></p>
+      <p style="color: var(--muted); font-size: 0.92rem;">
+        This permanently deletes your account and associated app data.
+        This action cannot be undone.
+      </p>
+      <label class="check">
+        <input type="checkbox" id="confirm-check">
+        <span>I understand that my account and associated data will be permanently deleted.</span>
+      </label>
+      <button type="button" class="btn-danger" id="delete-btn" disabled>
+        Delete my account and data
+      </button>
+      <button type="button" class="btn-secondary" id="sign-out-btn">Sign out</button>
+      <div id="delete-msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Need help?</h2>
+      <p style="color: var(--muted); margin: 0; font-size: 0.92rem;">
+        If you cannot sign in, email
+        <a id="support-mail" href="mailto:info@trinityglobal.co.za?subject=Limitless%20IOT%20account%20deletion%20request">info@trinityglobal.co.za</a>
+        from your account email with the subject <strong>Account deletion request</strong>.
+        We typically process requests within 30 days.
+      </p>
+    </div>
+
+    <footer>
+      &copy; Limitless IOT ·
+      Delete in the app: Profile → Delete account &amp; data ·
+      <a href="https://limitless-iot-17e8f.web.app/profile?page=profile">Back to profile</a>
+    </footer>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: 'AIzaSyBQf5sZS9Ve66qubyDbGs0PcJ6awp3VM0U',
+      authDomain: 'limitless-iot-17e8f.firebaseapp.com',
+      projectId: 'limitless-iot-17e8f',
+      storageBucket: 'limitless-iot-17e8f.firebasestorage.app',
+      messagingSenderId: '850789059915',
+      appId: '1:850789059915:web:d1dc9e730a9b1e8d76ecce',
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    const loginSection = document.getElementById('login-section');
+    const deleteSection = document.getElementById('delete-section');
+    const loginMsg = document.getElementById('login-msg');
+    const deleteMsg = document.getElementById('delete-msg');
+    const userEmailEl = document.getElementById('user-email');
+    const confirmCheck = document.getElementById('confirm-check');
+    const deleteBtn = document.getElementById('delete-btn');
+
+    function showMsg(el, text, type) {
+      el.innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+    }
+
+    function setSignedIn(user) {
+      loginSection.classList.add('hidden');
+      deleteSection.classList.remove('hidden');
+      userEmailEl.textContent = user.email || user.uid;
+      loginMsg.innerHTML = '';
+      deleteMsg.innerHTML = '';
+      confirmCheck.checked = false;
+      deleteBtn.disabled = true;
+    }
+
+    function setSignedOut() {
+      loginSection.classList.remove('hidden');
+      deleteSection.classList.add('hidden');
+      deleteMsg.innerHTML = '';
+    }
+
+    confirmCheck.addEventListener('change', function () {
+      deleteBtn.disabled = !confirmCheck.checked;
+    });
+
+    auth.onAuthStateChanged(function (user) {
+      if (user) {
+        setSignedIn(user);
+      } else {
+        setSignedOut();
+      }
+    });
+
+    document.getElementById('sign-in-btn').addEventListener('click', async function () {
+      loginMsg.innerHTML = '';
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      if (!email || !password) {
+        showMsg(loginMsg, 'Enter email and password.', 'err');
+        return;
+      }
+      try {
+        await auth.signInWithEmailAndPassword(email, password);
+      } catch (e) {
+        showMsg(loginMsg, e.message || 'Sign in failed.', 'err');
+      }
+    });
+
+    document.getElementById('sign-out-btn').addEventListener('click', function () {
+      auth.signOut();
+    });
+
+    async function deleteCollection(colRef) {
+      while (true) {
+        const snap = await colRef.limit(100).get();
+        if (snap.empty) break;
+        const batch = db.batch();
+        snap.docs.forEach(function (doc) { batch.delete(doc.ref); });
+        await batch.commit();
+      }
+    }
+
+    async function deleteNestedCollection(colRef, nestedNames) {
+      while (true) {
+        const snap = await colRef.limit(50).get();
+        if (snap.empty) break;
+        for (const doc of snap.docs) {
+          for (const nested of nestedNames) {
+            await deleteCollection(doc.ref.collection(nested));
+          }
+          await doc.ref.delete();
+        }
+      }
+    }
+
+    async function deleteUserFirestoreData(uid) {
+      const userRef = db.collection('users').doc(uid);
+      await deleteNestedCollection(userRef.collection('trackingSessions'), ['locations']);
+      await deleteNestedCollection(userRef.collection('monitors'), ['iotData']);
+      await deleteCollection(userRef.collection('geoFences'));
+      await deleteCollection(userRef.collection('baseStations'));
+      await deleteCollection(userRef.collection('operators'));
+      await deleteCollection(userRef.collection('shop_orders'));
+      await userRef.delete();
+    }
+
+    document.getElementById('delete-btn').addEventListener('click', async function () {
+      deleteMsg.innerHTML = '';
+      const user = auth.currentUser;
+      if (!user) {
+        showMsg(deleteMsg, 'Please sign in again.', 'err');
+        return;
+      }
+
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = 'Processing…';
+
+      try {
+        await deleteUserFirestoreData(user.uid);
+        await user.delete();
+        showMsg(
+          deleteMsg,
+          'Your account and associated data have been permanently deleted.',
+          'ok'
+        );
+        setSignedOut();
+      } catch (e) {
+        const code = e.code || '';
+        if (code === 'auth/requires-recent-login') {
+          showMsg(
+            deleteMsg,
+            'For security, sign out, sign in again on this page, then retry deletion. ' +
+            'Or delete from the app: Profile → Delete account & data.',
+            'info'
+          );
+        } else {
+          showMsg(
+            deleteMsg,
+            (e.message || 'Deletion failed.') +
+            ' You can also delete from the app: Profile → Delete account & data.',
+            'err'
+          );
+        }
+      }
+
+      deleteBtn.textContent = 'Delete my account and data';
+      deleteBtn.disabled = !confirmCheck.checked;
+    });
+  </script>
+</body>
+</html>

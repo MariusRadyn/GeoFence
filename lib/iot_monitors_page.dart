@@ -591,7 +591,8 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
             // Fuel Consumption
             onChangedFuelConsumption: (value) {
               setState(() {
-                monitor.fuelConsumption =  value as double;
+                monitor.fuelConsumption =
+                    double.tryParse(value) ?? monitor.fuelConsumption;
                 _saveMonitor(monitor);
               });
             },

@@ -33,6 +33,24 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <!-- Account deletion pages live on a separate site (no Flutter service worker). -->
+  <script>
+    (function () {
+      var accountHost = 'https://limitless-iot-account.web.app';
+      var path = location.pathname;
+      if (path.slice(-16) === 'delete-data.html') {
+        window.__skipFlutter = true;
+        location.replace(accountHost + '/delete-data.html');
+      } else if (path.slice(-19) === 'delete-account.html') {
+        window.__skipFlutter = true;
+        location.replace(accountHost + '/delete-account.html');
+      } else if (path.slice(-12) === 'privacy.html') {
+        window.__skipFlutter = true;
+        location.replace(accountHost + '/privacy.html');
+      }
+    })();
+  </script>
+
   <!-- App Check: use the SAME debug token already registered in Firebase Console
        (App Check → Web app → Manage debug tokens). `true` can mint a new token. -->
   <script>
@@ -40,6 +58,13 @@
       self.FIREBASE_APPCHECK_DEBUG_TOKEN = '1d08c0a0-4b92-4339-8cff-3d0de61304e7';
     }
   </script>
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    if (!window.__skipFlutter) {
+      var s = document.createElement('script');
+      s.src = 'flutter_bootstrap.js';
+      s.async = true;
+      document.body.appendChild(s);
+    }
+  </script>
 </body>
 </html>

@@ -35,7 +35,6 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
   bool _isLoadingGeofence = true;
   bool _isLoadingVehicles = true;
   bool _isTracking = false;
-  bool _newTrackingStarted = false;
   final Map<String, bool> _insideGeofence = {};
   String? _selectedVehicleId;
   List<Map<String, dynamic>> _vehicles = [];
@@ -43,6 +42,10 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
   List<LatLng> _trackingPathRed = [];
   List<LatLng> _trackingPathGreen = [];
   Set<Polyline> _pathPolyline = {};
+  LatLng? _lastTrackedLatLng;
+  bool _wasInsideAny = false;
+  double _pendingInsideKm = 0;
+  double _pendingOutsideKm = 0;
   LatLng _currentLocation = const LatLng(-29.6, 30.3);
   int _fencePntr = 0;
   int _distanceFilter = 0;
@@ -136,51 +139,80 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
           .collection(collectionGeoFences)
           .get();
 
-      if (geoFencesSnapshot.docs.isNotEmpty) {
-        for (var doc in geoFencesSnapshot.docs) {
-          final data = doc.data();
-          final points = List<GeoPoint>.from(data['points']);
-          final polygonPoints = points.map((point) =>
-              LatLng(point.latitude, point.longitude)).toList();
+      final newMarkers = <Marker>{};
+      final newPolygons = <Polygon>{};
+      final newFences = <FenceData>[];
 
-          if (polygonPoints.length >= 3) {
-            final polygonId = '$geoFencePolygon${_polygonIdCounter++}';
-            final markerId = '$geoFenceMarker${_polygonIdCounter++}';
+      for (var doc in geoFencesSnapshot.docs) {
+        final data = doc.data();
+        final type = '${data[fireGeoType] ?? geoFenceTypePolygon}';
+        final isCircle = type == geoFenceTypeCircle;
+        final pointsRaw = data[fireGeoPoints];
+        if (pointsRaw is! List || pointsRaw.isEmpty) continue;
 
-            setState(() {
-              // Add marker for the label
-              _markers.add(
-                Marker(
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueMagenta),
-                  markerId: MarkerId(markerId),
-                  position: calculateCentroid(polygonPoints),
-                  infoWindow: InfoWindow(title: data['name']),
-                  //onTap: ()=> _onMarkerTap(polygonId, doc.id, data['name'], polygonPoints),
-                ),
-              );
+        final polygonPoints = List<GeoPoint>.from(pointsRaw)
+            .map((point) => LatLng(point.latitude, point.longitude))
+            .toList();
 
-              // Add polygon
-              _polygons.add(
-                Polygon(
-                  polygonId: PolygonId(polygonId),
-                  points: polygonPoints,
-                  strokeWidth: 2,
-                  strokeColor: Colors.blue,
-                  fillColor: Colors.blue.withValues(alpha: 0.2),
-                  consumeTapEvents: true,
-                ),
-              );
+        if (polygonPoints.length < 3) continue;
 
-              _geofenceList.add(FenceData(
-                  points: polygonPoints,
-                  name: data['name'],
-                  firestoreId: doc.id
-              ));
-            });
+        final polygonId = '$geoFencePolygon$_polygonIdCounter';
+        final markerId = '$geoFenceMarker${_polygonIdCounter++}';
+
+        LatLng? center;
+        double? radiusMeters;
+        if (isCircle) {
+          final c = data[fireGeoCenter];
+          if (c is GeoPoint) {
+            center = LatLng(c.latitude, c.longitude);
           }
+          final r = data[fireGeoRadiusMeters];
+          if (r is num) radiusMeters = r.toDouble();
         }
+
+        final name = '${data[fireGeoName] ?? data['name'] ?? ''}';
+        final labelPos = isCircle && center != null
+            ? center
+            : calculateCentroid(polygonPoints);
+        final labelIcon = await fenceNameLabelIcon(name);
+
+        newMarkers.add(
+          Marker(
+            icon: labelIcon,
+            anchor: const Offset(0.5, 0.5),
+            markerId: MarkerId(markerId),
+            position: labelPos,
+            infoWindow: InfoWindow(title: name),
+          ),
+        );
+
+        newPolygons.add(
+          Polygon(
+            polygonId: PolygonId(polygonId),
+            points: polygonPoints,
+            strokeWidth: 2,
+            strokeColor: Colors.blue,
+            fillColor: Colors.blue.withValues(alpha: 0.2),
+            consumeTapEvents: true,
+          ),
+        );
+
+        newFences.add(FenceData(
+          points: polygonPoints,
+          name: name,
+          firestoreId: doc.id,
+          type: isCircle ? geoFenceTypeCircle : geoFenceTypePolygon,
+          center: center,
+          radiusMeters: radiusMeters,
+        ));
       }
+
+      if (!mounted) return;
+      setState(() {
+        _markers.addAll(newMarkers);
+        _polygons.addAll(newPolygons);
+        _geofenceList.addAll(newFences);
+      });
 
       // Focus map on user's location if available
       final userDoc = await firestore
@@ -197,9 +229,11 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
     } catch (e) {
       MyGlobalSnackBar.show('Error loading GEO Fences: $e');
     } finally {
-      setState(() {
-        _isLoadingGeofence = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoadingGeofence = false;
+        });
+      }
     }
   }
   Future<void> _getLocation() async {
@@ -310,17 +344,34 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
         _isTracking = true;
         _trackingPathRed = [];
         _trackingPathGreen = [];
-        _newTrackingStarted = true;
         _pathPolyline = {};
+        _lastTrackedLatLng = null;
+        _insideGeofence.clear();
+        _wasInsideAny = false;
+        _pendingInsideKm = 0;
+        _pendingOutsideKm = 0;
       });
 
+      if (!mounted) return;
+      final userId = context.read<UserDataService>().userdata!.userID;
+      final sessionRef = await _firestore
+          .collection(collectionUsers)
+          .doc(userId)
+          .collection(collectionTrackingSessions)
+          .add({
+        fireTrackingVehicleDocId: _selectedVehicleId,
+        fireTrackingStartTime: FieldValue.serverTimestamp(),
+        fireTrackingIsActive: true,
+        fireTrackingDistanceInside: 0.0,
+        fireTrackingDistanceOutside: 0.0,
+      });
+      _trackingSessionId = sessionRef.id;
 
-      // Start position tracking Listener
-      // This will fire onPostionUpdate every 5m traveled
-      //await LocationService.startLocationTracking();
       _startPositionTracking();
 
-      if(_isVoicePromptOn)  _flutterTts.speak('Tracking Started. Waiting for First Movement');
+      if (_isVoicePromptOn) {
+        _flutterTts.speak('Tracking started. Watching for geofence crossings');
+      }
 
       setState(() {
         _statusMessage = "Tracking";
@@ -337,176 +388,196 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
     _positionStream = Geolocator.getPositionStream(
       locationSettings: LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: _distanceFilter, // Update every 10 meters (Set in Settings)
+        distanceFilter: _distanceFilter,
       ),
     ).listen(_onPositionUpdate);
-
-    // FlutterBackgroundService().on('locationUpdate').listen((event) {
-    //   if (event != null) {
-    //     final latitude = event['latitude'] as double?;
-    //     final longitude = event['longitude'] as double?;
-    //     final timestamp = event['timestamp'] as String?;
-    //
-    //     if (latitude != null && longitude != null) {
-    //       _onPositionUpdate(latLngToPosition(LatLng(latitude, longitude)));
-    //     }
-    //   }
-    // });
   }
+
+  Future<void> _flushPendingDistance() async {
+    if (_trackingSessionId == null || !mounted) return;
+
+    if (_pendingInsideKm <= 0 && _pendingOutsideKm <= 0) return;
+
+    final userId = context.read<UserDataService>().userdata!.userID;
+    final updates = <String, dynamic>{};
+    if (_pendingInsideKm > 0) {
+      updates[fireTrackingDistanceInside] =
+          FieldValue.increment(_pendingInsideKm);
+      _pendingInsideKm = 0;
+    }
+    if (_pendingOutsideKm > 0) {
+      updates[fireTrackingDistanceOutside] =
+          FieldValue.increment(_pendingOutsideKm);
+      _pendingOutsideKm = 0;
+    }
+
+    await _firestore
+        .collection(collectionUsers)
+        .doc(userId)
+        .collection(collectionTrackingSessions)
+        .doc(_trackingSessionId)
+        .update(updates);
+  }
+
+  Future<void> _saveGeofenceCrossing({
+    required Position position,
+    required FenceData geofence,
+    required String event,
+    required bool insideAny,
+    double? distanceKm,
+  }) async {
+    if (_trackingSessionId == null || !mounted) return;
+
+    final userId = context.read<UserDataService>().userdata!.userID;
+    final payload = <String, dynamic>{
+      'latitude': position.latitude,
+      'longitude': position.longitude,
+      'timestamp': FieldValue.serverTimestamp(),
+      fireGeoCrossingFenceId: geofence.firestoreId,
+      fireGeoCrossingFenceName: geofence.name,
+      fireGeoCrossingEvent: event,
+      'inside_geofence': insideAny,
+    };
+    if (distanceKm != null && distanceKm > 0) {
+      payload[fireGeoCrossingDistanceKm] = distanceKm;
+    }
+
+    await _firestore
+        .collection(collectionUsers)
+        .doc(userId)
+        .collection(collectionTrackingSessions)
+        .doc(_trackingSessionId)
+        .collection(collectionLocations)
+        .add(payload);
+  }
+  Set<Polyline> _buildPathPolylines() {
+    return {
+      Polyline(
+        polylineId: const PolylineId('tracking_path_red'),
+        points: _trackingPathRed,
+        color: Colors.red,
+        width: 5,
+      ),
+      Polyline(
+        polylineId: const PolylineId('tracking_path_green'),
+        points: _trackingPathGreen,
+        color: Colors.green,
+        width: 5,
+      ),
+    };
+  }
+
   void _onPositionUpdate(Position position) async {
-    bool insideAny = false;
-    LatLng previousPosition;
-    double distance = 0;
+    if (!mounted) return;
+
+    final currentLatLng = LatLng(position.latitude, position.longitude);
 
     setState(() {
       _currentPosition = position;
     });
 
-    // Add to tracking path
-    final currentLatLng = LatLng(position.latitude, position.longitude);
-
-    // Move camera to current position
     _mapController?.animateCamera(
       CameraUpdate.newLatLng(currentLatLng),
     );
 
-    // Check if inside any geofence
-    for (var geofence in _geofenceList) {
-      final bool isInside = isPointInsidePolygon(
-          currentLatLng, geofence.points);
-
-      if (isInside) {
-        _trackingPathGreen.add(currentLatLng);
-      } else {
-        _trackingPathRed.add(currentLatLng);
-      }
-      insideAny = insideAny || isInside;
-
-      // Calculate distances and check if inside any geofence
-      if (_trackingPathRed.length >= 2 ||  _trackingPathGreen.length >= 2) {
-
-        if(insideAny){
-          // Inside
-          previousPosition = _trackingPathGreen[_trackingPathGreen.length - 2];
-          distance = Geolocator.distanceBetween(
-            previousPosition.latitude,
-            previousPosition.longitude,
-            currentLatLng.latitude,
-            currentLatLng.longitude,
-          ) / 1000; // Convert to kilometers
-        }else{
-          // Outside
-          previousPosition = _trackingPathRed[_trackingPathRed.length - 2];
-          distance = Geolocator.distanceBetween(
-            previousPosition.latitude,
-            previousPosition.longitude,
-            currentLatLng.latitude,
-            currentLatLng.longitude,
-          ) / 1000; // Convert to kilometers
-        }
-
-        // Create tracking session in Firebase only
-        // once first movement was detected
-        if (_newTrackingStarted) {
-          if(distance == 0) return;
-
-          _newTrackingStarted = false;
-          if(_isVoicePromptOn) _flutterTts.speak('Movement Detected');
-
-          if(!mounted) return;
-          final userId = context.read<UserDataService>().userdata!.userID;
-
-          final sessionRef = await _firestore
-              .collection(collectionUsers)
-              .doc(userId)
-              .collection(collectionTrackingSessions)
-              .add({
-            'vehicle_id': _selectedVehicleId,
-            'start_time': FieldValue.serverTimestamp(),
-            'is_active': true,
-            'distance_inside': 0.0,
-            'distance_outside': 0.0,
-          });
-          _trackingSessionId = sessionRef.id;
-        }
-
-        if (_trackingSessionId == null) return;
-        // Changed barriers (in or our fences)
-        // Check if status changed (entered or exited geofence)
-        if (isInside != _insideGeofence[geofence.firestoreId]) {
-          _insideGeofence[geofence.firestoreId] = isInside;
-
-          // Update polyline on map
-          setState(() {
-            _pathPolyline = {
-              Polyline(
-                polylineId: const PolylineId('tracking_path_red'),
-                points: _trackingPathRed,
-                color: Colors.red,
-                width: 5,
-              ),
-              Polyline(
-                polylineId: const PolylineId('tracking_path_green'),
-                points: _trackingPathGreen,
-                color: Colors.green,
-                width: 5,
-              ),
-            };
-          });
-
-          // Voice Prompt
-          if (_isVoicePromptOn) {
-            if (isInside) {
-              _flutterTts.speak('Entering ${geofence.name}');
-            } else {
-              _flutterTts.speak('Exiting ${geofence.name}');
-            }
-          }
-        }
-      }
-
-      // Update tracking session with new data
-      if(!mounted) return;
-      final userId = context.read<UserDataService>().userdata!.userID;
-
-      final batch = _firestore.batch();
-      final trackingRef = _firestore
-          .collection(collectionUsers)
-          .doc(userId)
-          .collection(collectionTrackingSessions)
-          .doc(_trackingSessionId);
-
-      final locationRef = trackingRef.collection('locations').doc();
-
-      // Ensure the session exists
-      await trackingRef.set({
-        'distance_inside': 0,
-        'distance_outside': 0,
-        'started_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      batch.set(locationRef, {
-        'latitude': position.latitude,
-        'longitude': position.longitude,
-        'timestamp': FieldValue.serverTimestamp(),
-        'inside_geofence': insideAny,
-        'distance_from_last': distance,
-      });
-
-      batch.update(trackingRef, {
-        insideAny ? 'distance_inside' : 'distance_outside':
-        FieldValue.increment(distance),
-      });
-
-      await batch.commit();
-
-      // Update status message
-      setState(() {
-        _statusMessage = insideAny
-            ? "Inside geofence"
-            : "Outside geofence";
-      });
+    final fenceInside = <String, bool>{};
+    var insideAny = false;
+    for (final geofence in _geofenceList) {
+      final inside = isPointInsideGeofence(currentLatLng, geofence);
+      fenceInside[geofence.firestoreId] = inside;
+      insideAny = insideAny || inside;
     }
+
+    if (insideAny) {
+      _trackingPathGreen.add(currentLatLng);
+    } else {
+      _trackingPathRed.add(currentLatLng);
+    }
+
+    if (_lastTrackedLatLng == null) {
+      for (final geofence in _geofenceList) {
+        _insideGeofence[geofence.firestoreId] =
+            fenceInside[geofence.firestoreId]!;
+      }
+      _wasInsideAny = insideAny;
+      _lastTrackedLatLng = currentLatLng;
+
+      setState(() {
+        _pathPolyline = _buildPathPolylines();
+        _statusMessage =
+            insideAny ? 'Inside geofence' : 'Outside geofence';
+      });
+      return;
+    }
+
+    final stepKm = Geolocator.distanceBetween(
+      _lastTrackedLatLng!.latitude,
+      _lastTrackedLatLng!.longitude,
+      currentLatLng.latitude,
+      currentLatLng.longitude,
+    ) / 1000;
+
+    if (stepKm > 0) {
+      if (_wasInsideAny) {
+        _pendingInsideKm += stepKm;
+      } else {
+        _pendingOutsideKm += stepKm;
+      }
+    }
+
+    final transitionedInside = insideAny != _wasInsideAny;
+    final exitingAllFences = _wasInsideAny && !insideAny;
+    final insideSegmentKm = exitingAllFences ? _pendingInsideKm : null;
+    _lastTrackedLatLng = currentLatLng;
+
+    if (_trackingSessionId == null) {
+      _wasInsideAny = insideAny;
+      setState(() {
+        _pathPolyline = _buildPathPolylines();
+        _statusMessage = insideAny ? 'Inside geofence' : 'Outside geofence';
+      });
+      return;
+    }
+
+    for (final geofence in _geofenceList) {
+      final isInside = fenceInside[geofence.firestoreId]!;
+      final wasInside = _insideGeofence[geofence.firestoreId] ?? isInside;
+      if (isInside == wasInside) continue;
+
+      _insideGeofence[geofence.firestoreId] = isInside;
+      final event =
+          isInside ? fireGeoCrossingEnter : fireGeoCrossingExit;
+
+      if (_isVoicePromptOn) {
+        if (isInside) {
+          _flutterTts.speak('Entering ${geofence.name}');
+        } else {
+          _flutterTts.speak('Exiting ${geofence.name}');
+        }
+      }
+
+      await _saveGeofenceCrossing(
+        position: position,
+        geofence: geofence,
+        event: event,
+        insideAny: insideAny,
+        distanceKm: event == fireGeoCrossingExit && !insideAny
+            ? insideSegmentKm
+            : null,
+      );
+    }
+
+    if (transitionedInside) {
+      await _flushPendingDistance();
+    }
+
+    _wasInsideAny = insideAny;
+
+    if (!mounted) return;
+    setState(() {
+      _pathPolyline = _buildPathPolylines();
+      _statusMessage = insideAny ? 'Inside geofence' : 'Outside geofence';
+    });
   }
   Future<void> _stopTracking({bool fromDispose = false}) async {
 
@@ -528,7 +599,11 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
     }
 
     try {
+      await _positionStream?.cancel();
+      _positionStream = null;
       await LocationService.stopLocationTracking();
+      if(!mounted) return;
+      await _flushPendingDistance();
       if(!mounted) return;
       final userId = context.read<UserDataService>().userdata!.userID;
 
@@ -566,46 +641,70 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
     //   }
     }
   }
-  Widget _buildVehicleSelector() {
-    return Card(
-      color: colorAppTitle,
-      margin: const EdgeInsets.all(5.0),
-      child: Padding(
-        padding: const EdgeInsets.all(5.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+  Widget _buildVehicleDropdown() {
+    if (_vehicles.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-            _vehicles.isEmpty
-                ? const Text('No vehicles found. Please add a vehicle',
-                    style: TextStyle(color: Colors.grey),
-                )
-
-                : DropdownButton<String>(
-                  isExpanded: true,
-                  value: _selectedVehicleId,
-                  hint: const Text(
-                  'Select a vehicle',
-                  style: TextStyle(color: Colors.grey),
-                ),
-
-              onChanged: (newValue) {
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        isExpanded: true,
+        isDense: true,
+        value: _selectedVehicleId,
+        dropdownColor: colorAppBar,
+        hint: const Text(
+          'Select a vehicle',
+          style: TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        iconEnabledColor: Colors.white,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 15,
+          fontFamily: 'Poppins',
+        ),
+        onChanged: _isTracking
+            ? null
+            : (newValue) {
                 setState(() {
                   _selectedVehicleId = newValue;
                 });
               },
-              items: _vehicles.map((vehicle) {
-                return DropdownMenuItem<String>(
-                  value: vehicle['id'],
-                  child: Text('${vehicle['name']} (${vehicle['registrationNumber']})',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                );
-              }).toList(),
+        items: _vehicles.map((vehicle) {
+          return DropdownMenuItem<String>(
+            value: vehicle['id'],
+            child: Text(
+              '${vehicle['name']} (${vehicle['registrationNumber']})',
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ),
+          );
+        }).toList(),
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildTrackingAppBar() {
+    return AppBar(
+      foregroundColor: Colors.white,
+      backgroundColor: _isTracking ? Colors.redAccent : colorAppBar,
+      title: _vehicles.isEmpty
+          ? myAppbarTitle(_statusMessage)
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildVehicleDropdown(),
+                const SizedBox(height: 2),
+                Text(
+                  _statusMessage,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontFamily: 'Poppins',
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
     );
   }
   void _nextFence() {
@@ -661,14 +760,9 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
     //     ),
     //   );
     // }
-myAppbarTitle(_statusMessage);
     return Scaffold(
       backgroundColor: colorAppBackground,
-      appBar: AppBar(
-        foregroundColor: Colors.white,
-        backgroundColor: _isTracking ? Colors.redAccent : colorAppBar,
-        title: myAppbarTitle(_statusMessage),
-      ),
+      appBar: _buildTrackingAppBar(),
       bottomNavigationBar: BottomNavigationBar(
           onTap: _onBotBarTap,
           backgroundColor: colorAppBar,
@@ -687,31 +781,18 @@ myAppbarTitle(_statusMessage);
       ),
       body: _vehicles.isEmpty
           ? myCenterMsg('No Vehicles Found')
-          : Stack(
-        children: [
-          Column(
-            children: [
-              _buildVehicleSelector(),
-              SizedBox(height: 5),
-
-              Expanded(
-                child: GoogleMap(
-                  initialCameraPosition: _initialPosition,
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
-                  mapType: MapType.normal,
-                  markers: _markers,
-                  polygons: _polygons,
-                  polylines: _pathPolyline,
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+          : GoogleMap(
+              initialCameraPosition: _initialPosition,
+              myLocationEnabled: true,
+              myLocationButtonEnabled: true,
+              mapType: MapType.normal,
+              markers: _markers,
+              polygons: _polygons,
+              polylines: _pathPolyline,
+              onMapCreated: (controller) {
+                _mapController = controller;
+              },
+            ),
     );
   }
 }

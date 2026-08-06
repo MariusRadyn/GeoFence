@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:geofence/account_deletion_service.dart';
 import 'package:geofence/network_avatar.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
@@ -25,6 +26,256 @@ class ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
+  }
+
+  void _showDeleteDataDialog(BuildContext context) {
+    final passwordController = TextEditingController();
+    final authUser = FirebaseAuth.instance.currentUser;
+    final usesEmailPassword = authUser?.providerData.any(
+          (p) => p.providerId == EmailAuthProvider.PROVIDER_ID,
+        ) ??
+        false;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        var confirmed = false;
+        var busy = false;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> runDelete() async {
+              if (!confirmed || busy) return;
+
+              setDialogState(() => busy = true);
+              try {
+                await AccountDeletionService.deleteCurrentUserDataOnly(
+                  password: usesEmailPassword
+                      ? passwordController.text
+                      : null,
+                );
+                if (!dialogContext.mounted) return;
+                Navigator.of(dialogContext).pop();
+                if (!context.mounted) return;
+                await context.read<UserDataService>().load();
+                await context.read<SettingsService>().load();
+                if (!context.mounted) return;
+                MyGlobalMessage.show(
+                  'Data deleted',
+                  'Your app data has been removed. Your account is still active.',
+                  MyMessageType.info,
+                );
+              } on FirebaseAuthException catch (e) {
+                setDialogState(() => busy = false);
+                final msg = switch (e.code) {
+                  'missing-password' =>
+                    'Enter your password to confirm data deletion.',
+                  'wrong-password' => 'Incorrect password.',
+                  'requires-recent-login' =>
+                    'Sign out, sign in again, then retry.',
+                  _ => e.message ?? e.code,
+                };
+                MyGlobalMessage.show('Delete failed', msg, MyMessageType.error);
+              } catch (e) {
+                setDialogState(() => busy = false);
+                MyGlobalMessage.show(
+                  'Delete failed',
+                  '$e',
+                  MyMessageType.error,
+                );
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: colorAppTitle,
+              title: const MyText(
+                text: 'Delete my data?',
+                color: Colors.white,
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const MyText(
+                      text:
+                          'This permanently deletes your GeoFence zones, '
+                          'tracking history, IoT data, operators, shop orders, '
+                          'and profile photo. Your account and sign-in stay active.',
+                      color: Colors.white70,
+                      fontsize: 14,
+                    ),
+                    const SizedBox(height: 12),
+                    if (usesEmailPassword) ...[
+                      MyTextFormField(
+                        controller: passwordController,
+                        labelText: 'Password',
+                        isPasswordField: true,
+                        backgroundColor: colorAppBar,
+                        foregroundColor: Colors.white,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: confirmed,
+                      activeColor: colorOrange,
+                      title: const MyText(
+                        text: 'I understand this cannot be undone',
+                        color: Colors.white70,
+                        fontsize: 13,
+                      ),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      onChanged: busy
+                          ? null
+                          : (v) => setDialogState(() => confirmed = v == true),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: busy ? null : () => Navigator.pop(dialogContext),
+                  child: const MyText(text: 'Cancel', color: Colors.white70),
+                ),
+                TextButton(
+                  onPressed: busy || !confirmed ? null : runDelete,
+                  child: MyText(
+                    text: busy ? 'Deleting…' : 'Delete data',
+                    color: busy || !confirmed ? Colors.grey : Colors.redAccent,
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context) {
+    final passwordController = TextEditingController();
+    final authUser = FirebaseAuth.instance.currentUser;
+    final usesEmailPassword = authUser?.providerData.any(
+          (p) => p.providerId == EmailAuthProvider.PROVIDER_ID,
+        ) ??
+        false;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        var confirmed = false;
+        var busy = false;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> runDelete() async {
+              if (!confirmed || busy) return;
+
+              setDialogState(() => busy = true);
+              try {
+                await AccountDeletionService.deleteCurrentUserAccount(
+                  password: usesEmailPassword
+                      ? passwordController.text
+                      : null,
+                );
+                if (!dialogContext.mounted) return;
+                Navigator.of(dialogContext).pop();
+                if (!context.mounted) return;
+                await context.read<UserDataService>().logout();
+                if (!context.mounted) return;
+                Navigator.of(context).popUntil((route) => route.isFirst);
+                MyGlobalMessage.show(
+                  'Account deleted',
+                  'Your account and app data have been removed.',
+                  MyMessageType.info,
+                );
+              } on FirebaseAuthException catch (e) {
+                setDialogState(() => busy = false);
+                final msg = switch (e.code) {
+                  'missing-password' =>
+                    'Enter your password to confirm deletion.',
+                  'wrong-password' => 'Incorrect password.',
+                  'requires-recent-login' =>
+                    'Sign out, sign in again, then retry deletion.',
+                  _ => e.message ?? e.code,
+                };
+                MyGlobalMessage.show('Delete failed', msg, MyMessageType.error);
+              } catch (e) {
+                setDialogState(() => busy = false);
+                MyGlobalMessage.show(
+                  'Delete failed',
+                  '$e',
+                  MyMessageType.error,
+                );
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: colorAppTitle,
+              title: const MyText(
+                text: 'Delete account?',
+                color: Colors.white,
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const MyText(
+                      text:
+                          'This permanently deletes your account, profile, '
+                          'GeoFence zones, tracking history, IoT data, '
+                          'operators, and shop orders.',
+                      color: Colors.white70,
+                      fontsize: 14,
+                    ),
+                    const SizedBox(height: 12),
+                    if (usesEmailPassword) ...[
+                      MyTextFormField(
+                        controller: passwordController,
+                        labelText: 'Password',
+                        isPasswordField: true,
+                        backgroundColor: colorAppBar,
+                        foregroundColor: Colors.white,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: confirmed,
+                      activeColor: colorOrange,
+                      title: const MyText(
+                        text: 'I understand this cannot be undone',
+                        color: Colors.white70,
+                        fontsize: 13,
+                      ),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      onChanged: busy
+                          ? null
+                          : (v) => setDialogState(() => confirmed = v == true),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: busy ? null : () => Navigator.pop(dialogContext),
+                  child: const MyText(text: 'Cancel', color: Colors.white70),
+                ),
+                TextButton(
+                  onPressed: busy || !confirmed ? null : runDelete,
+                  child: MyText(
+                    text: busy ? 'Deleting…' : 'Delete',
+                    color: busy || !confirmed ? Colors.grey : Colors.redAccent,
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void showLogoutDialog (BuildContext context) {
@@ -305,6 +556,40 @@ class ProfilePageState extends State<ProfilePage> {
                           labelText: "Email",
                           isPasswordField: false,
                           isReadOnly: true,
+                        ),
+
+                        SizedBox(height: 20),
+
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const MyText(
+                            text: 'Delete my data',
+                            color: Colors.orangeAccent,
+                            fontsize: 16,
+                          ),
+                          subtitle: const MyText(
+                            text:
+                                'Remove app data but keep your account',
+                            color: Colors.white54,
+                            fontsize: 12,
+                          ),
+                          onTap: () => _showDeleteDataDialog(context),
+                        ),
+
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const MyText(
+                            text: 'Delete account & data',
+                            color: Colors.redAccent,
+                            fontsize: 16,
+                          ),
+                          subtitle: const MyText(
+                            text:
+                                'Permanently delete your account and app data',
+                            color: Colors.white54,
+                            fontsize: 12,
+                          ),
+                          onTap: () => _showDeleteAccountDialog(context),
                         ),
 
                         SizedBox(height: 20),

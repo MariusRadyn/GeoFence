@@ -186,8 +186,7 @@ class LoginPageState extends State<LoginPage> {
                             if(!mounted) return;
                             // ignore: use_build_context_synchronously
                             Navigator.of(context).pop(); // close current dialog FIRST
-                            
-                            await _sendValidateEmail();
+                            // Verification email already sent in fireAuthCreateUserWithEmail.
                             if(!mounted) return;
 
                             // ignore: use_build_context_synchronously
@@ -295,15 +294,37 @@ class LoginPageState extends State<LoginPage> {
       return false;
     }
   }
-  Future<void> _sendValidateEmail() async {
+  Future<bool> _sendValidateEmail() async {
     final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) return;
+    if (user == null) return false;
+    if (user.emailVerified) return true;
 
     try {
-      await user.sendEmailVerification();   // 🔥 Forces server check
+      await user.sendEmailVerification();
+      MyGlobalMessage.show(
+        'Email sent',
+        'Check your inbox for the verification link.',
+        MyMessageType.info,
+      );
+      return true;
+    } on FirebaseAuthException catch (e) {
+      final msg = switch (e.code) {
+        'too-many-requests' =>
+          'Too many attempts. Wait a few minutes before resending.',
+        'network-request-failed' => 'Network error. Check your connection.',
+        _ => e.message ?? e.code,
+      };
+      MyGlobalMessage.show('Verification email', msg, MyMessageType.error);
+      return false;
     } catch (e) {
-      MyGlobalMessage.show("Error", e.toString(), MyMessageType.error);
+      debugPrint('sendEmailVerification: $e');
+      MyGlobalMessage.show(
+        'Verification email',
+        'Could not send verification email. Try again later.',
+        MyMessageType.error,
+      );
+      return false;
     }
   }
   void _showEmailVerificationDialog(BuildContext context) {
@@ -313,30 +334,47 @@ class LoginPageState extends State<LoginPage> {
       context: context,
       barrierDismissible: false,
 
-      builder: (context) {
+      builder: (dialogContext) {
         timer = Timer.periodic(const Duration(seconds: 3), (timer) async {
           final user = FirebaseAuth.instance.currentUser;
 
           if (user == null) {
             timer.cancel();
-            Navigator.of(context).pop();
+            if (dialogContext.mounted) {
+              Navigator.of(dialogContext).pop();
+            }
             return;
           }
 
-          await user.reload(); // 🔥 Force server refresh
-          if(!mounted) return;
-          
-          if (user.emailVerified) {
+          try {
+            await user.reload();
+          } catch (_) {
+            return;
+          }
+
+          if (!dialogContext.mounted) return;
+
+          final verified =
+              FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+          if (verified) {
             timer.cancel();
-            // ignore: use_build_context_synchronously
-            Navigator.of(context).pop(); // Close dialog
+            Navigator.of(dialogContext).pop();
+            final appContext = navigatorKey.currentContext;
+            if (appContext != null) {
+              await appContext.read<UserDataService>().load();
+            }
+            MyGlobalMessage.show(
+              'Email verified',
+              'Your email address has been verified.',
+              MyMessageType.info,
+            );
           }
         });
 
         return AlertDialog(
-          title: const Text("Email Verification"),
-          content: const Text(
-            "Please click the verification link sent to your email.\n\n"
+          title: const MyText(text:"Email Verification",fontsize: 20),
+          content: const MyText(
+            text:"Please click the verification link sent to your email.\n"
                 "This window will close automatically once verified.",
           ),
           shape: RoundedRectangleBorder(
@@ -360,9 +398,8 @@ class LoginPageState extends State<LoginPage> {
               onPressed: () async {
                 timer?.cancel();
                 await FirebaseAuth.instance.signOut();
-                if(mounted){
-                  // ignore: use_build_context_synchronously
-                  Navigator.of(context).pop();
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
                 }
               },
             )
@@ -413,35 +450,77 @@ class LoginPageState extends State<LoginPage> {
         _pwController.text,
       );
 
-      await userService.load();
-
-      setState(() {
-        busyLoggingIn = false;
-      });
-
-      // Logged In
-      if (result.isSuccess) {
-        if(userService.userdata != null){
-          userService.isUserLoggedIn = true;
-        }
-      } else {
-        // Logged ERROR
-        if(userService.userdata != null){
+      if (!result.isSuccess || result.user == null) {
+        if (userService.userdata != null) {
           userService.isUserLoggedIn = false;
         }
-
-        if(result.code != null){
+        if (result.code != null) {
           MyGlobalMessage.show("Login", result.code!, MyMessageType.warning);
-        } else {
+        } else if (result.exception != null) {
           MyGlobalMessage.show("Login", result.exception.toString(), MyMessageType.warning);
         }
         return false;
       }
+
+      final authUser = result.user!;
+      await userService.load();
+
+      if (userService.userdata == null) {
+        final email = authUser.email ?? _emailController.text.trim();
+        final displayName = authUser.displayName?.trim().isNotEmpty == true
+            ? authUser.displayName!.trim()
+            : (email.contains('@') ? email.split('@').first : email);
+
+        await userService.create(
+          UserData(
+            displayName: displayName,
+            email: email,
+            emailValidated: authUser.emailVerified,
+          ),
+          uid: authUser.uid,
+        );
+        await userService.load();
+      }
+
+      if (userService.userdata == null) {
+        MyGlobalMessage.show(
+          'Login',
+          'Signed in, but your profile could not be loaded.\n'
+          'Check your connection and try again.',
+          MyMessageType.warning,
+        );
+        await FirebaseAuth.instance.signOut();
+        return false;
+      }
+
+      userService.isUserLoggedIn = true;
+
+      try {
+        await authUser.reload();
+      } catch (_) {}
+
+      final verified =
+          FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+      if (!verified) {
+        MyGlobalMessage.show(
+          'Verify Email',
+          'Your email is not verified yet.\n'
+          'Please open your email and click the verify link.',
+          MyMessageType.warning,
+        );
+      }
+
+      return true;
     } catch (e) {
-      MyGlobalMessage.show("Error(LoginWithEmail):", '$e', MyMessageType.debug);
+      MyGlobalMessage.show("Login", '$e', MyMessageType.error);
       return false;
+    } finally {
+      if (mounted) {
+        setState(() {
+          busyLoggingIn = false;
+        });
+      }
     }
-    return true;
   }
   Future<bool> _loginWithGoogle(BuildContext context) async {
     UserDataService userService = context.read<UserDataService>();
@@ -727,12 +806,21 @@ class LoginPageState extends State<LoginPage> {
                       myTextButton(
                         text: 'OK',
                         onPressed: () async {
-                          bool loggedIn = await _loginWithEmail();
-                          if(!mounted) return;
+                          final loggedIn = await _loginWithEmail();
+                          if (!mounted || !loggedIn) return;
 
-                          if(loggedIn){
-                            // ignore: use_build_context_synchronously
-                            Navigator.of(context).pop();
+                          final needsVerify = !(FirebaseAuth
+                                  .instance.currentUser?.emailVerified ??
+                              false);
+                          Navigator.of(context).pop();
+
+                          if (needsVerify) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              final rootContext = navigatorKey.currentContext;
+                              if (rootContext != null) {
+                                _showEmailVerificationDialog(rootContext);
+                              }
+                            });
                           }
                         },
                       )

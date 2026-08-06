@@ -18,7 +18,7 @@
       "toolArgs": ["-d", "android", "--dart-define=APP_FLAVOR=full"]
     },
     {
-      "name": "Reporting (Chrome)",
+      "name": "Web App (Chrome)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
@@ -31,7 +31,7 @@
       ]
     },
     {
-      "name": "Reporting (Edge)",
+      "name": "Web App (Edge)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
@@ -44,7 +44,7 @@
       ]
     },
     {
-      "name": "Reporting (Windows)",
+      "name": "Web App (Windows)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
@@ -52,7 +52,7 @@
       "toolArgs": ["-d", "windows", "--dart-define=APP_FLAVOR=reporting"]
     },
     {
-      "name": "Reporting (debug)",
+      "name": "Web App (debug)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",

@@ -6,10 +6,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geofence/network_avatar.dart';
 import 'package:geofence/shop_page.dart';
+import 'package:geofence/shop_spell_check.dart';
 import 'package:geofence/utils.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 
 /// Developer-only catalog admin for Firestore `shop_products`.
 class ShopSetupPage extends StatelessWidget {
@@ -24,47 +24,19 @@ class ShopSetupPage extends StatelessWidget {
         foregroundColor: Colors.white,
         title: myAppbarTitle('Setup Shop'),
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'seedShop',
-            backgroundColor: colorTileLight,
-            foregroundColor: Colors.white,
-            onPressed: () async {
-              try {
-                final n = await context
-                    .read<ShopCatalogService>()
-                    .seedDefaults(force: false);
-                if (!context.mounted) return;
-                MyGlobalSnackBar.show(
-                  n == 0
-                      ? 'Shop already has items'
-                      : 'Seeded $n demo products to Firestore',
-                );
-              } catch (e) {
-                MyGlobalSnackBar.show('Seed failed: $e');
-              }
-            },
-            icon: const Icon(Icons.cloud_upload_outlined),
-            label: const Text('Seed demo'),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton(
-            heroTag: 'addShop',
-            backgroundColor: colorOrange,
-            foregroundColor: Colors.white,
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ShopProductEditPage(),
-                ),
-              );
-            },
-            child: const Icon(Icons.add),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'addShop',
+        backgroundColor: colorOrange,
+        foregroundColor: Colors.white,
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const ShopProductEditPage(),
+            ),
+          );
+        },
+        child: const Icon(Icons.add),
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
@@ -198,7 +170,9 @@ class _ProductList extends StatelessWidget {
                         Text(
                           '${money.format(product.salePrice)}'
                           '${product.discount > 0 ? ' · ${product.discount.round()}% off' : ''}'
-                          '${product.active ? '' : ' · inactive'}',
+                          '${product.active ? '' : ' · inactive'}'
+                          '${product.isReady ? '' : ' · coming soon'}'
+                          '${product.stockCount > 0 ? ' · stock ${product.stockCount}' : ' · no stock'}',
                           style: TextStyle(
                             color: product.active ? colorOrange : Colors.grey,
                             fontSize: 12,
@@ -230,11 +204,12 @@ class ShopProductEditPage extends StatefulWidget {
 
 class _ShopProductEditPageState extends State<ShopProductEditPage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _descriptionController = TextEditingController();
+  late final ShopSpellCheckerController _nameController;
+  late final ShopSpellCheckerController _descriptionController;
+  late final ShopSpellCheckerController _categoryController;
   final _priceController = TextEditingController();
   final _discountController = TextEditingController();
-  final _categoryController = TextEditingController();
+  final _stockCountController = TextEditingController();
   final _picker = ImagePicker();
 
   late String _docId;
@@ -242,6 +217,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
   final List<Uint8List> _pendingBytes = [];
   bool _active = true;
   bool _freeDelivery = true;
+  bool _isReady = false;
   bool _saving = false;
 
   bool get _isEditing => widget.product != null;
@@ -249,24 +225,31 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
   @override
   void initState() {
     super.initState();
+    ShopSpellCheck.ensureInitialized();
     final p = widget.product;
     _docId = p?.id.isNotEmpty == true
         ? p!.id
         : FirebaseFirestore.instance.collection(collectionShopProducts).doc().id;
 
+    _nameController = ShopSpellCheckerController(text: p?.name ?? '');
+    _descriptionController =
+        ShopSpellCheckerController(text: p?.description ?? '');
+    _categoryController =
+        ShopSpellCheckerController(text: p?.category ?? 'Hardware');
+
     if (p != null) {
-      _nameController.text = p.name;
-      _descriptionController.text = p.description;
       // Always the catalog price from Firestore (unchanged by discount).
       _priceController.text = p.price > 0 ? p.price.toStringAsFixed(2) : '';
       _discountController.text =
           p.discount > 0 ? p.discount.toStringAsFixed(0) : '';
-      _categoryController.text = p.category;
+      _stockCountController.text =
+          p.stockCount > 0 ? p.stockCount.toString() : '';
       _imageUrls.addAll(p.imageUrls);
       _active = p.active;
       _freeDelivery = p.freeDelivery;
+      _isReady = p.isReady;
     } else {
-      _categoryController.text = 'Hardware';
+      _stockCountController.text = '0';
     }
   }
 
@@ -277,6 +260,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
     _priceController.dispose();
     _discountController.dispose();
     _categoryController.dispose();
+    _stockCountController.dispose();
     super.dispose();
   }
 
@@ -338,10 +322,26 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
     final description = _descriptionController.text.trim();
     final price = double.tryParse(_priceController.text.trim()) ?? 0;
     final discount = double.tryParse(_discountController.text.trim()) ?? 0;
+    final stockCount = int.tryParse(_stockCountController.text.trim()) ?? 0;
     if (discount < 0 || discount >= 100) {
       MyGlobalSnackBar.show('Discount must be between 0 and 99');
       return;
     }
+
+    final category = _categoryController.text.trim().isEmpty
+        ? 'General'
+        : _categoryController.text.trim();
+    final spellingIssues = await ShopSpellCheck.checkFields(
+      name: name,
+      description: description,
+      category: category,
+    );
+    if (!mounted) return;
+    final proceed = await ShopSpellCheck.confirmIfNeeded(
+      context,
+      spellingIssues,
+    );
+    if (!proceed) return;
 
     setState(() => _saving = true);
     try {
@@ -358,11 +358,11 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
         discount: discount,
         imageUrl: allUrls.isNotEmpty ? allUrls.first : null,
         imageUrls: allUrls,
-        category: _categoryController.text.trim().isEmpty
-            ? 'General'
-            : _categoryController.text.trim(),
+        category: category,
         freeDelivery: _freeDelivery,
         active: _active,
+        stockCount: stockCount < 0 ? 0 : stockCount,
+        isReady: _isReady,
       );
 
       await FirebaseFirestore.instance
@@ -510,44 +510,16 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                         (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
                   const SizedBox(height: 10),
-                  TextFormField(
+                  MyTextFormField(
                     controller: _descriptionController,
-                    maxLines: 4,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontFamily: 'Poppins',
-                    ),
+                    labelText: 'Description',
+                    hintText: 'Short product description',
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
+                    maxLines: 6,
+                    minLines: 4,
                     validator: (v) =>
                         (v == null || v.trim().isEmpty) ? 'Required' : null,
-                    decoration: const InputDecoration(
-                      filled: true,
-                      fillColor: colorAppBar,
-                      floatingLabelBehavior: FloatingLabelBehavior.always,
-                      alignLabelWithHint: true,
-                      labelText: 'Description',
-                      labelStyle: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 18,
-                        fontFamily: 'Poppins',
-                      ),
-                      hintText: 'Short product description',
-                      hintStyle: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
-                        fontFamily: 'Poppins',
-                      ),
-                      contentPadding: EdgeInsets.fromLTRB(12, 20, 12, 12),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Colors.blue),
-                      ),
-                      border: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey),
-                      ),
-                    ),
                   ),
                   const SizedBox(height: 10),
                   MyTextFormField(
@@ -590,7 +562,34 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                     backgroundColor: colorAppBar,
                     foregroundColor: Colors.white,
                   ),
+                  const SizedBox(height: 10),
+                  MyTextFormField(
+                    controller: _stockCountController,
+                    labelText: 'Stock count',
+                    hintText: 'Units available for sale',
+                    inputType: TextInputType.number,
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return null;
+                      final n = int.tryParse(v.trim());
+                      if (n == null || n < 0) return 'Enter 0 or more';
+                      return null;
+                    },
+                  ),
                   const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const MyText(text: 'Launched (ready to buy)'),
+                    subtitle: const MyText(
+                      text: 'Off shows Coming Soon on shop tiles',
+                      color: Colors.white54,
+                      fontsize: 12,
+                    ),
+                    value: _isReady,
+                    activeThumbColor: colorOrange,
+                    onChanged: (v) => setState(() => _isReady = v),
+                  ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const MyText(text: 'Active in shop'),

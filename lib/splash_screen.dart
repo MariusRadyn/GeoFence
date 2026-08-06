@@ -131,7 +131,9 @@ class SplashScreenState extends State<SplashScreen>
         Future.delayed(const Duration(milliseconds: 450), () {
           if (!mounted) return;
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => HomePage()),
+            MaterialPageRoute(
+              builder: (_) => HomePage(openProfileOnLaunch: launchOpensProfile),
+            ),
           );
         });
       }
@@ -237,7 +239,7 @@ class SplashScreenState extends State<SplashScreen>
                       ),
                       // Wordmark just below the circle (does not shift the logo)
                       Transform.translate(
-                        offset: const Offset(0, 118),
+                        offset: const Offset(0, 78),
                         child: FadeTransition(
                           opacity: _textOpacityAnimation,
                           child: SlideTransition(

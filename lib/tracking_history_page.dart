@@ -26,6 +26,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
   double _totalRebate = 0.0;
   double _totalKM = 0.0;
   double _totalLiters = 0.0;
+  double _totalDieselCost = 0.0;
 
 
   @override
@@ -348,6 +349,12 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
             }
 
             // Calculate totals
+            _totalRebate = 0;
+            _totalKM = 0;
+            _totalLiters = 0;
+            _totalDieselCost = 0;
+            final dieselPrice = settings.fireSettings?.dieselPrice ?? 0;
+
             for (var session in sessions) {
               final vehicleId = session['vehicle_id'];
               final distanceInside = (session['distance_inside'] ?? 0).toDouble();
@@ -355,15 +362,23 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
               final rebate = settings.fireSettings?.rebateValuePerLiter ?? 0;
               double litersUsed = 0.0;
               double thisRebate = 0;
+              double thisDieselCost = 0;
 
               if (vehicleConsumption > 0) {
-                litersUsed = distanceInside / vehicleConsumption;
-                thisRebate = litersUsed * rebate;
+                litersUsed =
+                    dieselLitersForDistanceKm(distanceInside, vehicleConsumption);
+                thisRebate = dieselRebateForDistanceKm(
+                  distanceInside,
+                  vehicleConsumption,
+                  rebate,
+                );
+                thisDieselCost = dieselCostForLiters(litersUsed, dieselPrice);
               }
 
               _totalRebate += thisRebate;
               _totalKM += distanceInside;
               _totalLiters += litersUsed;
+              _totalDieselCost += thisDieselCost;
             }
 
             return _vehicles == null
@@ -375,6 +390,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
                   header: 'Total',
                   subtext:
                       'Total Rebate: R${nrFormatter.format(_totalRebate)}\n'
+                      'Total Diesel Cost: R${nrFormatter.format(_totalDieselCost)}\n'
                       'Total Distance: ${nrFormatter.format(_totalKM)}km\n'
                       'Total Liters: ${nrFormatter.format(_totalLiters)}L',
 
@@ -392,12 +408,25 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
                         String vehicleReg = _getVehicleRegById(session['vehicle_id']) ?? "Unknown";
                         double vehicleConsumption = _getVehicleFuelConsumptiomById(session['vehicle_id']) ?? 0;
                         double rebate = settings.fireSettings?.rebateValuePerLiter ?? 0;
+                        double dieselPrice =
+                            settings.fireSettings?.dieselPrice ?? 0;
                         double insideKM = session['distance_inside'];
                         double outsideKM = session['distance_outside'];
                         double litersUsed = 0.0;
+                        double dieselCost = 0.0;
+                        double sessionRebate = 0.0;
 
                         if(vehicleConsumption > 0){
-                          litersUsed =  insideKM / vehicleConsumption;
+                          litersUsed = dieselLitersForDistanceKm(
+                            insideKM,
+                            vehicleConsumption,
+                          );
+                          dieselCost = dieselCostForLiters(litersUsed, dieselPrice);
+                          sessionRebate = dieselRebateForDistanceKm(
+                            insideKM,
+                            vehicleConsumption,
+                            rebate,
+                          );
                         }
 
                           return Column(
@@ -413,7 +442,8 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
                                   'Inside: ${nrFormatter.format(insideKM)} km\n'
                                   'Outside: ${nrFormatter.format(outsideKM)} km\n'
                                   'Liters Used: ${nrFormatter.format(litersUsed)} L\n'
-                                  'Rebate: R${nrFormatter.format(litersUsed * rebate)}\n',
+                                  'Diesel Cost: R${nrFormatter.format(dieselCost)}\n'
+                                  'Rebate: R${nrFormatter.format(sessionRebate)}\n',
 
                                 onTapDelete: (){
                                     _deleteSession(session, vehicleName, vehicleReg);

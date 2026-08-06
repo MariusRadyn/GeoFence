@@ -44,13 +44,16 @@ enum MyMessageType {
 // Get PVT key for Firestore
 
 //-- Constants Images ----------------------------------------------------------
-const String iconWheel = "assets/distance_wheel_icon.png";
+const String iconWheel = "assets/distance_wheel_icon2.png";
 const String iconVehicle = "assets/vehicle_icon.png";
 const String iconMachine = "assets/generator_icon.png";
 const String iconNoImage = 'assets/noImage.jpg';
 const String iconProfile = 'assets/profile.png';
 const String iconShopNoImage = 'assets/shop_no_image.png';
+const String iconGeofenceNoBackground = 'assets/geofence_no_background.png';
+const String iconThirdPartyIot = 'assets/third_party_iot.png';
 const String iconFleet = 'assets/fleet_track_icon.png';
+const String iconFleetNoBackground = 'assets/fleet_track_no_background.png';
 const String iconTrailer = 'assets/trailer_icon.png';
 
 const String iconWarning = "assets/warning.png";
@@ -63,6 +66,8 @@ const String iconBase = 'assets/base_station_icon.png';
 const String iconReport = 'assets/track_history_icon.png';
 const String iconWages = 'assets/wages_icon.png';
 const String iconShop = 'assets/shop_icon.png';
+const String iconWhatsNew = 'assets/whats_new_icon.png';
+const String iconItsFree = 'assets/its_free.png';
 const String iconOperators = 'assets/operators_icon.png';
 
 const String iconLimitlessLogo = 'assets/limitless_logo.png';
@@ -102,9 +107,35 @@ const String geoFenceMarker = "marker_";
 const String geoFencePolygon = "polygon_";
 const String geoFencePoint = "point_";
 const String geoFenceDrawingPolygon = "drawing_polygon";
+const String geoFenceDrawingCircle = "drawing_circle";
+const String geoFenceCircleCenter = "circle_center";
+const String geoFenceCircleRadius = "circle_radius";
+const String geoFenceTypePolygon = "polygon";
+const String geoFenceTypeCircle = "circle";
+const String geoFenceSavedCircle = "circle_";
 
 //-- Firebase Settings ---------------------------------------------------------
 const collectionUsers = 'users';
+const _accountPagesHost = 'https://limitless-iot-account.web.app';
+const accountDeletionUrl = '$_accountPagesHost/delete-account.html';
+const accountDataDeletionUrl = '$_accountPagesHost/delete-data.html';
+const privacyPolicyUrl = '$_accountPagesHost/privacy.html';
+const profileLaunchPath = '/profile';
+
+bool _launchOpensProfile = false;
+
+/// Call once at web startup before Flutter rewrites the browser URL.
+void cacheLaunchRoute() {
+  if (!kIsWeb) return;
+  final uri = Uri.base;
+  final path = uri.path;
+  _launchOpensProfile = path == profileLaunchPath ||
+      path == '$profileLaunchPath/' ||
+      uri.queryParameters['page'] == 'profile';
+}
+
+/// True when the web app was opened for Profile (e.g. from delete-data pages).
+bool get launchOpensProfile => _launchOpensProfile;
 const collectionGeoFences = 'geoFences';
 const collectionTrackingSessions = 'trackingSessions';
 const collectionLocations = 'locations';
@@ -172,6 +203,9 @@ const fireGeoCreateDate = 'createdAt';
 const fireGeoName = 'name';
 const fireGeoPoints = 'points';
 const fireGeoUpdateDate = 'updatedAt';
+const fireGeoType = 'type';
+const fireGeoCenter = 'center';
+const fireGeoRadiusMeters = 'radiusMeters';
 
 // Firebase - Base Station Settings
 const fireBaseName = 'name';
@@ -232,6 +266,42 @@ const fireTrackingStartTime = 'start_time';
 const fireTrackingEndTime = 'end_time';
 const fireTrackingIsActive = 'is_active';
 const fireTrackingVehicleDocId = 'vehicle_id';
+const fireGeoCrossingEvent = 'event';
+const fireGeoCrossingEnter = 'enter';
+const fireGeoCrossingExit = 'exit';
+const fireGeoCrossingFenceId = 'fence_id';
+const fireGeoCrossingFenceName = 'fence_name';
+const fireGeoCrossingDistanceKm = 'distance_km';
+
+/// Vehicle [litersPer100Km] is stored on IoT monitors as l/100 km.
+double dieselLitersForDistanceKm(double distanceKm, double litersPer100Km) {
+  if (distanceKm <= 0 || litersPer100Km <= 0) return 0;
+  return distanceKm * litersPer100Km / 100;
+}
+
+double dieselRebateForDistanceKm(
+  double distanceKm,
+  double litersPer100Km,
+  double rebatePerLiter,
+) {
+  return dieselLitersForDistanceKm(distanceKm, litersPer100Km) * rebatePerLiter;
+}
+
+double dieselCostForLiters(double liters, double dieselPricePerLiter) {
+  if (liters <= 0 || dieselPricePerLiter <= 0) return 0;
+  return liters * dieselPricePerLiter;
+}
+
+double dieselCostForDistanceKm(
+  double distanceKm,
+  double litersPer100Km,
+  double dieselPricePerLiter,
+) {
+  return dieselCostForLiters(
+    dieselLitersForDistanceKm(distanceKm, litersPer100Km),
+    dieselPricePerLiter,
+  );
+}
 
 // Clients Settings
 const settingClientIpAdr = 'IPAdress';
@@ -359,6 +429,118 @@ LatLng calculateCentroid(List<LatLng> points) {
 
   return LatLng(latitude / points.length, longitude / points.length);
 }
+
+/// Approximate destination from [origin] given [distanceMeters] and [bearingDegrees].
+LatLng destinationFromLatLng(
+  LatLng origin,
+  double distanceMeters,
+  double bearingDegrees,
+) {
+  const earthRadius = 6378137.0;
+  final bearing = bearingDegrees * pi / 180;
+  final lat1 = origin.latitude * pi / 180;
+  final lon1 = origin.longitude * pi / 180;
+  final angular = distanceMeters / earthRadius;
+  final lat2 = asin(
+    sin(lat1) * cos(angular) + cos(lat1) * sin(angular) * cos(bearing),
+  );
+  final lon2 = lon1 +
+      atan2(
+        sin(bearing) * sin(angular) * cos(lat1),
+        cos(angular) - sin(lat1) * sin(lat2),
+      );
+  return LatLng(lat2 * 180 / pi, lon2 * 180 / pi);
+}
+
+/// Ring of [segments] points approximating a circle (for Firestore + polygon checks).
+List<LatLng> circlePolygonRing(
+  LatLng center,
+  double radiusMeters, {
+  int segments = 32,
+}) {
+  return List.generate(segments, (i) {
+    final bearing = 360.0 * i / segments;
+    return destinationFromLatLng(center, radiusMeters, bearing);
+  });
+}
+
+bool isPointInsideGeofence(LatLng point, FenceData fence) {
+  if (fence.isCircle &&
+      fence.center != null &&
+      fence.radiusMeters != null &&
+      fence.radiusMeters! > 0) {
+    final dist = Geolocator.distanceBetween(
+      point.latitude,
+      point.longitude,
+      fence.center!.latitude,
+      fence.center!.longitude,
+    );
+    return dist <= fence.radiusMeters!;
+  }
+  if (fence.points.length >= 3) {
+    return isPointInsidePolygon(point, fence.points);
+  }
+  return false;
+}
+
+Future<BitmapDescriptor> buildFenceNameLabelIcon(String name) async {
+  final display = name.trim().isEmpty
+      ? 'Fence'
+      : (name.length > 24 ? '${name.substring(0, 22)}…' : name);
+
+  const double fontSize = 16;
+  const double padH = 8;
+  const double padV = 4;
+
+  final textPainter = TextPainter(
+    text: TextSpan(
+      text: display,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: fontSize,
+        fontWeight: FontWeight.w700,
+        fontFamily: 'Poppins',
+      ),
+    ),
+    textDirection: ui.TextDirection.ltr,
+  )..layout();
+
+  final width = textPainter.width + padH * 2;
+  final height = textPainter.height + padV * 2;
+
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  final rect = Rect.fromLTWH(0, 0, width, height);
+  final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
+
+  canvas.drawRRect(rrect, Paint()..color = colorAppBar);
+  canvas.drawRRect(
+    rrect,
+    Paint()
+      ..color = colorOrange
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5,
+  );
+  textPainter.paint(canvas, const Offset(padH, padV));
+
+  final image = await recorder
+      .endRecording()
+      .toImage(width.ceil(), height.ceil());
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+}
+
+final Map<String, BitmapDescriptor> _fenceNameLabelIconCache = {};
+
+Future<BitmapDescriptor> fenceNameLabelIcon(String name) async {
+  final key = name.trim().isEmpty ? 'Fence' : name.trim();
+  final cached = _fenceNameLabelIconCache[key];
+  if (cached != null) return cached;
+  final icon = await buildFenceNameLabelIcon(key);
+  _fenceNameLabelIconCache[key] = icon;
+  return icon;
+}
+
 Position latLngToPosition(LatLng latLng) {
   return Position(
     latitude: latLng.latitude,
@@ -414,13 +596,22 @@ class FenceData{
   String firestoreId;
   String name;
   List<LatLng> points;
+  /// [geoFenceTypePolygon] or [geoFenceTypeCircle]. Missing → polygon.
+  String type;
+  LatLng? center;
+  double? radiusMeters;
 
   FenceData({
     this.points = const [],
     this.name = "",
     this.firestoreId = "",
     this.polygonId = "",
+    this.type = geoFenceTypePolygon,
+    this.center,
+    this.radiusMeters,
   });
+
+  bool get isCircle => type == geoFenceTypeCircle;
 }
 class BluetoothData{
   String name;
@@ -443,6 +634,7 @@ class MyTextFormField extends StatefulWidget {
   final FormFieldValidator<String>? validator;
   final ValueChanged<String>? onFieldSubmitted;
   final FocusNode? focusNode;
+  final VoidCallback? onFocusLost;
   final TextInputType? inputType;
   final double? width;
   final double? labelFontSize;
@@ -450,6 +642,9 @@ class MyTextFormField extends StatefulWidget {
   final Color? backgroundColor;
   final Color? foregroundColor;
   final bool showLine;
+  final bool enableSpellCheck;
+  final int maxLines;
+  final int? minLines;
 
   const MyTextFormField({
     super.key,
@@ -464,6 +659,7 @@ class MyTextFormField extends StatefulWidget {
     this.width,
     this.onFieldSubmitted,
     this.focusNode,
+    this.onFocusLost,
     this.inputType,
     this.backgroundColor = Colors.white,
     this.foregroundColor = Colors.black,
@@ -471,6 +667,9 @@ class MyTextFormField extends StatefulWidget {
     this.labelFontSize = 18,
     this.valueFontSize = 14,
     this.showLine = true,
+    this.enableSpellCheck = false,
+    this.maxLines = 1,
+    this.minLines,
   });
 
   @override
@@ -478,6 +677,33 @@ class MyTextFormField extends StatefulWidget {
 }
 class MyTextFormFieldState extends State<MyTextFormField> {
   bool _obscureText = true;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode?.addListener(_handleFocusNodeChange);
+  }
+
+  @override
+  void didUpdateWidget(MyTextFormField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode?.removeListener(_handleFocusNodeChange);
+      widget.focusNode?.addListener(_handleFocusNodeChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode?.removeListener(_handleFocusNodeChange);
+    super.dispose();
+  }
+
+  void _handleFocusNodeChange() {
+    if (widget.focusNode?.hasFocus == false) {
+      widget.onFocusLost?.call();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -494,9 +720,12 @@ class MyTextFormFieldState extends State<MyTextFormField> {
       inputFormatters = null; // No restriction
     }
 
+    final compact = widget.labelText == null;
+    final isMultiline = widget.maxLines > 1;
+
     return SizedBox(
       width: widget.width,
-      height: 55,
+      height: compact ? 34 : (isMultiline ? null : 55),
       child: TextFormField(
         style: TextStyle(
           fontSize: widget.valueFontSize,
@@ -504,12 +733,30 @@ class MyTextFormFieldState extends State<MyTextFormField> {
           fontFamily: 'Poppins',
         ),
 
-        autocorrect: false,
-        smartDashesType: SmartDashesType.disabled,
-        smartQuotesType: SmartQuotesType.disabled,
+        autocorrect: widget.enableSpellCheck,
+        enableSuggestions: widget.enableSpellCheck,
+        spellCheckConfiguration: widget.enableSpellCheck
+            ? const SpellCheckConfiguration(
+                misspelledTextStyle: TextStyle(
+                  decoration: TextDecoration.underline,
+                  decorationStyle: TextDecorationStyle.wavy,
+                  decorationColor: Colors.redAccent,
+                ),
+              )
+            : null,
+        smartDashesType: widget.enableSpellCheck
+            ? SmartDashesType.enabled
+            : SmartDashesType.disabled,
+        smartQuotesType: widget.enableSpellCheck
+            ? SmartQuotesType.enabled
+            : SmartQuotesType.disabled,
         readOnly: widget.isReadOnly,
         controller: widget.controller,
         keyboardType: widget.inputType,
+        maxLines: widget.isPasswordField ? 1 : widget.maxLines,
+        minLines: widget.isPasswordField
+            ? 1
+            : (widget.minLines ?? (isMultiline ? widget.maxLines : 1)),
         inputFormatters: inputFormatters,
         key: widget.key,
         obscureText: widget.isPasswordField == true ? _obscureText : false,
@@ -517,7 +764,16 @@ class MyTextFormFieldState extends State<MyTextFormField> {
         focusNode: widget.focusNode,
         validator: widget.validator,
         onFieldSubmitted: widget.onFieldSubmitted,
+        onTapOutside: (_) => widget.focusNode?.unfocus(),
+        onEditingComplete: () => widget.focusNode?.unfocus(),
         decoration: InputDecoration(
+          isDense: compact,
+          floatingLabelBehavior:
+              compact ? FloatingLabelBehavior.never : FloatingLabelBehavior.always,
+          alignLabelWithHint: isMultiline,
+          contentPadding: isMultiline
+              ? const EdgeInsets.fromLTRB(12, 20, 12, 12)
+              : (compact ? const EdgeInsets.only(top: 2, bottom: 6) : null),
           enabledBorder: widget.showLine
               ? const UnderlineInputBorder(
                   borderSide: BorderSide(color: Colors.grey),
@@ -533,9 +789,7 @@ class MyTextFormFieldState extends State<MyTextFormField> {
                   borderSide: BorderSide(color: Colors.grey),
                 )
               : InputBorder.none,
-
           filled: true,
-          floatingLabelBehavior: FloatingLabelBehavior.always,
           fillColor: widget.backgroundColor,
           suffix: Text(widget.suffix),
           hintText: widget.hintText,
@@ -576,20 +830,42 @@ class MyTextFormFieldState extends State<MyTextFormField> {
   }
 }
 class MyCustomTileWithPic extends StatelessWidget {
-  final String imagePath;
+  final String? imagePath;
+  final Widget? leading;
   final String header;
   final String description;
   final Widget widget;
   final VoidCallback? onTap;
 
   const MyCustomTileWithPic({
-    required this.imagePath,
+    this.imagePath,
+    this.leading,
     required this.header,
     this.description = "",
     required this.widget,
     this.onTap,
-    super.key
-  });
+    super.key,
+  }) : assert(
+          imagePath != null || leading != null,
+          'Provide imagePath or leading',
+        );
+
+  Widget _buildLeading() {
+    if (leading != null) return leading!;
+    return Image.asset(
+      imagePath!,
+      width: 90,
+      height: 90,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(
+        width: 90,
+        height: 90,
+        color: colorAppBar,
+        alignment: Alignment.center,
+        child: const Icon(Icons.image_not_supported, color: Colors.white54),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -647,12 +923,7 @@ class MyCustomTileWithPic extends StatelessWidget {
                       topRight: Radius.circular(20),
                       bottomRight: Radius.circular(20),
                     ),
-                    child: Image.asset (
-                        imagePath,
-                        width: 90,
-                        height: 90,
-                        fit: BoxFit.cover
-                    ),
+                    child: _buildLeading(),
                   ),
 
                   // Heading Text
@@ -1590,7 +1861,6 @@ class _MyVehiclesDataState extends State<MyVehicleData> {
                         labelText: 'Select Bluetooth Device',
                         labelStyle: TextStyle(color: Colors.grey),
                         fillColor: colorAppBackground,
-                        filled: true,
                         prefixIcon: const Icon(
                           Icons.bluetooth,
                           color: Colors.blueAccent,

@@ -35,6 +35,7 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
   int _fencePntr = 0;
 
   List<LatLng> _trackSessionPoints = [];
+  List<Map<String, dynamic>> _trackSessionCrossings = [];
   //final List<Map<String, dynamic>> _geofenceData = [];
   //final FirebaseAuth _auth = FirebaseAuth.instance;
   //final FlutterTts _flutterTts = FlutterTts();
@@ -52,34 +53,35 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
     _initializeTracking();
   }
 
-  Future<void> _getTrackSessionPoints() async{
-    List<LatLng> lst = [];
+  Future<void> _getTrackSessionPoints() async {
+    final points = <LatLng>[];
+    final crossings = <Map<String, dynamic>>[];
 
-    try{
+    try {
       final locationsSnapshot = await firestore
           .collection(collectionUsers)
           .doc(widget.userId)
           .collection(collectionTrackingSessions)
           .doc(widget.trackSessionId)
           .collection(collectionLocations)
-          .orderBy('timestamp') // optional, if order matters
+          .orderBy('timestamp')
           .get();
 
-
-      for (var doc in locationsSnapshot.docs) {
+      for (final doc in locationsSnapshot.docs) {
         final data = doc.data();
-        lst.add(LatLng(data['latitude'], data['longitude']));
+        points.add(LatLng(data['latitude'], data['longitude']));
+        crossings.add(data);
       }
-    }catch (e){
-      if(mounted){
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading tracking locations: $e')),
         );
       }
-    }
-    finally{
+    } finally {
       setState(() {
-        _trackSessionPoints = lst;
+        _trackSessionPoints = points;
+        _trackSessionCrossings = crossings;
       });
     }
   }
@@ -102,59 +104,69 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
       _isLoading = true;
       _polygons.clear();
       _markers.clear();
+      _geoFenceList.clear();
     });
     try {
-      final userId = widget.userId;// _userData.userID;// firebaseAuthService. _auth.currentUser!.uid;
+      final userId = widget.userId;
       final geoFencesSnapshot = await firestore
           .collection(collectionUsers)
           .doc(userId)
           .collection(collectionGeoFences)
           .get();
 
-      if (geoFencesSnapshot.docs.isNotEmpty) {
-        for (var doc in geoFencesSnapshot.docs) {
-          final data = doc.data();
-          final points = List<GeoPoint>.from(data[fireGeoPoints]);
-          final polygonPoints = points.map((point) =>
-              LatLng(point.latitude, point.longitude)).toList();
+      final newMarkers = <Marker>{};
+      final newPolygons = <Polygon>{};
+      final newFences = <FenceData>[];
 
-          if (polygonPoints.length >= 3) {
-            final polygonId = '$geoFencePolygon${_polygonIdCounter++}';
-            final markerId = '$geoFenceMarker${_polygonIdCounter++}';
+      for (var doc in geoFencesSnapshot.docs) {
+        final data = doc.data();
+        final points = List<GeoPoint>.from(data[fireGeoPoints]);
+        final polygonPoints = points
+            .map((point) => LatLng(point.latitude, point.longitude))
+            .toList();
 
-            setState(() {
-              // Add marker for the label
-              _markers.add(
-                Marker(
-                  icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta),
-                  markerId: MarkerId(markerId),
-                  position: calculateCentroid(polygonPoints),
-                  infoWindow: InfoWindow(title: data[fireGeoName]),
-                  //onTap: ()=> _onMarkerTap(polygonId, doc.id, data['name'], polygonPoints),
-                ),
-              );
+        if (polygonPoints.length < 3) continue;
 
-              // Add polygon
-              _polygons.add(
-                Polygon(
-                  polygonId: PolygonId(polygonId),
-                  points: polygonPoints,
-                  strokeWidth: 2,
-                  strokeColor: Colors.blue,
-                  fillColor: Colors.blue.withValues(alpha: 0.2),
-                  consumeTapEvents: true,
-                ),
-              );
+        final polygonId = '$geoFencePolygon${_polygonIdCounter++}';
+        final markerId = '$geoFenceMarker${_polygonIdCounter++}';
+        final name = '${data[fireGeoName] ?? data['name'] ?? ''}';
+        final labelIcon = await fenceNameLabelIcon(name);
 
-              _geoFenceList.add(FenceData(
-                  points: polygonPoints,
-                  name: data['name'],
-                  firestoreId: doc.id
-              ));
-            });
-          }
-        }
+        newMarkers.add(
+          Marker(
+            icon: labelIcon,
+            anchor: const Offset(0.5, 0.5),
+            markerId: MarkerId(markerId),
+            position: calculateCentroid(polygonPoints),
+            infoWindow: InfoWindow(title: name),
+          ),
+        );
+
+        newPolygons.add(
+          Polygon(
+            polygonId: PolygonId(polygonId),
+            points: polygonPoints,
+            strokeWidth: 2,
+            strokeColor: Colors.blue,
+            fillColor: Colors.blue.withValues(alpha: 0.2),
+            consumeTapEvents: true,
+          ),
+        );
+
+        newFences.add(FenceData(
+          points: polygonPoints,
+          name: name,
+          firestoreId: doc.id,
+        ));
       }
+
+      if (!mounted) return;
+      setState(() {
+        _markers.addAll(newMarkers);
+        _polygons.addAll(newPolygons);
+        _geoFenceList.addAll(newFences);
+      });
+
       // Focus map on user's location if available
       final userDoc = await firestore.collection('users').doc(userId).get();
       if (userDoc.exists && userDoc.data()!.containsKey('location')) {
@@ -187,7 +199,7 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
       bool insideAny = false;
 
       for (var geofence in _geoFenceList) {
-        final bool isInside = isPointInsidePolygon(position, geofence.points);
+        final bool isInside = isPointInsideGeofence(position, geofence);
 
         if(isInside) {
           trackingPathGreen.add(position);
@@ -242,16 +254,31 @@ class TrackingHistoryMapState extends State<TrackingHistoryMap> {
 
     for (int i = 0; i < _trackSessionPoints.length; i++) {
       final point = _trackSessionPoints[i];
+      final data = i < _trackSessionCrossings.length
+          ? _trackSessionCrossings[i]
+          : const <String, dynamic>{};
+      final event = '${data[fireGeoCrossingEvent] ?? ''}';
+      final fenceName = '${data[fireGeoCrossingFenceName] ?? ''}';
+      final isEnter = event == fireGeoCrossingEnter;
+      final title = event.isEmpty
+          ? 'Point $i'
+          : '${isEnter ? 'Enter' : 'Exit'}${fenceName.isEmpty ? '' : ': $fenceName'}';
+
       pointMarkers.add(
         Marker(
           markerId: MarkerId('$geoFencePoint$i'),
           position: point,
           icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueAzure, // Or use red, green, etc.
+            event.isEmpty
+                ? BitmapDescriptor.hueAzure
+                : isEnter
+                    ? BitmapDescriptor.hueGreen
+                    : BitmapDescriptor.hueRed,
           ),
           infoWindow: InfoWindow(
-            title: 'Point $i',
-            snippet: '${point.latitude}, ${point.longitude}',
+            title: title,
+            snippet: '${point.latitude.toStringAsFixed(5)}, '
+                '${point.longitude.toStringAsFixed(5)}',
           ),
         ),
       );

@@ -1,5 +1,11 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
+
+# flutter_tts on Windows needs nuget.exe (CppWinRT). Install globally:
+#   winget install Microsoft.NuGet
+# Or run:  powershell -ExecutionPolicy Bypass -File tools/ensure-nuget.ps1
+list(APPEND CMAKE_PROGRAM_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../tools")
+
 project(geofence LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change

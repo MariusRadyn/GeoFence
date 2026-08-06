@@ -29,6 +29,80 @@ class IotVehicleType extends StatefulWidget {
   State<IotVehicleType> createState() => _IotVehicleTypeState();
 }
 class _IotVehicleTypeState extends State<IotVehicleType> {
+  late final TextEditingController _controllerName;
+  late final TextEditingController _controllerFuel;
+  late final TextEditingController _controllerReg;
+  late final FocusNode _focusNodeName;
+  late final FocusNode _focusNodeFuel;
+  late final FocusNode _focusNodeReg;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllerName =
+        TextEditingController(text: widget.monitorData.monitorName);
+    _controllerFuel = TextEditingController(
+        text: widget.monitorData.fuelConsumption.toString());
+    _controllerReg = TextEditingController(text: widget.monitorData.reg);
+
+    _focusNodeName = FocusNode();
+    _focusNodeFuel = FocusNode();
+    _focusNodeReg = FocusNode();
+
+    _focusNodeName
+        .addListener(() => _handleFocusChange(_focusNodeName, 'name'));
+    _focusNodeFuel
+        .addListener(() => _handleFocusChange(_focusNodeFuel, 'fuel'));
+    _focusNodeReg
+        .addListener(() => _handleFocusChange(_focusNodeReg, 'reg'));
+  }
+
+  @override
+  void didUpdateWidget(covariant IotVehicleType oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (!_focusNodeName.hasFocus &&
+        _controllerName.text != widget.monitorData.monitorName) {
+      _controllerName.text = widget.monitorData.monitorName;
+    }
+    if (!_focusNodeFuel.hasFocus &&
+        _controllerFuel.text !=
+            widget.monitorData.fuelConsumption.toString()) {
+      _controllerFuel.text = widget.monitorData.fuelConsumption.toString();
+    }
+    if (!_focusNodeReg.hasFocus &&
+        _controllerReg.text != widget.monitorData.reg) {
+      _controllerReg.text = widget.monitorData.reg;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controllerName.dispose();
+    _controllerFuel.dispose();
+    _controllerReg.dispose();
+    _focusNodeName.dispose();
+    _focusNodeFuel.dispose();
+    _focusNodeReg.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(FocusNode node, String field) {
+    if (node.hasFocus) return;
+
+    switch (field) {
+      case 'name':
+        widget.onChangedVehicleName(_controllerName.text);
+        break;
+      case 'fuel':
+        widget.onChangedFuelConsumption(_controllerFuel.text);
+        break;
+      case 'reg':
+        widget.onChangedReg(_controllerReg.text);
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -46,9 +120,10 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 child: MyTextFormField(
+                  focusNode: _focusNodeName,
                   backgroundColor: colorAppBackground,
                   foregroundColor: Colors.white,
-                  controller: TextEditingController(text: widget.monitorData.monitorName),
+                  controller: _controllerName,
                   hintText: "Enter value here",
                   labelText: "Vehicle Name",
                   onFieldSubmitted: widget.onChangedVehicleName,
@@ -59,9 +134,10 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 child: MyTextFormField(
+                  focusNode: _focusNodeFuel,
                   backgroundColor: colorAppBackground,
                   foregroundColor: Colors.white,
-                  controller: TextEditingController(text:  widget.monitorData.fuelConsumption.toString()),
+                  controller: _controllerFuel,
                   hintText: "Enter value here",
                   labelText: "Consumption",
                   suffix: "l/100Km",
@@ -74,9 +150,10 @@ class _IotVehicleTypeState extends State<IotVehicleType> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 child: MyTextFormField(
+                  focusNode: _focusNodeReg,
                   backgroundColor: colorAppBackground,
                   foregroundColor: Colors.white,
-                  controller: TextEditingController(text: widget.monitorData.reg),
+                  controller: _controllerReg,
                   hintText: "Enter value here",
                   labelText: "Registration Number",
                   onFieldSubmitted: widget.onChangedReg,

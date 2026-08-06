@@ -311,19 +311,38 @@ class _ShopProductDetailPageState extends State<ShopProductDetailPage> {
             height: 48,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: colorOrange,
+                backgroundColor:
+                    p.isReady && p.stockCount > 0 ? colorOrange : Colors.white24,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(6),
                 ),
               ),
-              onPressed: () {
-                cart.add(p);
-                MyGlobalSnackBar.show('${p.name} added to basket');
-              },
-              icon: const Icon(Icons.add_shopping_cart),
+              onPressed: p.isReady && p.stockCount > 0
+                  ? () {
+                      cart.add(p);
+                      MyGlobalSnackBar.show('${p.name} added to basket');
+                    }
+                  : () {
+                      MyGlobalSnackBar.show(
+                        !p.isReady
+                            ? '${p.name} is coming soon'
+                            : '${p.name} is out of stock',
+                      );
+                    },
+              icon: Icon(
+                !p.isReady
+                    ? Icons.schedule
+                    : p.stockCount > 0
+                        ? Icons.add_shopping_cart
+                        : Icons.remove_shopping_cart,
+              ),
               label: Text(
-                'Add to Cart · ${_money.format(p.salePrice)}',
+                !p.isReady
+                    ? 'Coming Soon'
+                    : p.stockCount > 0
+                        ? 'Add to Cart · ${_money.format(p.salePrice)}'
+                        : 'Out of Stock',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
@@ -419,8 +438,16 @@ class _ShopProductDetailPageState extends State<ShopProductDetailPage> {
                   color: Color(0xFF4ADE80),
                 ),
               _InfoChip(
-                label: p.active ? 'In stock' : 'Unavailable',
-                icon: p.active ? Icons.check_circle_outline : Icons.block,
+                label: !p.isReady
+                    ? 'Coming soon'
+                    : p.stockCount > 0
+                        ? '${p.stockCount} in stock'
+                        : 'Out of stock',
+                icon: !p.isReady
+                    ? Icons.schedule
+                    : p.stockCount > 0
+                        ? Icons.check_circle_outline
+                        : Icons.block,
               ),
             ],
           ),

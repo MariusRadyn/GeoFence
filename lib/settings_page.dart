@@ -4,277 +4,425 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:geofence/app_flavor.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-//import 'package:permission_handler/permission_handler.dart';
 
 class SettingsPage extends StatefulWidget {
   final String userId;
 
   const SettingsPage({
     super.key,
-    required this.userId
+    required this.userId,
   });
 
   @override
   State<SettingsPage> createState() => SettingsPageState();
 }
 
-class SettingsPageState extends State<SettingsPage> with TickerProviderStateMixin{
-  //bool Debug = false;
+class SettingsPageState extends State<SettingsPage> with TickerProviderStateMixin {
   bool isLoading = true;
-  TabController? _tabControllerMain;
   TabController? _tabControllerServers;
-  //late SettingsService settings;
 
   final TextEditingController _controllerLogPointPerM = TextEditingController();
   final TextEditingController _controllerRebateValue = TextEditingController();
+  final TextEditingController _controllerDieselPrice = TextEditingController();
+  final FocusNode _focusNodeLogPointPerM = FocusNode();
+  final FocusNode _focusNodeRebateValue = FocusNode();
+  final FocusNode _focusNodeDieselPrice = FocusNode();
   final FlutterTts _flutterTts = FlutterTts();
-  final bool _didInitListeners = false;
-  String? bluetoothValue;
-  bool isScanning = false;
-  bool isSetBTVehicleID = false;
-  bool isSetBTMonitor = false;
-
-  List<ScanResult> lstAvailableDevices = [];
-  ScanResult? selectedAvailableDevice;
 
   final Map<String, Map<String, dynamic>> mapServerData = {};
   List<DocumentSnapshot<Map<String, dynamic>>> lstServerData = [];
-
-  BluetoothDevice? pairedDevice;
-  BluetoothDevice? selectedDevice;
-  List<BluetoothDevice> lstPairedDevices = [
-    BluetoothDevice.fromId("00:11:22:33:44:55"),
-    BluetoothDevice.fromId("11:11:22:33:44:55"),
-  ];
-
+  bool _controllersInitialized = false;
 
   @override
   void initState() {
     super.initState();
-
-    //_getBondedDevices();
     _initTts();
     _fetchServers();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      // settings = context.read<SettingsService>();
-      //
-      // setState(() {
-      //     _logPointPerMeterController.text = settings.fireSettings!.logPointPerMeter.toString();
-      //     _rebateValueController.text = settings.fireSettings!.rebateValuePerLiter.toString();
-      //   });
-    });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    if (!mounted) return;
-    //_settingsService = Provider.of<SettingsService>(context, listen: false);
-
-    //final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-
-    // You could set up listeners here or perform one-time operations
-    // that depend on inherited widgets
-    //if (!_didInitListeners) {
-    //  SettingsService().addListener(_updateControllerValues);
-      //settingsProvider.addListener(_updateControllerValues);
-    //  _didInitListeners = true;
-    //}
-
-    // You can also immediately update values based on current provider state
-    _updateControllerValues();
   }
 
   @override
   void dispose() {
     _controllerRebateValue.dispose();
     _controllerLogPointPerM.dispose();
+    _controllerDieselPrice.dispose();
+    _focusNodeLogPointPerM.dispose();
+    _focusNodeRebateValue.dispose();
+    _focusNodeDieselPrice.dispose();
     _flutterTts.stop();
-    _tabControllerMain?.dispose();
     _tabControllerServers?.dispose();
 
     if (!kIsWeb) {
       FlutterBluePlus.stopScan();
     }
-
-    if (_didInitListeners) {
-     //_settingsService.removeListener(_updateControllerValues);
-    }
     super.dispose();
   }
 
-  Future<void> updateSettingFields(Map<String, dynamic> updates) async {
-    await SettingsService().updateFireSettingsFields(updates);
-  }
-  void _updateControllerValues() {
-    if(!mounted) return;
+  void _ensureControllersInitialized(SettingsService settings) {
+    if (_controllersInitialized || settings.fireSettings == null) return;
 
-    //final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-    //if (!settingsProvider.isLoading && mounted) {
-    //  setState(() {
-    //    _logPointPerMeterController.text = (settingsProvider.LogPointPerMeter).toString();
-    //  });
-    //}
+    _controllerRebateValue.text =
+        settings.fireSettings!.rebateValuePerLiter.toString();
+    _controllerDieselPrice.text =
+        settings.fireSettings!.dieselPrice.toString();
+    _controllerLogPointPerM.text =
+        settings.fireSettings!.logPointPerMeter.toString();
+    _controllersInitialized = true;
   }
-  void getVoices() async {
-    List<dynamic> voices = await _flutterTts.getVoices;
-    printDebugMsg("Available Voices: $voices");
+
+  Future<void> _saveGpsCheckInterval(SettingsService settings) async {
+    if (settings.fireSettings == null) return;
+
+    final log = int.tryParse(_controllerLogPointPerM.text.trim());
+    if (log == null || log <= 0) {
+      MyGlobalSnackBar.show('Enter a valid GPS check interval in meters');
+      _controllerLogPointPerM.text =
+          settings.fireSettings!.logPointPerMeter.toString();
+      return;
+    }
+    if (log == settings.fireSettings!.logPointPerMeter) return;
+
+    await settings.updateFireSettingsFields({settingLogPointPerMeter: log});
+    if (mounted) MyGlobalSnackBar.show('Saved');
   }
+
+  Future<void> _saveRebateValue(SettingsService settings) async {
+    if (settings.fireSettings == null) return;
+
+    final rebate = double.tryParse(_controllerRebateValue.text.trim());
+    if (rebate == null) {
+      MyGlobalSnackBar.show('Enter a valid rebate value');
+      _controllerRebateValue.text =
+          settings.fireSettings!.rebateValuePerLiter.toString();
+      return;
+    }
+    if (rebate == settings.fireSettings!.rebateValuePerLiter) return;
+
+    await settings.updateFireSettingsFields({settingRebateValue: rebate});
+    if (mounted) MyGlobalSnackBar.show('Saved');
+  }
+
+  Future<void> _saveDieselPrice(SettingsService settings) async {
+    if (settings.fireSettings == null) return;
+
+    final dieselPrice = double.tryParse(_controllerDieselPrice.text.trim());
+    if (dieselPrice == null || dieselPrice <= 0) {
+      MyGlobalSnackBar.show('Enter a valid diesel price');
+      _controllerDieselPrice.text =
+          settings.fireSettings!.dieselPrice.toString();
+      return;
+    }
+    if (dieselPrice == settings.fireSettings!.dieselPrice) return;
+
+    await settings.updateFireSettingsFields({settingDieselPrice: dieselPrice});
+    if (mounted) MyGlobalSnackBar.show('Saved');
+  }
+
+  Future<void> _saveVoicePrompt(SettingsService settings, bool value) async {
+    if (settings.fireSettings == null) return;
+    if (value == settings.fireSettings!.isVoicePromptOn) return;
+
+    await settings.updateFireSettingsFields({
+      settingIsVoicePromptOn: value,
+    });
+    if (!mounted) return;
+    MyGlobalSnackBar.show('Saved');
+    if (value) {
+      _flutterTts.speak('Voice Prompt enabled');
+    }
+  }
+
   void _initTts() async {
     await _flutterTts.setLanguage('en-US');
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
   }
-  Future<void> _fetchServers() async {
-    try{
-      String? uid = FirebaseAuth.instance.currentUser?.uid;
-      if(uid == null) return;
 
-      final snapshot =  await  FirebaseFirestore.instance
+  Future<void> _fetchServers() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final snapshot = await FirebaseFirestore.instance
           .collection(collectionUsers)
           .doc(uid)
           .collection(collectionBaseStations)
           .get();
 
+      if (!mounted) return;
       setState(() {
         lstServerData = snapshot.docs;
         mapServerData.clear();
 
-        for (var doc in lstServerData) {
+        for (final doc in lstServerData) {
           mapServerData[doc.id] = doc.data() ?? {};
-          printDebugMsg("Server Data: ${jsonEncode(doc.data() ?? {})}");
+          printDebugMsg('Server Data: ${jsonEncode(doc.data() ?? {})}');
         }
-        printDebugMsg("lstServeData Len: ${lstServerData.length}");
 
-        if(lstServerData.isNotEmpty) {
-          if(_tabControllerServers != null)  _tabControllerServers?.dispose();
-
+        if (lstServerData.isNotEmpty) {
+          _tabControllerServers?.dispose();
           _tabControllerServers = TabController(
-              length: lstServerData.length,
-              vsync: this
+            length: lstServerData.length,
+            vsync: this,
           );
         }
 
         isLoading = false;
       });
-    }
-    catch (e){
+    } catch (e) {
       MyGlobalSnackBar.show('Load Server Data Failed: $e');
-      setState(() {isLoading = false;});
+      if (mounted) setState(() => isLoading = false);
     }
   }
-  // Future<void> _deleteServer() async {
-  //   try {
-  //     User? user = FirebaseAuth.instance.currentUser;
-  //     int index = _tabControllerServers!.index;
-  //     final docId = lstServerData[index].id;
 
-  //     // 1️⃣ Delete from Firestore
-  //     await FirebaseFirestore.instance
-  //         .collection(collectionUsers)
-  //         .doc(user?.uid)
-  //         .collection(collectionBaseStations)
-  //         .doc(docId)
-  //         .delete();
-
-  //     setState(() {
-  //       lstServerData.removeWhere((d) => d.id == docId);
-  //       mapServerData.remove(docId);
-
-  //       _tabControllerServers?.dispose();
-
-  //       if (lstServerData.isNotEmpty) {
-  //         _tabControllerServers = TabController(
-  //           length: lstServerData.length,
-  //           vsync: this,
-  //         );
-
-  //         // 5️⃣ Ensure a safe tab is selected
-  //         int newIndex = 0;
-  //         if (_tabControllerServers!.index >= lstServerData.length) {
-  //           newIndex = lstServerData.length - 1;
-  //         } else {
-  //           newIndex = _tabControllerServers!.index;
-  //         }
-  //         _tabControllerServers!.animateTo(newIndex);
-  //       } else {
-  //         _tabControllerServers = null;
-  //       }
-
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Server Deleted')),
-  //       );
-  //     });
-  //   } catch (e) {
-  //     print('Error deleting Server: $e');
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       SnackBar(content: Text('Failed to delete Server: $e')),
-  //     );
-  //   }
-  // }
-
-  Future<void> sendTextToDevice(BluetoothDevice device, String message) async {
-    List<BluetoothService> services = await device.discoverServices();
-    for (BluetoothService service in services) {
-      if (service.uuid.str.toLowerCase() == bluetoothServiceUuid) {
-        for (BluetoothCharacteristic characteristic in service.characteristics) {
-          if (characteristic.uuid.toString().toLowerCase() == bluetoothCharUuid) {
-            await characteristic.write(utf8.encode(message), withoutResponse: true);
-            printDebugMsg("Message sent: $message");
-          }
-        }
-      }
-    }
+  Widget _fieldDescription(String text) {
+    return Text(
+      text,
+      softWrap: true,
+      style: const TextStyle(
+        fontSize: 12,
+        color: Colors.white54,
+        fontFamily: 'Poppins',
+      ),
+    );
   }
-  void connectBluetoothDevice(String mac) async {
-    if (!AppConfig.enableBluetooth) {
-      MyGlobalMessage.show(
-        'Bluetooth',
-        'Bluetooth is not available in the web app.',
-        MyMessageType.info,
-      );
-      return;
-    }
-    FlutterBluePlus.startScan(timeout: Duration(seconds: 4));
-    printDebugMsg("Connecting... Bluetooth $mac");
 
-    for(BluetoothDevice bt in lstPairedDevices ){
-      if(bt.remoteId.str == mac){
-        String btNname = bt.platformName;
-        await FlutterBluePlus.stopScan();
-        await bt.connect(license: License.nonprofit);
-        printDebugMsg("Connected $btNname");
-        await sendTextToDevice(bt, "Hello Raspberry Pi!");
-        break;
-      }
+  Widget _fieldLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 18,
+        color: Colors.white,
+        fontFamily: 'Poppins',
+      ),
+    );
+  }
+
+  Widget _buildGeneralTab(SettingsService settings) {
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 10),
+          child: MyTextHeader(
+            text: 'Tracking',
+            color: Colors.white,
+            fontsize: 16,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _fieldDescription(
+                'Minimum distance (meters) before GPS checks for geofence '
+                'crossings during tracking. Lower values update more often but '
+                'use more battery.\n\n'
+                'Suggested: 10 m (balanced), 25 m (longer battery life), '
+                '50 m (best battery, less precise).',
+              ),
+              const SizedBox(height: 6),
+              _fieldLabel('GPS Check Interval'),
+              const SizedBox(height: 2),
+              MyTextFormField(
+                focusNode: _focusNodeLogPointPerM,
+                backgroundColor: colorAppBackground,
+                foregroundColor: Colors.white,
+                controller: _controllerLogPointPerM,
+                hintText: 'Enter value here',
+                suffix: 'm',
+                inputType: TextInputType.number,
+                showLine: true,
+                onFocusLost: () => _saveGpsCheckInterval(settings),
+                onFieldSubmitted: (_) => _saveGpsCheckInterval(settings),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _fieldDescription(
+                'Rebate amount per kilometer traveled.',
+              ),
+              const SizedBox(height: 6),
+              _fieldLabel('Rebate Value'),
+              const SizedBox(height: 2),
+              MyTextFormField(
+                focusNode: _focusNodeRebateValue,
+                backgroundColor: colorAppBackground,
+                foregroundColor: Colors.white,
+                controller: _controllerRebateValue,
+                hintText: 'Enter value here',
+                suffix: 'R/km',
+                inputType: const TextInputType.numberWithOptions(decimal: true),
+                showLine: true,
+                onFocusLost: () => _saveRebateValue(settings),
+                onFieldSubmitted: (_) => _saveRebateValue(settings),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _fieldDescription(
+                'Current diesel pump price used to estimate fuel cost inside geofences.',
+              ),
+              const SizedBox(height: 6),
+              _fieldLabel('Diesel Price'),
+              const SizedBox(height: 2),
+              MyTextFormField(
+                focusNode: _focusNodeDieselPrice,
+                backgroundColor: colorAppBackground,
+                foregroundColor: Colors.white,
+                controller: _controllerDieselPrice,
+                hintText: 'Enter value here',
+                suffix: 'R/L',
+                inputType: const TextInputType.numberWithOptions(decimal: true),
+                showLine: true,
+                onFocusLost: () => _saveDieselPrice(settings),
+                onFieldSubmitted: (_) => _saveDieselPrice(settings),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 10),
+          child: MyTextHeader(
+            text: 'Voice',
+            color: Colors.white,
+            fontsize: 16,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _fieldDescription(
+                'Spoken feedback during tracking and geofence events.',
+              ),
+              const SizedBox(height: 6),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: _fieldLabel('Voice Prompt'),
+                value: settings.fireSettings!.isVoicePromptOn,
+                activeThumbColor: Colors.white,
+                activeTrackColor: colorOrange,
+                onChanged: (value) => _saveVoicePrompt(settings, value),
+              ),
+            ],
+          ),
+        ),
+      ],
+      ),
+    );
+  }
+
+  Widget _buildServersTab() {
+    if (lstServerData.isEmpty) {
+      return myCenterMsg('No base stations configured');
     }
 
-    printDebugMsg("BT Connection Not Found");
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TabBar(
+          controller: _tabControllerServers,
+          isScrollable: true,
+          indicatorColor: Colors.blueAccent,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.grey,
+          tabs: lstServerData.map((doc) {
+            final name = doc.data()?['name']?.toString() ?? 'Station';
+            return Tab(text: name);
+          }).toList(),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabControllerServers,
+            children: lstServerData.map((doc) {
+              final data = doc.data() ?? {};
+              return ListView(
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
+                children: [
+                  const MyTextHeader(text: 'Base Station', fontsize: 16),
+                  const SizedBox(height: 12),
+                  _settingsInfoRow('Name', '${data['name'] ?? '—'}'),
+                  _settingsInfoRow('Device ID', doc.id),
+                  if (data['ip'] != null)
+                    _settingsInfoRow('IP', '${data['ip']}'),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _settingsInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 12,
+              fontFamily: 'Poppins',
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontFamily: 'Poppins',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonitorsTab() {
+    return myCenterMsg('Monitor map settings coming soon');
   }
 
   @override
-  Widget build(BuildContext context){
+  Widget build(BuildContext context) {
     return Consumer<SettingsService>(
-      builder: (context , settings, _){
+      builder: (context, settings, _) {
         if (settings.isLoading || isLoading) {
-          return myProgressCircle();
+          return Scaffold(
+            backgroundColor: colorAppBackground,
+            body: Center(child: myProgressCircle()),
+          );
         }
 
-        if(settings.fireSettings != null) {
-          _controllerRebateValue.text =
-              settings.fireSettings!.rebateValuePerLiter.toString();
+        _ensureControllersInitialized(settings);
 
-          _controllerLogPointPerM.text =
-              settings.fireSettings!.logPointPerMeter.toString();
-        }
         return DefaultTabController(
           length: 3,
           child: Scaffold(
@@ -283,109 +431,29 @@ class SettingsPageState extends State<SettingsPage> with TickerProviderStateMixi
               backgroundColor: colorAppBar,
               foregroundColor: Colors.white,
               title: myAppbarTitle('Settings'),
-              actions: [
-
-                // Save Button
-                IconButton(
-                  icon: const Icon(
-                      Icons.save,
-                      size: 30
-                  ),
-                  onPressed: () {
-                    settings.updateFireSettingsFields({
-                      settingLogPointPerMeter: int.parse(
-                          _controllerLogPointPerM.text),
-
-                      settingRebateValue: double.parse(
-                          _controllerRebateValue.text),
-                    });
-                    MyGlobalSnackBar.show("Saved");
-                  },
-                ),
-              ],
-              bottom: TabBar(
-                  labelColor: Colors.white,
-                  indicatorColor: Colors.blue,
-                  unselectedLabelColor: Colors.grey,
-                  tabs: [
-                    Tab(text: "General"),
-                    Tab(text: "Servers"),
-                    Tab(text: "Monitors",)
-                  ]
+              bottom: const TabBar(
+                indicatorColor: Colors.blueAccent,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.grey,
+                tabs: [
+                  Tab(text: 'General'),
+                  Tab(text: 'Servers'),
+                  Tab(text: 'Monitors'),
+                ],
               ),
             ),
-            body: TabBarView(
-              children: [
-
-                // General Settings
-                ListView(
-                  children: [
-                    const SizedBox(height: 20),
-
-                    // Rebate Value
-                    MyTextOption(
-                      controller: _controllerRebateValue,
-                      label: 'Rebate Value',
-                      description: "Rebate value per kilometer",
-                      prefix: 'R',
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // logPointPerMeter
-                    MyTextOption(
-                      controller: _controllerLogPointPerM,
-                      label: 'Log Location Interval',
-                      description: "Record a map location everytime you move this far in meters",
-                      suffix: 'm',
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // isVoicePromptOn
-                    MyToggleOption(
-                        value: settings.fireSettings!.isVoicePromptOn,
-                        label: 'Voice Prompt',
-                        subtitle: 'Allow me to give you vocal feedback',
-                        onChanged: (bool value) =>
-                        {
-                          //setState(() {
-                          //  _isVoicePromptOn = value;
-                          //}),
-                          settings.updateFireSettingsFields({
-                            settingIsVoicePromptOn: value
-                          }),
-
-                          if(value) {
-                            _flutterTts.speak('Voice Prompt enabled'),
-                          },
-                        }
-                    ),
-                  ],
-                ),
-
-                // Stations
-                Center(
-                  child: Text(
-                    "Stations",
-                    style:
-                    TextStyle(color: Colors.white),
+            body: settings.fireSettings == null
+                ? myCenterMsg('Settings not available')
+                : TabBarView(
+                    children: [
+                      _buildGeneralTab(settings),
+                      _buildServersTab(),
+                      _buildMonitorsTab(),
+                    ],
                   ),
-                ),
-
-                // Monitors
-                Center(
-                  child: Text(
-                    "Map", style:
-                  TextStyle(color: Colors.white),
-                  ),
-                ),
-              ]
-            )
           ),
         );
-      }
+      },
     );
   }
 }
-

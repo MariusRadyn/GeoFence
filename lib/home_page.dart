@@ -19,11 +19,14 @@ import 'package:geofence/shop_setup_page.dart';
 import 'package:geofence/tracking_history_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/wages_summary_page.dart';
+import 'package:geofence/whats_new_page.dart';
 import 'package:provider/provider.dart';
 import 'iot_monitors_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final bool openProfileOnLaunch;
+
+  const HomePage({super.key, this.openProfileOnLaunch = false});
 
   @override
   State<HomePage> createState() => HomePageState();
@@ -35,6 +38,7 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
   final double drawerWidth = 250;
   Timer? _loadingTimer;
   bool busyLoggingIn = false;
+  bool _profileLaunchHandled = false;
 
   final Color colorMenuIcons = Colors.blue;
   final Color colorMenuHeader = Colors.white;
@@ -100,6 +104,21 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
       tiles.add(tile);
     }
 
+    addTile(
+      MyCustomTileWithPic(
+        imagePath: iconWhatsNew,
+        header: "What's New",
+        description: 'Latest updates, features, and improvements',
+        widget: const WhatsNewPage(),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const WhatsNewPage()),
+          );
+        },
+      ),
+    );
+
     if (AppConfig.showLiveTracking) {
       addTile(
         MyCustomTileWithPic(
@@ -108,18 +127,6 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
           description:
               'Track your vehicle as it moves inside and outside of your GeoFences',
           widget: TrackingPage(),
-        ),
-      );
-    }
-
-    if (AppConfig.showGeoFenceSetup) {
-      addTile(
-        const MyCustomTileWithPic(
-          imagePath: iconGeoFence,
-          header: 'GeoFence',
-          description:
-              'Set all the fence perimeters where you would like to record refundable tax rebate',
-          widget: GeoFencePage(),
         ),
       );
     }
@@ -261,9 +268,7 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
 
     final showIotSection = AppConfig.showBaseStations ||
         AppConfig.showIotMonitors ||
-        AppConfig.showIotDataReport ||
-        AppConfig.showWages ||
-        AppConfig.showShop;
+        AppConfig.showIotDataReport;
     if (showIotSection) {
       items.add(heading('iOT', first: !showTrackingSection));
       if (AppConfig.showBaseStations) {
@@ -287,6 +292,25 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
           onTap: () => open(const IotDataPage()),
         ));
       }
+    }
+
+    final showGeneralSection = AppConfig.showOperators ||
+        AppConfig.showWages ||
+        AppConfig.showShop;
+    final showSetupSection = AppConfig.showSettings ||
+        AppConfig.canSetupShop(
+          userIsDeveloper: user.userdata?.isDeveloper == true,
+        );
+
+    if (showGeneralSection) {
+      items.add(heading('General', first: !showTrackingSection && !showIotSection));
+      if (AppConfig.showOperators) {
+        items.add(drawerTile(
+          icon: Icons.person,
+          title: 'Operators',
+          onTap: () => open(const OperatorsPage()),
+        ));
+      }
       if (AppConfig.showWages) {
         items.add(drawerTile(
           icon: Icons.attach_money_sharp,
@@ -303,33 +327,52 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
       }
     }
 
-    items.add(heading('Setup', first: !showTrackingSection && !showIotSection));
-    if (AppConfig.showOperators) {
-      items.add(drawerTile(
-        icon: Icons.person,
-        title: 'Operators',
-        onTap: () => open(const OperatorsPage()),
+    if (showSetupSection) {
+      items.add(heading(
+        'Setup',
+        first: !showTrackingSection && !showIotSection && !showGeneralSection,
       ));
-    }
-    if (AppConfig.showSettings) {
-      items.add(drawerTile(
-        icon: Icons.settings,
-        title: 'Settings',
-        onTap: () => open(SettingsPage(userId: user.userdata!.userID)),
-      ));
-    }
-    if (AppConfig.canSetupShop(
-      userIsDeveloper: user.userdata?.isDeveloper == true,
-    )) {
-      items.add(drawerTile(
-        icon: Icons.store_mall_directory_outlined,
-        title: 'Setup Shop',
-        onTap: () => open(const ShopSetupPage()),
-      ));
+      if (AppConfig.showSettings) {
+        items.add(drawerTile(
+          icon: Icons.settings,
+          title: 'Settings',
+          onTap: () => open(SettingsPage(userId: user.userdata!.userID)),
+        ));
+      }
+      if (AppConfig.canSetupShop(
+        userIsDeveloper: user.userdata?.isDeveloper == true,
+      )) {
+        items.add(drawerTile(
+          icon: Icons.store_mall_directory_outlined,
+          title: 'Setup Shop',
+          onTap: () => open(const ShopSetupPage()),
+        ));
+      }
     }
 
     items.add(const SizedBox(height: 5));
     return items;
+  }
+
+  Future<void> _openProfileOnLaunch() async {
+    final userService = context.read<UserDataService>();
+    await userService.load();
+
+    if (!mounted) return;
+
+    final authUser = FirebaseAuth.instance.currentUser;
+    if (authUser != null) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ProfilePage()),
+      );
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => LoginPage()),
+    );
   }
 
   Future<void> _login({
@@ -937,6 +980,15 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                 if (isLoading) {
                   return myProgressCircle();
                 }
+
+                if (widget.openProfileOnLaunch && !_profileLaunchHandled) {
+                  _profileLaunchHandled = true;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    _openProfileOnLaunch();
+                  });
+                }
+
                 return Scaffold(
 
                   backgroundColor: const Color(0xFF020617),

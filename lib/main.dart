@@ -3,7 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:geofence/app_flavor.dart';
+import 'package:geofence/home_page.dart';
 import 'package:geofence/splash_screen.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/firebase_options.dart';
@@ -59,6 +61,11 @@ Future<void> _activateAppCheck() async {
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
+
+    if (kIsWeb) {
+      usePathUrlStrategy();
+      cacheLaunchRoute();
+    }
 
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -119,7 +126,9 @@ class _MyAppState extends State<MyApp> {
       theme: ThemeData(
         primaryColor: Colors.blueGrey,
       ),
-      home: const SplashScreen(),
+      home: launchOpensProfile
+          ? const HomePage(openProfileOnLaunch: true)
+          : const SplashScreen(),
     );
   }
 }
