@@ -703,7 +703,7 @@ class _ChangesTab extends StatelessWidget {
       bullets: [
         'Browse Limitless IoT products in-app',
         'Product detail pages with discount ribbons',
-        'Secure PayFast checkout flow',
+        'Bob Pay checkout and Bob Go delivery rates',
       ],
     ),
     _WhatsNewItem(

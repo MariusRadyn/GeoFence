@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment — Limitless IOT</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: linear-gradient(180deg, #042c3a, #020617);
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      max-width: 480px;
+      margin: 24px;
+      padding: 28px;
+      background: rgba(6, 63, 82, 0.9);
+      border: 1px solid rgba(33, 137, 215, 0.35);
+      border-radius: 12px;
+    }
+    h1 { margin: 0 0 10px; font-size: 1.5rem; }
+    p { color: #94a3b8; line-height: 1.5; }
+    a { color: #7dd3fc; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 id="title">Payment</h1>
+    <p id="msg">Returning to Limitless IOT…</p>
+    <p><a href="/">Open the app</a> · <a href="/#/">Order history is in the app menu</a></p>
+  </div>
+  <script>
+    var params = new URLSearchParams(location.search);
+    var status = (params.get('status') || '').toLowerCase();
+    var title = document.getElementById('title');
+    var msg = document.getElementById('msg');
+    if (status === 'cancelled' || status === 'canceled') {
+      title.textContent = 'Payment cancelled';
+      msg.textContent = 'No charge was completed. You can open the app and try checkout again.';
+    } else {
+      title.textContent = 'Thanks — payment submitted';
+      msg.textContent = 'Bob Pay will confirm the payment shortly. Delivery is arranged with Bob Go once the order is paid. Check Order History in the app.';
+    }
+  </script>
+</body>
+</html>

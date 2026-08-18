@@ -97,5 +97,9 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/vnd.ms-excel" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
     </queries>
 </manifest>

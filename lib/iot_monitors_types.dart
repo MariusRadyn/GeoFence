@@ -298,6 +298,7 @@ class IotDistanceWheelType extends StatefulWidget {
   final Function(String) onChangedTicks;
   final Function(String) onChangedMonId;
   final Function() onTapPair;
+  final Function() onTapFind;
   final Function() onTapConnect;
   final Function() onTapCalibrate;
 
@@ -309,6 +310,7 @@ class IotDistanceWheelType extends StatefulWidget {
     required this.onChangedTicks,
     required this.onChangedMonId,
     required this.onTapPair,
+    required this.onTapFind,
     required this.onTapConnect,
     required this.onTapCalibrate,
   });
@@ -329,6 +331,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   late FocusNode _focusNodeTicksPerM;
   late FocusNode _focusNodeCalDistance;
   bool _pairButtonPressed = false;
+  bool _findButtonPressed = false;
   bool _calibrateButtonPressed = false;
   bool _connectButtonPressed = false;
   
@@ -559,8 +562,8 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                       ),
               
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child:  animatedActionButton(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: animatedActionButton(
                           pressed: _pairButtonPressed,
                           onTap: () => _animateTap(
                             widget.onTapPair,
@@ -583,6 +586,36 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                                       : Colors.grey
                                 ),
                               )
+                            ],
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: animatedActionButton(
+                          pressed: _findButtonPressed,
+                          onTap: () => _animateTap(
+                            widget.onTapFind,
+                            (v) => _findButtonPressed = v,
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.sensors,
+                                size: 30,
+                                color: settingService.isBaseStationConnected
+                                    ? Colors.lightBlueAccent
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                "Find",
+                                style: TextStyle(
+                                  color: settingService.isBaseStationConnected
+                                      ? Colors.white
+                                      : Colors.grey,
+                                ),
+                              ),
                             ],
                           ),
                         ),

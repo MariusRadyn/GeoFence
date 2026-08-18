@@ -23,6 +23,7 @@ class LoginPageState extends State<LoginPage> {
   final TextEditingController _userController = TextEditingController();
 
   bool busyLoggingIn = false;
+  bool _busyResetting = false;
 
   @override
   void initState() {
@@ -61,7 +62,20 @@ class LoginPageState extends State<LoginPage> {
     }
 
     if (error is GoogleSignInException) {
-      return error.description ?? "Google Sign in Error";
+      final code = error.code.name;
+      final description = error.description ?? 'Google Sign-In failed';
+      if (description.contains('[16]') ||
+          description.toLowerCase().contains('reauth')) {
+        return 'Play Store sign-in failed (certificate mismatch).\n'
+            'Debug and Play use different keys. In Firebase, add the '
+            'App signing SHA-1 from Play Console → Manage Play app signing '
+            '(not the upload key). Also add SHA-256, download new '
+            'google-services.json, rebuild, and reinstall from Play Store.';
+      }
+      if (code == 'canceled' && !description.contains('[16]')) {
+        return 'Google Sign-In was canceled.';
+      }
+      return '$code: $description';
     }
 
     // General fallback
@@ -72,10 +86,9 @@ class LoginPageState extends State<LoginPage> {
     double width = MediaQuery.of(context).size.width * 0.8;
     double height = MediaQuery.of(context).size.height * 0.6;
 
-    _emailController.text = "";
-    _pwController.text = "";
+    // Keep email/password already typed on the login form (shared controllers).
+    // Only reset the confirm-password field used by signup.
     _pwController2.text = "";
-    _userController.text = "";
 
     showDialog<void>(
       context: context,
@@ -125,6 +138,7 @@ class LoginPageState extends State<LoginPage> {
                     padding: EdgeInsets.only(left: 20, right: 20),
                     child: MyTextFormField(
                       controller: _emailController,
+                      inputType: TextInputType.emailAddress,
                       hintText: "Enter Email Address",
                       backgroundColor: colorAppBackground,
                       foregroundColor: Colors.white,
@@ -238,7 +252,7 @@ class LoginPageState extends State<LoginPage> {
 
         // Create user ONLY if it does not exist
         if (!doc.exists) {
-          userService.create(
+          await userService.create(
               UserData(
                 displayName: _userController.text,
                 email: _emailController.text,
@@ -248,7 +262,11 @@ class LoginPageState extends State<LoginPage> {
           );
 
           printDebugMsg('User Created');
+        } else {
+          await userService.load();
         }
+
+        await context.read<SettingsService>().load();
 
         return result.user;
 
@@ -292,6 +310,30 @@ class LoginPageState extends State<LoginPage> {
     } catch (e) {
       MyGlobalMessage.show("Error", '$e', MyMessageType.error);
       return false;
+    }
+  }
+
+  Future<void> _onResetPasswordTap() async {
+    if (busyLoggingIn || _busyResetting) return;
+
+    FocusScope.of(context).unfocus();
+    setState(() => _busyResetting = true);
+    MyGlobalSnackBar.show('Sending password reset…');
+
+    try {
+      final ok = await _resetPasswordWithEmail();
+      if (!mounted) return;
+      if (ok) {
+        MyGlobalMessage.show(
+          "Check email",
+          "We sent a reset link.\n\n"
+          "Check spam/junk.\n"
+          "If you only ever used Google Sign-In, there is no password to reset — use Google.",
+          MyMessageType.info,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busyResetting = false);
     }
   }
   Future<bool> _sendValidateEmail() async {
@@ -482,6 +524,8 @@ class LoginPageState extends State<LoginPage> {
         await userService.load();
       }
 
+      await _reloadUserScopedData();
+
       if (userService.userdata == null) {
         MyGlobalMessage.show(
           'Login',
@@ -522,6 +566,16 @@ class LoginPageState extends State<LoginPage> {
       }
     }
   }
+  Future<void> _reloadUserScopedData() async {
+    if (!mounted) return;
+    await Future.wait([
+      context.read<SettingsService>().load(),
+      context.read<BaseStationService>().load(),
+      context.read<MonitorSettingsService>().load(),
+      context.read<OperatorService>().load(),
+    ]);
+  }
+
   Future<bool> _loginWithGoogle(BuildContext context) async {
     UserDataService userService = context.read<UserDataService>();
     userService.errorMsg = "";
@@ -533,309 +587,352 @@ class LoginPageState extends State<LoginPage> {
       });
 
       AuthResult result = await firebaseAuthService.signInWithGoogle();
+
+      if (!result.isSuccess || result.user == null) {
+        final err = _getGoogleError(result.exception);
+        MyGlobalMessage.show("Error", err, MyMessageType.error);
+        return false;
+      }
+
+      final authUser = result.user!;
+      printDebugMsg('Google login UID: ${authUser.uid} email: ${authUser.email}');
       await userService.load();
 
-      if(result.isSuccess){
+      if (userService.userdata == null) {
         final doc = await FirebaseFirestore.instance
             .collection(collectionUsers)
-            .doc(result.user!.uid)
+            .doc(authUser.uid)
             .get();
 
-
-        // Create user ONLY if it does not exist
         if (!doc.exists) {
-          if (result.user != null) {
-            userService.create(
-                UserData(
-                  displayName:  result.user?.displayName ?? "",
-                  email: result.user?.email ?? "",
-                  emailValidated: true,
-                  imageURL: result.user?.photoURL ?? "",
-                ),
-                uid: result.user!.uid
-            );
-
-            setState(() {
-              userService.isUserLoggedIn = true;
-              busyLoggingIn = true;
-            });
-
-          } else {
-            if(!result.user!.emailVerified){
-              MyGlobalMessage.show("Warning", "Email address not verified", MyMessageType.warning);
-              return false;
-            }
-            else {
-
-              MyGlobalMessage.show("Warning", "User Credentials not found", MyMessageType.warning);
-              return false;
-            }
-          }
+          await userService.create(
+            UserData(
+              displayName: authUser.displayName ?? "",
+              email: authUser.email ?? "",
+              emailValidated: true,
+              imageURL: authUser.photoURL ?? "",
+            ),
+            uid: authUser.uid,
+          );
+          await userService.load();
         }
       }
-      else{
-        String err = _getGoogleError(result.exception);
-        MyGlobalMessage.show("Error", err, MyMessageType.error);
 
+      await _reloadUserScopedData();
+
+      if (userService.userdata == null) {
+        MyGlobalMessage.show(
+          'Login',
+          'Signed in with Google, but your profile could not be loaded.\n'
+          'Check your connection and try again.',
+          MyMessageType.warning,
+        );
+        await FirebaseAuth.instance.signOut();
+        return false;
+      }
+
+      userService.isUserLoggedIn = true;
+      return true;
+    } catch (e) {
+      MyGlobalMessage.show("Error(LoginWithGoogle)", '$e', MyMessageType.debug);
+      return false;
+    } finally {
+      if (mounted) {
         setState(() {
           busyLoggingIn = false;
         });
-
-        return false;
       }
-    } catch (e) {
-      setState(() {
-        busyLoggingIn = false;
-      });
-
-      MyGlobalMessage.show("Error(LoginWithGoogle)", '$e', MyMessageType.debug);
-      return false;
     }
-
-    if(!mounted) return false;
-    setState(() {
-      busyLoggingIn = false;
-    });
-    return true;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF020617),
       appBar: AppBar(
-        backgroundColor: colorAppBar,
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
-        title:
-            MyText(
-              text: "Login",
-              fontsize: 20,
-            ),
-
-
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: MyText(
+          text: "Login",
+          fontsize: 20,
+        ),
       ),
+      body: homeBackground(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            SafeArea(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                SizedBox(height: 20),
 
-      backgroundColor: colorAppBackground,
-      body: Stack(
-        children: [
-          // Background
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Color(0xFF042C3A),
-                  Color(0xFF063F52),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    MyText(text: "Enter Credentials")
+                  ],
+                ),
+
+                SizedBox(height: 40),
+
+                // Inputs
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    children: [
+                      MyTextFormField(
+                        inputType: TextInputType.emailAddress,
+                        backgroundColor: colorAppBackground,
+                        foregroundColor: Colors.white,
+                        controller: _emailController,
+                        //hintText: "Enter Email Address",
+                        labelText: "Email",
+                        valueFontSize: 14,
+
+                      ),
+
+                      SizedBox(height: 20),
+
+                      MyTextFormField(
+                         foregroundColor: Colors.white,
+                         backgroundColor: colorAppBackground,
+                         controller: _pwController,
+                         //hintText: "Enter Password",
+                         labelText: "Password",
+                         isPasswordField: true,
+                         valueFontSize: 14,
+                       ),
+                    ],
+                  ),
+                ),
+
+                SizedBox(height: 20),
+
+                //Reset Password
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const MyText(
+                      text: "Forgot Password?",
+                      color: Colors.grey,
+                      fontsize: 14,
+                    ),
+
+                    const SizedBox(width: 4),
+
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: (busyLoggingIn || _busyResetting)
+                            ? null
+                            : _onResetPasswordTap,
+                        borderRadius: BorderRadius.circular(6),
+                        splashColor: colorOrange.withValues(alpha: 0.25),
+                        highlightColor: colorOrange.withValues(alpha: 0.12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          child: _busyResetting
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: colorOrange,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Sending…',
+                                      style: TextStyle(
+                                        color: colorOrange.withValues(
+                                          alpha: 0.85,
+                                        ),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : const Text(
+                                  'Reset',
+                                  style: TextStyle(
+                                    color: colorOrange,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                SizedBox(height: 20),
+
+                // Sign up
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const MyText(
+                      text: "Don't have an account?",
+                      color: Colors.grey,
+                      fontsize: 14,
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    GestureDetector(
+                      onTap: busyLoggingIn ? null : () {
+                        _signUpScreen();
+                      },
+                      child: const Text(
+                        "Sign up",
+                        style: TextStyle(color: colorOrange),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                // Google / Facebook
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+
+                    // Sign In with Google
+                    _buildSocialLoginButton(
+                      context: context,
+                      onPressed: busyLoggingIn
+                          ? () {}
+                          : () async {
+                        final loggedin = await _loginWithGoogle(context);
+                        if(!mounted) return;
+
+                        if(loggedin){
+                          // ignore: use_build_context_synchronously
+                          Navigator.of(context).pop();
+                        }
+                      },
+                      iconPath: iconGoogle,
+                    ),
+
+                    const SizedBox(width: 20),
+
+                    // Sign In with facebook
+                    _buildSocialLoginButton(
+                      context: context,
+                      onPressed: busyLoggingIn
+                          ? () {}
+                          : () {
+                        MyGlobalMessage.show("Oops!","Not Implemented Yet",MyMessageType.warning );
+                      },
+                      iconPath: iconFacebook,
+                    ),
+                  ],
+                ),
+
+                SizedBox(height: 20),
+
+                // Buttons Cancel / OK
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+
+                    // Cancel Button
+                    myTextButton(
+                      text: 'Cancel',
+                      onPressed: busyLoggingIn
+                          ? null
+                          : () {
+                        Navigator.of(context).pop();
+                      },
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    // OK Button
+                    myTextButton(
+                      text: 'OK',
+                      onPressed: busyLoggingIn
+                          ? null
+                          : () async {
+                        final loggedIn = await _loginWithEmail();
+                        if (!mounted || !loggedIn) return;
+
+                        final needsVerify = !(FirebaseAuth
+                                .instance.currentUser?.emailVerified ??
+                            false);
+                        Navigator.of(context).pop();
+
+                        if (needsVerify) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            final rootContext = navigatorKey.currentContext;
+                            if (rootContext != null) {
+                              _showEmailVerificationDialog(rootContext);
+                            }
+                          });
+                        }
+                      },
+                    )
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Logo
+                Image.asset(iconLimitlessLogo, height: 100),
+
+                  ],
+                ),
               ),
             ),
-          ),
-
-          // Honeycomb overlay
-          Opacity(
-            opacity: 0.08, // subtle
-            child: CustomPaint(
-              size: Size.infinite,
-              painter: HexagonPainter(),
-            ),
-          ),
-
-          // Main Content
-          SafeArea(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  SizedBox(height: 20),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      MyText(text: "Enter Credentials")
-                    ],
-                  ), 
-                 
-                  SizedBox(height: 40),
-
-                  // Inputs
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      children: [
-                        MyTextFormField(
-                          inputType: TextInputType.emailAddress,
-                          backgroundColor: colorAppBackground,
-                          foregroundColor: Colors.white,
-                          controller: _emailController,
-                          //hintText: "Enter Email Address",
-                          labelText: "Email",
-                          valueFontSize: 14,
-
-                        ),
-
-                        SizedBox(height: 20),
-
-                        MyTextFormField(
-                           foregroundColor: Colors.white,
-                           backgroundColor: colorAppBackground,
-                           controller: _pwController,
-                           //hintText: "Enter Password",
-                           labelText: "Password",
-                           isPasswordField: true,
-                           valueFontSize: 14,
-                         ),
-                      ],
+            if (busyLoggingIn)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: const Color(0xFF020617).withValues(alpha: 0.92),
+                  child: Center(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 32),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 32,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorAppTitle,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          myProgressCircle(),
+                          const SizedBox(height: 16),
+                          const MyText(
+                            text: "Logging in...",
+                            color: Colors.white,
+                            fontsize: 16,
+                          ),
+                          const SizedBox(height: 8),
+                          const MyText(
+                            text: "Please wait while we set up your account.",
+                            color: Colors.grey,
+                            fontsize: 13,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-
-                  SizedBox(height: 20),
-
-                  //Reset Password
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const MyText(
-                        text: "Forgot Password?",
-                        color: Colors.grey,
-                        fontsize: 14,
-                      ),
-
-                      const SizedBox(width: 10),
-
-                      GestureDetector(
-                        onTap: () async {
-                          if (await _resetPasswordWithEmail()) {
-                            MyGlobalMessage.show(
-                              "Check email",
-                              "If an email/password account exists for that address, "
-                              "We sent a reset link.\n\n"
-                              "Check spam/junk.\n"
-                              "If you only ever used Google Sign-In, there is no password to reset — use Google.",
-                              MyMessageType.info,
-                            );
-                          }
-                        },
-                        child: const Text(
-                          "Reset",
-                          style: TextStyle(color: colorOrange),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Sign up
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const MyText(
-                        text: "Don't have an account?",
-                        color: Colors.grey,
-                        fontsize: 14,
-                      ),
-
-                      const SizedBox(width: 10),
-
-                      GestureDetector(
-                        onTap: () {
-                          _signUpScreen();
-                        },
-                        child: const Text(
-                          "Sign up",
-                          style: TextStyle(color: colorOrange),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Google / Facebook
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-
-                      // Sign In with Google
-                      _buildSocialLoginButton(
-                        context: context,
-                        onPressed: () async {
-                          final loggedin = await _loginWithGoogle(context);
-                          if(!mounted) return;
-                          
-                          if(loggedin){
-                            // ignore: use_build_context_synchronously
-                            Navigator.of(context).pop();
-                          }
-                        },
-                        iconPath: iconGoogle,
-                      ),
-
-                      const SizedBox(width: 20),
-
-                      // Sign In with facebook
-                      _buildSocialLoginButton(
-                        context: context,
-                        onPressed: () {
-                          // loginWithFacebook implementation would go here
-                          //Navigator.of(context).pop();
-                          MyGlobalMessage.show("Oops!","Not Implemented Yet",MyMessageType.warning );
-                        },
-                        iconPath: iconFacebook,
-                      ),
-                    ],
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Buttons Cancel / OK
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-
-                      // Cancel Button
-                      myTextButton(
-                        text: 'Cancel',
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                      ),
-
-                      const SizedBox(width: 10),
-
-                      // OK Button
-                      myTextButton(
-                        text: 'OK',
-                        onPressed: () async {
-                          final loggedIn = await _loginWithEmail();
-                          if (!mounted || !loggedIn) return;
-
-                          final needsVerify = !(FirebaseAuth
-                                  .instance.currentUser?.emailVerified ??
-                              false);
-                          Navigator.of(context).pop();
-
-                          if (needsVerify) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              final rootContext = navigatorKey.currentContext;
-                              if (rootContext != null) {
-                                _showEmailVerificationDialog(rootContext);
-                              }
-                            });
-                          }
-                        },
-                      )
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Logo
-                  Image.asset(iconLimitlessLogo, height: 100),
-
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

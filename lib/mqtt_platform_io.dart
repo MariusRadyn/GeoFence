@@ -18,11 +18,13 @@ Future<bool> isMqttBrokerReachable(String host, {Duration? timeout}) async {
     final socket = await Socket.connect(
       host,
       _tcpPort,
-      timeout: timeout ?? const Duration(seconds: 2),
+      timeout: timeout ?? const Duration(seconds: 5),
     );
-    await socket.close();
+    socket.destroy();
     return true;
-  } catch (_) {
+  } catch (e) {
+    // ignore: avoid_print
+    print('MQTT TCP probe $host:$_tcpPort failed: $e');
     return false;
   }
 }

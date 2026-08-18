@@ -37,6 +37,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
   String? currentImageUrl;
   String? currentImgFilename;
   Uint8List? _originalBytes;
+  Uint8List? _localPreviewBytes;
   bool isLoading = false;
   int _selectedIndex = 0;
   ProfilePicData profilePicData = ProfilePicData(update: false);
@@ -48,6 +49,22 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
     currentImgFilename = widget.imageFilename;
   }
 
+  void _warnUploading() {
+    MyGlobalMessage.show(
+      'Please wait',
+      'Your photo is still uploading. Don’t leave until it finishes.',
+      MyMessageType.warning,
+    );
+  }
+
+  void _popWithResult() {
+    if (isLoading) {
+      _warnUploading();
+      return;
+    }
+    Navigator.pop<ProfilePicData>(context, profilePicData);
+  }
+
   Reference _storageChild(String filename) {
     return FirebaseStorage.instance
         .ref()
@@ -57,7 +74,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
   }
 
   Future<void> _selectImage({ImageSource? source}) async {
-    if (source == null) return;
+    if (isLoading || source == null) return;
     final ImagePicker imagePicker = ImagePicker();
 
     try {
@@ -146,24 +163,34 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
 
     if (cropped == null || !mounted) return;
 
+    final thumb = createThumbnail(cropped);
+
     setState(() {
       isLoading = true;
+      _localPreviewBytes = thumb;
       if (replaceOriginal) {
         _originalBytes = originalBytes;
       }
     });
+    MyGlobalSnackBar.show('Uploading photo…');
 
-    if (replaceOriginal) {
-      await _uploadOriginal(originalBytes);
+    try {
+      if (replaceOriginal) {
+        await _uploadOriginal(originalBytes);
+      }
+      await _updateImage(thumb);
+      if (!mounted) return;
+      MyGlobalSnackBar.show('Photo saved');
+    } catch (e, st) {
+      if (!mounted) return;
+      MyGlobalSnackBar.show('Upload failed: $e\n$st');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
-
-    final thumb = createThumbnail(cropped);
-    await _updateImage(thumb);
-
-    if (!mounted) return;
-    setState(() {
-      isLoading = false;
-    });
   }
 
   Future<void> _uploadOriginal(Uint8List bytes) async {
@@ -208,22 +235,31 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
   }
 
   Future<void> _updateImage(Uint8List bytes) async {
-    if (currentImgFilename != null && currentImgFilename!.isNotEmpty) {
+    // Upload the new file first so leaving mid-upload cannot delete the old one.
+    final oldFilename = currentImgFilename;
+    final imgURL = await _fireUploadImage(bytes: bytes, docId: widget.docId);
+    final newFilename = profilePicData.imageFilename;
+
+    if (!mounted) return;
+    setState(() {
+      currentImageUrl = imgURL;
+      currentImgFilename = newFilename;
+      profilePicData.imageURL = imgURL;
+      _localPreviewBytes = null;
+    });
+
+    if (oldFilename != null &&
+        oldFilename.isNotEmpty &&
+        oldFilename != newFilename) {
       await _fireDeleteImage(
-        filename: currentImgFilename!,
+        filename: oldFilename,
         docId: widget.docId,
       );
     }
-    final imgURL = await _fireUploadImage(bytes: bytes, docId: widget.docId);
-
-    setState(() {
-      currentImageUrl = imgURL;
-      currentImgFilename = profilePicData.imageFilename;
-      profilePicData.imageURL = imgURL;
-    });
   }
 
   Future<void> _deleteImage() async {
+    if (isLoading) return;
     if (currentImgFilename == null || currentImgFilename!.isEmpty) return;
 
     setState(() {
@@ -245,6 +281,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
         currentImageUrl = null;
         currentImgFilename = null;
         _originalBytes = null;
+        _localPreviewBytes = null;
         profilePicData.imageURL = "";
         profilePicData.imageFilename = "";
         profilePicData.update = true;
@@ -259,34 +296,44 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
   }
 
   Widget _buildPreview() {
-    final preview = kIsWeb
-        ? NetworkAvatar(
-            imageUrl: currentImageUrl,
-            size: 280,
-            fit: BoxFit.contain,
-          )
-        : Image(
-            image: currentImageUrl != null && currentImageUrl!.isNotEmpty
-                ? CachedNetworkImageProvider(currentImageUrl!) as ImageProvider
-                : const AssetImage(iconProfile) as ImageProvider,
+    final hasLocal = _localPreviewBytes != null && _localPreviewBytes!.isNotEmpty;
+    final preview = hasLocal
+        ? Image.memory(
+            _localPreviewBytes!,
             fit: BoxFit.contain,
             width: 280,
             height: 280,
-          );
+            gaplessPlayback: true,
+          )
+        : kIsWeb
+            ? NetworkAvatar(
+                imageUrl: currentImageUrl,
+                size: 280,
+                fit: BoxFit.contain,
+              )
+            : Image(
+                image: currentImageUrl != null && currentImageUrl!.isNotEmpty
+                    ? CachedNetworkImageProvider(currentImageUrl!)
+                        as ImageProvider
+                    : const AssetImage(iconProfile) as ImageProvider,
+                fit: BoxFit.contain,
+                width: 280,
+                height: 280,
+              );
 
-    final hasPic =
-        currentImageUrl != null && currentImageUrl!.isNotEmpty;
+    final hasPic = hasLocal ||
+        (currentImageUrl != null && currentImageUrl!.isNotEmpty);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
-          onTap: hasPic ? _reeditFromOriginal : null,
+          onTap: (!isLoading && hasPic && !hasLocal) ? _reeditFromOriginal : null,
           child: Stack(
             alignment: Alignment.center,
             children: [
               ClipOval(child: preview),
-              if (hasPic)
+              if (hasPic && !isLoading && !hasLocal)
                 Positioned(
                   right: 8,
                   bottom: 8,
@@ -306,7 +353,7 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
             ],
           ),
         ),
-        if (hasPic) ...[
+        if (hasPic && !isLoading && !hasLocal) ...[
           const SizedBox(height: 12),
           Text(
             'Tap photo to adjust crop',
@@ -322,63 +369,97 @@ class _EditProfilePicPageState extends State<EditProfilePicPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: colorAppBar,
-        foregroundColor: Colors.white,
-        title: myAppbarTitle('Profile Picture'),
-        leading: IconButton(
-          onPressed: () {
-            Navigator.pop<ProfilePicData>(context, profilePicData);
-          },
-          icon: const Icon(Icons.arrow_back),
+    return PopScope(
+      canPop: !isLoading,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !isLoading) return;
+        _warnUploading();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: colorAppBar,
+          foregroundColor: Colors.white,
+          title: myAppbarTitle('Profile Picture'),
+          leading: IconButton(
+            onPressed: _popWithResult,
+            icon: const Icon(Icons.arrow_back),
+          ),
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        backgroundColor: colorAppBar,
-        unselectedItemColor: Colors.grey,
-        selectedItemColor: Colors.grey,
-        onTap: (index) async {
-          setState(() => _selectedIndex = index);
-          if (index == 0) {
-            if (kIsWeb) {
-              // Camera often unavailable in browsers — fall back to gallery.
-              await _selectImage(source: ImageSource.gallery);
-            } else {
-              await _selectImage(source: ImageSource.camera);
-            }
-          }
-          if (index == 1) await _selectImage(source: ImageSource.gallery);
-          if (index == 2) await _deleteImage();
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.camera_alt_outlined),
-            label: 'Camera',
-            backgroundColor: Colors.grey,
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.image),
-            label: 'Image',
-            backgroundColor: Colors.grey,
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.delete_forever),
-            label: 'Delete',
-            backgroundColor: Colors.grey,
-          ),
-        ],
-      ),
-      backgroundColor: colorAppBackground,
-      body: isLoading
-          ? myProgressCircle()
-          : Center(
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          backgroundColor: colorAppBar,
+          unselectedItemColor: Colors.grey,
+          selectedItemColor: Colors.grey,
+          onTap: isLoading
+              ? null
+              : (index) async {
+                  setState(() => _selectedIndex = index);
+                  if (index == 0) {
+                    if (kIsWeb) {
+                      // Camera often unavailable in browsers — fall back to gallery.
+                      await _selectImage(source: ImageSource.gallery);
+                    } else {
+                      await _selectImage(source: ImageSource.camera);
+                    }
+                  }
+                  if (index == 1) await _selectImage(source: ImageSource.gallery);
+                  if (index == 2) await _deleteImage();
+                },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.camera_alt_outlined),
+              label: 'Camera',
+              backgroundColor: Colors.grey,
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.image),
+              label: 'Image',
+              backgroundColor: Colors.grey,
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.delete_forever),
+              label: 'Delete',
+              backgroundColor: Colors.grey,
+            ),
+          ],
+        ),
+        backgroundColor: colorAppBackground,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: _buildPreview(),
               ),
             ),
+            if (isLoading)
+              ColoredBox(
+                color: Colors.black.withValues(alpha: 0.55),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      myProgressCircle(),
+                      const SizedBox(height: 16),
+                      const MyText(
+                        text: 'Uploading photo…',
+                        color: Colors.white,
+                        fontsize: 16,
+                      ),
+                      const SizedBox(height: 8),
+                      MyText(
+                        text: 'Please wait — don’t leave this screen',
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontsize: 13,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

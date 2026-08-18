@@ -14,12 +14,20 @@ FirebaseStorage fireStorageInstance = FirebaseStorage.instance;
 List<Reference> fireAllSongsRef = [];
 final gsis.GoogleSignIn googleSignIn = gsis.GoogleSignIn.instance;
 
+/// Web OAuth client ID from Firebase (client_type 3 in `google-services.json`).
+/// Required by google_sign_in 7.x on Android for Credential Manager / id tokens.
+/// Override at build time with: `--dart-define=GOOGLE_WEB_CLIENT_ID=...`
+const String _googleWebClientId = String.fromEnvironment(
+  'GOOGLE_WEB_CLIENT_ID',
+  defaultValue:
+      '850789059915-jt4v3v2ntkk1s3k7kgal1k2kgshgg808.apps.googleusercontent.com',
+);
+
 /// google_sign_in 7.x must be initialized once before use on mobile/desktop.
 /// Web uses Firebase Auth [signInWithPopup] instead (no clientId / GIS needed).
-/// On Android, [serverClientId] is read automatically from `google-services.json`.
 Future<void> initializeGoogleSignIn() async {
   if (kIsWeb) return;
-  await googleSignIn.initialize();
+  await googleSignIn.initialize(serverClientId: _googleWebClientId);
 }
 
 // ----------------------------------------------------------------------------
@@ -350,9 +358,19 @@ class FirebaseAuthService {
         UserCredential credential = await FirebaseAuth.instance.signInWithPopup(googleProvider);
         return AuthResult(user: credential.user);
       } else {
-        // Mobile authentication (Android & iOS)
-        final gsis.GoogleSignInAccount googleUser = await googleSignIn.authenticate();
+        // User tapped sign-in: always open the Google account picker.
+        final gsis.GoogleSignInAccount googleUser =
+            await googleSignIn.authenticate();
         final gsis.GoogleSignInAuthentication googleAuth = googleUser.authentication;
+
+        if (googleAuth.idToken == null || googleAuth.idToken!.isEmpty) {
+          return AuthResult(
+            exception: Exception(
+              'Google Sign-In did not return an ID token. '
+              'Check Firebase SHA-1 fingerprints and OAuth setup.',
+            ),
+          );
+        }
 
         final AuthCredential credential = GoogleAuthProvider.credential(
           idToken: googleAuth.idToken,
@@ -364,6 +382,8 @@ class FirebaseAuthService {
     }
     on FirebaseAuthException catch (e) {
       return AuthResult(exception: e as Exception, code: e.code);
+    } on gsis.GoogleSignInException catch (e) {
+      return AuthResult(exception: e, code: e.code.name);
     } catch (e) {
       return AuthResult(exception: e as Exception);
     }

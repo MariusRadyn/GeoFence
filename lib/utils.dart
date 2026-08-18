@@ -22,14 +22,28 @@ import 'package:shared_preferences/shared_preferences.dart';
 // ignore: depend_on_referenced_packages
 import 'package:uuid/uuid.dart';
 
-
 export 'app_version.g.dart' show APP_VERSION, APP_BUILD;
+
+const String googleAPiKey = String.fromEnvironment('MAPS_API_KEY');
+
+/// Runtime Maps/Places key. Prefers `--dart-define=MAPS_API_KEY`, else the
+/// Android `MAP_API_KEY` from `android/local.properties` (native string).
+String resolvedMapsApiKey = googleAPiKey;
+
+Future<void> loadMapsApiKey() async {
+  if (resolvedMapsApiKey.isNotEmpty || kIsWeb) return;
+  try {
+    const channel = MethodChannel('limitless.iot.trinity/maps');
+    final key = await channel.invokeMethod<String>('getMapsApiKey');
+    if (key != null && key.trim().isNotEmpty) {
+      resolvedMapsApiKey = key.trim();
+    }
+  } catch (_) {}
+}
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 String debugLog = '';
 bool disableDebugMsg = false;
-
-const String  googleAPiKey = String.fromEnvironment('MAPS_API_KEY');
 
 enum MyMessageType {
   info,
@@ -72,6 +86,7 @@ const String iconOperators = 'assets/operators_icon.png';
 
 const String iconLimitlessLogo = 'assets/limitless_logo.png';
 const String iconLimitlessWord = 'assets/limitlessIotWord.png';
+const String iconContactUs = 'assets/contact_us3.jpeg';
 const String iconSplashBackground = 'assets/splash_background.png';
 
 //-- Constants Colors ----------------------------------------------------------
@@ -120,8 +135,9 @@ const _accountPagesHost = 'https://limitless-iot-account.web.app';
 const accountDeletionUrl = '$_accountPagesHost/delete-account.html';
 const accountDataDeletionUrl = '$_accountPagesHost/delete-data.html';
 const privacyPolicyUrl = '$_accountPagesHost/privacy.html';
+const termsAndConditionsUrl = '$_accountPagesHost/terms.html';
+const warrantyAndReturnsUrl = '$_accountPagesHost/warranty.html';
 const profileLaunchPath = '/profile';
-
 bool _launchOpensProfile = false;
 
 /// Call once at web startup before Flutter rewrites the browser URL.
@@ -144,6 +160,7 @@ const collectionIotData = 'iotData';
 const collectionBaseStations = 'baseStations';
 const collectionClients = 'clients';
 const collectionOperators = 'operators';
+const collectionContactMessages = 'contact_messages';
 
 const fieldsSettings = 'settings';
 const fieldsUserData = 'userdata';
@@ -190,10 +207,8 @@ const String monitorTypeTrailer = "Trailer Wiring";
 //   monitorTypeWheel,
 //];
 
-// Monitor Debug
-//const debugMonitorConnected = 'debugConnected';
-//const debugMonitorWheelDistance = 'debugWheelDistance';
-//const debugMonitorWheelSignal = 'debugWheelSignal';
+// Debug
+const bool enableSetupShop = true;
 
 // FIREBASE ---------------------------------------------------------------------
 const fireUid = 'userId';
@@ -321,8 +336,10 @@ const mqttCmdFoundMonitor = "#FOUND_MONITOR";
 const mqttCmdConnectMonitor = "#CONNECT_MONITOR";
 const mqttCmdCalibrate = "#CALIBRATE";
 const mqttCmdDisconnectMonitor = "#DISCONNECT_MONITOR";
+const mqttCmdDisconnect = "#DISCONNECT";
 const mqttCmdAck = "#ACK";
 const mqttCmdPing = "#PING";
+const mqttCmdFind = "#FIND";
 const mqttCmdConnectBase = "#CONNECT_BASE";
 const mqttCmdLiveMonitorData = "#MONITOR_DATA";
 const mqttCmdTagRequest = "#TAG_REQ";
@@ -707,6 +724,8 @@ class MyTextFormFieldState extends State<MyTextFormField> {
 
   @override
   Widget build(BuildContext context) {
+    final isEmail = widget.inputType == TextInputType.emailAddress;
+
     List<TextInputFormatter>? inputFormatters;
     if (widget.inputType == TextInputType.number ||
         widget.inputType == const TextInputType.numberWithOptions(decimal: false)) {
@@ -716,12 +735,20 @@ class MyTextFormFieldState extends State<MyTextFormField> {
       inputFormatters = [
         FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
       ];
+    } else if (isEmail) {
+      // Keyboards often insert ". " after a period in sentence mode.
+      inputFormatters = [
+        FilteringTextInputFormatter.deny(RegExp(r'\s')),
+      ];
     } else {
       inputFormatters = null; // No restriction
     }
 
     final compact = widget.labelText == null;
     final isMultiline = widget.maxLines > 1;
+    // Emails/passwords must never use sentence autocorrect (". " after period).
+    final allowSpellAssist =
+        widget.enableSpellCheck && !widget.isPasswordField && !isEmail;
 
     return SizedBox(
       width: widget.width,
@@ -733,9 +760,10 @@ class MyTextFormFieldState extends State<MyTextFormField> {
           fontFamily: 'Poppins',
         ),
 
-        autocorrect: widget.enableSpellCheck,
-        enableSuggestions: widget.enableSpellCheck,
-        spellCheckConfiguration: widget.enableSpellCheck
+        autocorrect: allowSpellAssist,
+        enableSuggestions: allowSpellAssist,
+        textCapitalization: TextCapitalization.none,
+        spellCheckConfiguration: allowSpellAssist
             ? const SpellCheckConfiguration(
                 misspelledTextStyle: TextStyle(
                   decoration: TextDecoration.underline,
@@ -743,11 +771,11 @@ class MyTextFormFieldState extends State<MyTextFormField> {
                   decorationColor: Colors.redAccent,
                 ),
               )
-            : null,
-        smartDashesType: widget.enableSpellCheck
+            : const SpellCheckConfiguration.disabled(),
+        smartDashesType: allowSpellAssist
             ? SmartDashesType.enabled
             : SmartDashesType.disabled,
-        smartQuotesType: widget.enableSpellCheck
+        smartQuotesType: allowSpellAssist
             ? SmartQuotesType.enabled
             : SmartQuotesType.disabled,
         readOnly: widget.isReadOnly,
@@ -2023,18 +2051,23 @@ class MqttCredentialsPreferences {
   static Future<bool> syncFromFirestore(String baseId) async {
     if (baseId.isEmpty) return false;
 
-    final client = await ClientCloudService.load(baseId);
-    final mqttUser = client.mqttUser;
-    final mqttPw = client.mqttPw;
-    if (mqttUser == null ||
-        mqttUser.isEmpty ||
-        mqttPw == null ||
-        mqttPw.isEmpty) {
+    try {
+      final client = await ClientCloudService.load(baseId);
+      final mqttUser = client.mqttUser;
+      final mqttPw = client.mqttPw;
+      if (mqttUser == null ||
+          mqttUser.isEmpty ||
+          mqttPw == null ||
+          mqttPw.isEmpty) {
+        return false;
+      }
+
+      await save(baseId: baseId, user: mqttUser, password: mqttPw);
+      return true;
+    } catch (e) {
+      printDebugMsg('MQTT syncFromFirestore failed: $e');
       return false;
     }
-
-    await save(baseId: baseId, user: mqttUser, password: mqttPw);
-    return true;
   }
 }
 
@@ -2258,7 +2291,8 @@ class MyGlobalMessage {
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      useRootNavigator: true,
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
           side: const BorderSide(
@@ -2281,7 +2315,7 @@ class MyGlobalMessage {
           myTextButton(
               text: "OK",
               onPressed: () async {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
               }
           ),
         ],
@@ -2303,6 +2337,33 @@ class MyGlobalSnackBar {
       ),
     );
   }
+}
+Widget homeBackground({required Widget child}) {
+  return Stack(
+    fit: StackFit.expand,
+    children: [
+      Image.asset(
+        iconSplashBackground,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      ),
+      DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: const Alignment(0, -0.1),
+            radius: 1.1,
+            colors: [
+              Colors.transparent,
+              Colors.black.withValues(alpha: 0.35),
+            ],
+            stops: const [0.45, 1.0],
+          ),
+        ),
+      ),
+      child,
+    ],
+  );
 }
 class HexagonPainter extends CustomPainter {
   @override
@@ -2417,14 +2478,26 @@ class UserDataService extends ChangeNotifier {
 
   bool isLoading = false;
   bool isUserLoggedIn = false;
+  bool isLoggingOut = false;
   bool firebaseError = false;
   String errorMsg = "";
+
+  Future<void>? _loadInFlight;
 
   UserDataService() {
     FirebaseAuth.instance.authStateChanges().listen(_onAuthChanged);
   }
 
   Future<void> _onAuthChanged(User? user) async {
+    if (isLoggingOut) {
+      if (user == null) {
+        _userdata = null;
+        isUserLoggedIn = false;
+        isLoading = false;
+        notifyListeners();
+      }
+      return;
+    }
 
     if (user == null) {
       _userdata = null;
@@ -2438,6 +2511,27 @@ class UserDataService extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    if (isLoggingOut) return;
+
+    if (_loadInFlight != null) {
+      await _loadInFlight;
+      return;
+    }
+
+    final future = _loadImpl();
+    _loadInFlight = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_loadInFlight, future)) {
+        _loadInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _loadImpl() async {
+    if (isLoggingOut) return;
+
     final user = FirebaseAuth.instance.currentUser; // Get the user object
     final uid = user?.uid;
     final firestore = FirebaseFirestore.instance;
@@ -2449,42 +2543,62 @@ class UserDataService extends ChangeNotifier {
 
       if (uid == null) {
         firebaseError = true;
-        isLoading = false;
         isUserLoggedIn = false;
         errorMsg = "User ID not found";
-        notifyListeners();
         return;
       }
 
-      await user?.reload();
+      try {
+        await user?.reload().timeout(const Duration(seconds: 8));
+      } catch (_) {
+        // Offline / slow network — continue with current auth session.
+      }
+
+      if (isLoggingOut || FirebaseAuth.instance.currentUser == null) {
+        _userdata = null;
+        isUserLoggedIn = false;
+        return;
+      }
 
       final doc = await firestore
           .collection(collectionUsers)
           .doc(uid)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 12));
+
+      if (isLoggingOut || FirebaseAuth.instance.currentUser == null) {
+        _userdata = null;
+        isUserLoggedIn = false;
+        return;
+      }
 
       if (doc.exists) {
         _userdata = UserData.fromMap(doc.data()?[fieldsUserData] ?? {});
         _userdata?.userID = uid;
-        _userdata?.emailValidated = FirebaseAuth.instance.currentUser!.emailVerified;
+        _userdata?.emailValidated =
+            FirebaseAuth.instance.currentUser?.emailVerified ?? false;
         isUserLoggedIn = true;
       }
       else {
         _userdata = null;
         isUserLoggedIn = false;
       }
-
-      isLoading = false;
-      notifyListeners();
     }
     catch(e) {
+      if (isLoggingOut || FirebaseAuth.instance.currentUser == null) {
+        _userdata = null;
+        isUserLoggedIn = false;
+        return;
+      }
+      firebaseError = true;
+      errorMsg = '$e';
+      MyGlobalMessage.show("Error(Load)", "$e", MyMessageType.debug);
+    } finally {
       isLoading = false;
       notifyListeners();
-      MyGlobalMessage.show("Error(Load)", "$e", MyMessageType.debug);
     }
   }
   Future<void> create(UserData newUserData, {required String uid}) async {
-    _userdata = newUserData;
     final firestore = FirebaseFirestore.instance;
 
     try {
@@ -2492,9 +2606,10 @@ class UserDataService extends ChangeNotifier {
         fieldsUserData: newUserData.toMap(),
       }, SetOptions(merge: true));
 
-      notifyListeners();
+      await load();
     } catch (e) {
       printDebugMsg("Failed to save user data: $e");
+      rethrow;
     }
   }
   Future<void> save(UserData user) async{
@@ -2570,16 +2685,46 @@ class UserDataService extends ChangeNotifier {
       MyGlobalMessage.show('Error:', '$e', MyMessageType.error);
     }
   }
-  Future<void> logout() async{
-    try{
-      final auth = FirebaseAuth.instance;
+  Future<void> logout() async {
+    if (isLoggingOut) return;
+    isLoggingOut = true;
+    // Clear local session immediately so Home unlocks login UI and skips
+    // auto profile reload while auth is still briefly present.
+    _userdata = null;
+    isUserLoggedIn = false;
+    isLoading = false;
+    firebaseError = false;
+    notifyListeners();
 
-      await auth.signOut();
-      await updateFields({'isLoggedIn': false});
+    try {
+      // Firebase first — must always run. On web, Google Sign-In is unused
+      // (popup auth); calling googleSignIn.signOut() can hang and leave the
+      // Firebase session alive, so the next refresh looks "auto signed in".
+      await FirebaseAuth.instance.signOut();
 
-      notifyListeners();
-    }catch (e){
+      if (!kIsWeb) {
+        // Revoke Google session so the next login can show the account picker.
+        // Timeouts avoid blocking forever on Credential Manager glitches.
+        try {
+          await googleSignIn
+              .disconnect()
+              .timeout(const Duration(seconds: 5));
+        } catch (_) {
+          try {
+            await googleSignIn
+                .signOut()
+                .timeout(const Duration(seconds: 3));
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
       MyGlobalMessage.show('Error:', '$e', MyMessageType.error);
+    } finally {
+      isLoggingOut = false;
+      _userdata = null;
+      isUserLoggedIn = false;
+      isLoading = false;
+      notifyListeners();
     }
   }
   void printHash() {
@@ -2674,28 +2819,54 @@ class SettingsService extends ChangeNotifier {
   final _db = FirebaseFirestore.instance;
   //String? _lastMqttIp;
 
+  SettingsService() {
+    FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user == null) {
+        _settings = null;
+        isLoading = false;
+        notifyListeners();
+      } else {
+        load();
+      }
+    });
+  }
+
   Future<void> load() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    try{
+    if (uid == null) {
+      _settings = null;
+      isLoading = false;
+      return;
+    }
+    try {
       isLoading = true;
+      notifyListeners();
 
       final doc = await _db
           .collection(collectionUsers)
           .doc(uid)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 12));
+
+      if (FirebaseAuth.instance.currentUser == null) {
+        _settings = null;
+        return;
+      }
 
       if (doc.exists) {
         _settings = FireSettings.fromMap(doc.data()?[fieldsSettings] ?? {});
+      } else {
+        _settings = null;
       }
-
-      isLoading = false;
-      notifyListeners();
-
     } catch (e) {
+      if (FirebaseAuth.instance.currentUser == null) {
+        _settings = null;
+        return;
+      }
+      MyGlobalMessage.show('Error(Settings)', '$e', MyMessageType.debug);
+    } finally {
       isLoading = false;
       notifyListeners();
-      MyGlobalMessage.show('Error(Settings)', '$e', MyMessageType.debug);
     }
   }
   Map<String, dynamic> flattenMap(Map<String, dynamic> map, [String prefix = '']) {
@@ -3030,7 +3201,17 @@ class MonitorSettingsService extends ChangeNotifier {
 
   // Local-only updates
   void setConnectedToIot(String id, bool value) {
-    final mon = _monitors.firstWhere((m) => m.monitorId == id);
+    MonitorSettings? mon;
+    for (final m in _monitors) {
+      if (m.monitorId == id) {
+        mon = m;
+        break;
+      }
+    }
+    if (mon == null && _monitors.isNotEmpty) {
+      mon = _selected;
+    }
+    if (mon == null) return;
     mon.isConnectedToIot = value;
     notifyListeners();
   }
@@ -3215,32 +3396,61 @@ class BaseStationService extends ChangeNotifier {
   final List<BaseStationData> _lstBase = [];
   BaseStationData? _selected;
   bool isLoading = true;
+  StreamSubscription<User?>? _authSub;
 
   List<BaseStationData> get lstBaseStations => List.unmodifiable(_lstBase);
   BaseStationData? get selected => _selected;
 
+  BaseStationService() {
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user == null) {
+        _lstBase.clear();
+        _selected = null;
+        isLoading = false;
+        notifyListeners();
+      } else {
+        // Defer so login can finish before we fetch.
+        scheduleMicrotask(() => load());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> load() async {
     isLoading = true;
+    notifyListeners();
 
     String? uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    final snapshot = await FirebaseFirestore.instance
-        .collection(collectionUsers)
-        .doc(uid)
-        .collection(collectionBaseStations)
-        .get();
-
-    final list = snapshot.docs
-        .map((doc) => BaseStationData.fromMap(doc.data(), doc.id))
-        .toList();
+    if (uid == null) {
+      _lstBase.clear();
+      _selected = null;
+      isLoading = false;
+      notifyListeners();
+      return;
+    }
 
     try {
-      if (lstBaseStations.length != list.length) {
-        setBaseStations(list);
-      }
+      final snapshot = await FirebaseFirestore.instance
+          .collection(collectionUsers)
+          .doc(uid)
+          .collection(collectionBaseStations)
+          .get();
+
+      final list = snapshot.docs
+          .map((doc) => BaseStationData.fromMap(doc.data(), doc.id))
+          .toList();
+
+      // Always apply — length-only checks skipped updates after login.
+      setBaseStations(list);
     } catch (e) {
-      printDebugMsg(e.toString());
+      printDebugMsg('BaseStation load error: $e');
+      _lstBase.clear();
+      notifyListeners();
     } finally {
       isLoading = false;
       notifyListeners();

@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:geofence/network_avatar.dart';
+import 'package:geofence/shop_product_image.dart';
+import 'package:geofence/shop_checkout_page.dart';
 import 'package:geofence/shop_product_detail_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +16,8 @@ import 'package:provider/provider.dart';
 const String collectionShopProducts = 'shop_products';
 const String collectionShopOrders = 'shop_orders';
 const String collectionShopReviews = 'reviews';
+const String collectionShopReturns = 'returns';
+const String collectionShopCancellations = 'cancellations';
 
 /// Catalog item for the Limitless online shop.
 class ShopProduct {
@@ -33,6 +38,10 @@ class ShopProduct {
   final int stockCount;
   /// When false, product is visible but not yet launched for purchase.
   final bool isReady;
+  final double weightKg;
+  final double lengthCm;
+  final double widthCm;
+  final double heightCm;
 
   const ShopProduct({
     required this.id,
@@ -51,6 +60,10 @@ class ShopProduct {
     this.active = true,
     this.stockCount = 0,
     this.isReady = true,
+    this.weightKg = 1,
+    this.lengthCm = 20,
+    this.widthCm = 15,
+    this.heightCm = 10,
   });
 
   String? get primaryImageUrl {
@@ -111,6 +124,10 @@ class ShopProduct {
       active: map['active'] != false,
       stockCount: asInt(map['stockCount']),
       isReady: map['isReady'] != false,
+      weightKg: asDouble(map['weightKg'], 1),
+      lengthCm: asDouble(map['lengthCm'], 20),
+      widthCm: asDouble(map['widthCm'], 15),
+      heightCm: asDouble(map['heightCm'], 10),
     );
   }
   Map<String, dynamic> toMap() => {
@@ -129,6 +146,10 @@ class ShopProduct {
         'active': active,
         'stockCount': stockCount,
         'isReady': isReady,
+        'weightKg': weightKg,
+        'lengthCm': lengthCm,
+        'widthCm': widthCm,
+        'heightCm': heightCm,
       };
   ShopProduct copyWith({
     String? id,
@@ -147,6 +168,10 @@ class ShopProduct {
     bool? active,
     int? stockCount,
     bool? isReady,
+    double? weightKg,
+    double? lengthCm,
+    double? widthCm,
+    double? heightCm,
   }) {
     return ShopProduct(
       id: id ?? this.id,
@@ -165,6 +190,10 @@ class ShopProduct {
       active: active ?? this.active,
       stockCount: stockCount ?? this.stockCount,
       isReady: isReady ?? this.isReady,
+      weightKg: weightKg ?? this.weightKg,
+      lengthCm: lengthCm ?? this.lengthCm,
+      widthCm: widthCm ?? this.widthCm,
+      heightCm: heightCm ?? this.heightCm,
     );
   }
 }
@@ -360,12 +389,32 @@ class _ShopPageState extends State<ShopPage> {
   String _category = 'All';
   String _query = '';
   String _sort = 'Featured';
-  bool _checkingOut = false;
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  int _shopGridCrossAxisCount(BuildContext context) {
+    if (!kIsWeb) return 2;
+    final width = MediaQuery.sizeOf(context).width;
+    if (width >= 900) return 4;
+    if (width >= 600) return 3;
+    return 2;
+  }
+
+  double _shopGridChildAspectRatio(BuildContext context) {
+    // Lower ratio = taller tiles (text half needs room for button + details).
+    if (!kIsWeb) return 0.55;
+    switch (_shopGridCrossAxisCount(context)) {
+      case 4:
+        return 0.70;
+      case 3:
+        return 0.66;
+      default:
+        return 0.62;
+    }
   }
 
   List<ShopProduct> _filterAndSort(List<ShopProduct> products) {
@@ -403,69 +452,11 @@ class _ShopPageState extends State<ShopPage> {
       return;
     }
     if (cart.isEmpty) return;
-
-    setState(() => _checkingOut = true);
-    try {
-      final orderRef = FirebaseFirestore.instance
-          .collection(collectionUsers)
-          .doc(user.uid)
-          .collection(collectionShopOrders)
-          .doc();
-
-      final items = cart.items
-          .map((i) => {
-                'productId': i.product.id,
-                'name': i.product.name,
-                'catalogPrice': i.product.price,
-                'price': i.unitPrice,
-                'discount': i.product.discount,
-                'quantity': i.quantity,
-                'lineTotal': i.lineTotal,
-              })
-          .toList();
-
-      await orderRef.set({
-        'orderId': orderRef.id,
-        'userId': user.uid,
-        'email': user.email,
-        'items': items,
-        'total': cart.total,
-        'currency': 'ZAR',
-        'status': 'pending_payment',
-        'paymentProvider': 'payfast',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      final orderTotal = cart.total;
-      final orderId = orderRef.id;
-      cart.clear();
-      if (!mounted) return;
-
-      Navigator.of(context).pop();
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: colorAppTitle,
-          title: const MyText(text: 'Order placed', color: Colors.white),
-          content: MyText(
-            text:
-                'Order $orderId was saved.\n\nTotal: ${_money.format(orderTotal)}\n\nPayFast card checkout can be connected next using your merchant account.',
-            color: Colors.grey,
-            fontsize: 15,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const MyText(text: 'OK', color: colorOrange),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      MyGlobalSnackBar.show('Checkout failed: $e');
-    } finally {
-      if (mounted) setState(() => _checkingOut = false);
-    }
+    Navigator.of(context).pop();
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ShopCheckoutPage()),
+    );
   }
 
   void _openCart() {
@@ -557,25 +548,25 @@ class _ShopPageState extends State<ShopPage> {
                                 return Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Container(
-                                      width: 72,
-                                      height: 72,
-                                      decoration: BoxDecoration(
-                                        color: (item.product.primaryImageUrl !=
-                                                    null &&
-                                                item.product.primaryImageUrl!
-                                                    .trim()
-                                                    .isNotEmpty)
-                                            ? Colors.white
-                                                .withValues(alpha: 0.92)
-                                            : colorAppBar,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.white12),
-                                      ),
-                                      padding: const EdgeInsets.all(8),
-                                      child: _ProductThumb(
-                                        product: item.product,
-                                        size: 56,
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: SizedBox(
+                                        width: 72,
+                                        height: 72,
+                                        child: ColoredBox(
+                                          color: (item.product.primaryImageUrl !=
+                                                      null &&
+                                                  item.product.primaryImageUrl!
+                                                      .trim()
+                                                      .isNotEmpty)
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.92)
+                                              : colorAppBar,
+                                          child: ShopProductImage(
+                                            imageUrl:
+                                                item.product.primaryImageUrl,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(width: 12),
@@ -707,26 +698,15 @@ class _ShopPageState extends State<ShopPage> {
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                   ),
-                                  onPressed: _checkingOut
-                                      ? null
-                                      : () => _checkout(liveCart),
-                                  child: _checkingOut
-                                      ? const SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        )
-                                      : const Text(
-                                          'Secure Checkout · PayFast',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 15,
-                                            letterSpacing: 0.2,
-                                          ),
-                                        ),
+                                  onPressed: () => _checkout(liveCart),
+                                  child: const Text(
+                                    'Secure Checkout · Bob Pay',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -775,6 +755,39 @@ class _ShopPageState extends State<ShopPage> {
     );
   }
 
+  Widget _buildNeonShoppingBagIcon({double size = 140}) {
+    const neonBlue = Color(0xFF00E5FF);
+    const neonCore = Color(0xFF8BE5F5);
+
+    return Stack(
+      alignment: Alignment.center,
+      clipBehavior: Clip.none,
+      children: [
+        ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Icon(
+            Icons.shopping_bag_outlined,
+            size: size,
+            color: neonBlue.withValues(alpha: 0.55),
+          ),
+        ),
+        ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Icon(
+            Icons.shopping_bag_outlined,
+            size: size,
+            color: neonBlue.withValues(alpha: 0.85),
+          ),
+        ),
+        Icon(
+          Icons.shopping_bag_outlined,
+          size: size,
+          color: neonCore,
+        ),
+      ],
+    );
+  }
+
   Widget _buildPromoBanner() {
     return Container(
       height: 118,
@@ -797,11 +810,7 @@ class _ShopPageState extends State<ShopPage> {
           Positioned(
             right: -20,
             bottom: -30,
-            child: Icon(
-              Icons.shopping_bag_outlined,
-              size: 140,
-              color: Colors.white.withValues(alpha: 0.07),
-            ),
+            child: _buildNeonShoppingBagIcon(),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -1066,19 +1075,26 @@ class _ShopPageState extends State<ShopPage> {
           )
         else
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(10, 4, 10, 24),
+            padding: EdgeInsets.fromLTRB(
+              kIsWeb ? 12 : 10,
+              4,
+              kIsWeb ? 12 : 10,
+              24,
+            ),
             sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 0.52,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: _shopGridCrossAxisCount(context),
+                mainAxisSpacing: kIsWeb ? 8 : 10,
+                crossAxisSpacing: kIsWeb ? 8 : 10,
+                childAspectRatio: _shopGridChildAspectRatio(context),
               ),
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
                   final product = filtered[i];
                   return _ProductCard(
                     product: product,
+                    compact: kIsWeb ||
+                        MediaQuery.sizeOf(context).width < 480,
                     priceLabel: _money.format(product.salePrice),
                     listPriceLabel: product.hasDeal
                         ? _money.format(product.price)
@@ -1123,6 +1139,7 @@ class _ProductCard extends StatelessWidget {
   final String? listPriceLabel;
   final VoidCallback onOpen;
   final VoidCallback onAdd;
+  final bool compact;
 
   const _ProductCard({
     required this.product,
@@ -1130,10 +1147,22 @@ class _ProductCard extends StatelessWidget {
     required this.listPriceLabel,
     required this.onOpen,
     required this.onAdd,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final nameSize = compact ? 10.0 : 12.0;
+    final priceSize = compact ? 12.0 : 15.0;
+    final listPriceSize = compact ? 9.0 : 11.0;
+    final starSize = compact ? 10.0 : 12.0;
+    final reviewSize = compact ? 8.0 : 10.0;
+    final buttonHeight = compact ? 26.0 : 32.0;
+    final buttonFontSize = compact ? 9.0 : 11.0;
+    final bodyPadding = compact
+        ? const EdgeInsets.fromLTRB(6, 4, 6, 4)
+        : const EdgeInsets.fromLTRB(8, 5, 8, 6);
+
     return Material(
       color: colorAppBar,
       borderRadius: BorderRadius.circular(6),
@@ -1155,107 +1184,109 @@ class _ProductCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Image plate — flex share so details always keep room for the button.
               Expanded(
-                flex: 5,
-                child: Stack(
-                  clipBehavior: Clip.hardEdge,
-                  children: [
-                    Positioned.fill(
-                      child: ColoredBox(
-                        color: (product.primaryImageUrl != null &&
-                                product.primaryImageUrl!.trim().isNotEmpty)
-                            ? Colors.white.withValues(alpha: 0.94)
-                            : colorAppBar,
-                        child: Padding(
-                          padding: const EdgeInsets.all(10),
-                          child: _ProductThumb(product: product, size: 96),
+                flex: 1,
+                child: ClipRect(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Positioned.fill(
+                        child: ColoredBox(
+                          color: (product.primaryImageUrl != null &&
+                                  product.primaryImageUrl!.trim().isNotEmpty)
+                              ? Colors.white.withValues(alpha: 0.94)
+                              : colorAppBar,
+                          child: ShopProductImage(
+                            imageUrl: product.primaryImageUrl,
+                          ),
                         ),
                       ),
-                    ),
-                    if (!product.isReady)
-                      Positioned(
-                        left: -38,
-                        top: 14,
-                        child: Transform.rotate(
-                          angle: -math.pi / 4,
-                          child: Container(
-                            width: 130,
-                            padding: const EdgeInsets.symmetric(vertical: 5),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  colorDrawer,
-                                  colorDrawer.withValues(alpha: 0.85),
-                                  const Color(0xFF1E3A8A),
+                      if (!product.isReady)
+                        Positioned(
+                          left: compact ? -46 : -38,
+                          top: compact ? 30 : 26,
+                          child: Transform.rotate(
+                            angle: -math.pi / 4,
+                            child: Container(
+                              width: compact ? 140 : 140,
+                              padding: EdgeInsets.symmetric(
+                                  vertical: compact ? 3 : 5),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    colorDrawer,
+                                    colorDrawer.withValues(alpha: 0.85),
+                                    const Color(0xFF1E3A8A),
+                                  ],
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.35),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
                                 ],
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.35),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
+                              child: Text(
+                                'COMING SOON',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: compact ? 7 : 10,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.5,
                                 ),
-                              ],
+                              ),
                             ),
-                            child: const Text(
-                              'COMING SOON',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.5,
+                          ),
+                        )
+                      else if (product.hasDeal)
+                        Positioned(
+                          left: compact ? -25 : -34,
+                          top: compact ? 18 : 10,
+                          child: Transform.rotate(
+                            angle: -math.pi / 4,
+                            child: Container(
+                              width: compact ? 100 : 110,
+                              padding: EdgeInsets.symmetric(
+                                  vertical: compact ? 3 : 5),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    colorOrange,
+                                    colorOrange.withValues(alpha: 0.9),
+                                    const Color(0xFFE11D48),
+                                  ],
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.35),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                '-${product.savePercent}%',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: compact ? 9 : 11,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.6,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      )
-                    else if (product.hasDeal)
-                      Positioned(
-                        left: -34,
-                        top: 12,
-                        child: Transform.rotate(
-                          angle: -math.pi / 4,
-                          child: Container(
-                            width: 110,
-                            padding: const EdgeInsets.symmetric(vertical: 5),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  colorOrange,
-                                  colorOrange.withValues(alpha: 0.9),
-                                  const Color(0xFFE11D48),
-                                ],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.35),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              '-${product.savePercent}%',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               Expanded(
-                flex: 6,
+                flex: 1,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                  padding: bodyPadding,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -1263,18 +1294,20 @@ class _ProductCard extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              product.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                height: 1.2,
+                            Flexible(
+                              child: Text(
+                                product.name,
+                                maxLines: compact ? 1 : 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: nameSize,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.15,
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 2),
+                            SizedBox(height: compact ? 1 : 2),
                             Row(
                               children: [
                                 ...List.generate(5, (i) {
@@ -1289,7 +1322,7 @@ class _ProductCard extends StatelessWidget {
                                     icon = Icons.star_border;
                                   }
                                   return Icon(icon,
-                                      size: 12, color: colorOrange);
+                                      size: starSize, color: colorOrange);
                                 }),
                                 const SizedBox(width: 2),
                                 Flexible(
@@ -1299,24 +1332,25 @@ class _ProductCard extends StatelessWidget {
                                         : 'No reviews',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: Colors.white70,
-                                      fontSize: 10,
+                                      fontSize: reviewSize,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 4),
+                            SizedBox(height: compact ? 1 : 3),
                             Text(
                               priceLabel,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 15,
+                                fontSize: priceSize,
                                 fontWeight: FontWeight.w800,
+                                height: 1.1,
                               ),
                             ),
                             if (listPriceLabel != null)
@@ -1326,33 +1360,35 @@ class _ProductCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: Colors.white.withValues(alpha: 0.45),
-                                  fontSize: 11,
+                                  fontSize: listPriceSize,
                                   decoration: TextDecoration.lineThrough,
                                   decorationColor: Colors.white38,
+                                  height: 1.1,
                                 ),
                               ),
-                            if (product.freeDelivery)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 2),
+                            if (product.freeDelivery && !compact)
+                              Padding(
+                                padding: EdgeInsets.only(top: compact ? 1 : 2),
                                 child: Text(
                                   'FREE DELIVERY',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: Color(0xFF4ADE80),
-                                    fontSize: 9,
+                                    color: const Color(0xFF4ADE80),
+                                    fontSize: compact ? 7 : 9,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 0.3,
+                                    height: 1.1,
                                   ),
                                 ),
                               ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: compact ? 3 : 4),
                       SizedBox(
                         width: double.infinity,
-                        height: 32,
+                        height: buttonHeight,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: product.isReady
@@ -1377,9 +1413,9 @@ class _ProductCard extends StatelessWidget {
                                 : product.stockCount <= 0
                                     ? 'Out of Stock'
                                     : 'Add to Cart',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w700,
-                              fontSize: 11,
+                              fontSize: buttonFontSize,
                             ),
                           ),
                         ),
@@ -1391,38 +1427,6 @@ class _ProductCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-class _ProductThumb extends StatelessWidget {
-  final ShopProduct product;
-  final double size;
-
-  const _ProductThumb({required this.product, required this.size});
-
-  String get _placeholder => iconShopNoImage;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = product.primaryImageUrl;
-    if (url != null && url.trim().isNotEmpty) {
-      return Center(
-        child: NetworkAvatar(
-          imageUrl: url,
-          size: size,
-          fit: BoxFit.contain,
-          fallbackAsset: _placeholder,
-        ),
-      );
-    }
-
-    return Center(
-      child: Image.asset(
-        _placeholder,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
       ),
     );
   }

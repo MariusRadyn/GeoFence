@@ -15,11 +15,25 @@ import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
     private val downloadsChannel = "limitless.iot.trinity/downloads"
+    private val mapsChannel = "limitless.iot.trinity/maps"
     private val excelMime =
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, mapsChannel)
+            .setMethodCallHandler { call, result ->
+                if (call.method != "getMapsApiKey") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                try {
+                    val key = getString(R.string.google_maps_key)
+                    result.success(key)
+                } catch (e: Exception) {
+                    result.error("maps_key", e.message, null)
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, downloadsChannel)
             .setMethodCallHandler { call, result ->
                 if (call.method != "saveToDownloads") {

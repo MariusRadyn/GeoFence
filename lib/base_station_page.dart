@@ -130,7 +130,16 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
 
       debugPrint('MQTT RX: $msg');
 
-      final jsonData = jsonDecode(msg);
+      Map<String, dynamic> jsonData;
+      try {
+        final decoded = jsonDecode(msg);
+        if (decoded is! Map) return;
+        jsonData = Map<String, dynamic>.from(decoded);
+      } catch (e) {
+        printDebugMsg('MQTT RX not JSON: $e');
+        return;
+      }
+
       final cmd = jsonData[mqttJsonCmd];
       final fromId = jsonData[mqttJsonFromDeviceId];
 
@@ -175,27 +184,91 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
       }
     });
   }
-  Future<bool> _mqttConnectBase (BaseStationData base) async {
+  Future<bool> _mqttConnectBase(BaseStationData base) async {
     await _mqttSubscription?.cancel();
     _mqttSubscription = null;
 
-    await MqttCredentialsPreferences.syncFromFirestore(base.bluetoothName);
+    // Prefer the IP currently in the text field (model may be stale until blur).
+    base.ipAddress = MqttService.normalizeHost(
+      _getControllerIpAdr(base).text,
+    );
+    _getControllerIpAdr(base).text = base.ipAddress;
 
-    bool isReady = await MqttService().restartService(
+    // Refresh MQTT credentials (and IP if cloud has one) before connecting.
+    try {
+      final clientData =
+          await ClientCloudService.load(base.bluetoothName);
+      if (clientData.mqttUser != null &&
+          clientData.mqttUser!.isNotEmpty &&
+          clientData.mqttPw != null &&
+          clientData.mqttPw!.isNotEmpty) {
+        await MqttCredentialsPreferences.save(
+          baseId: base.bluetoothName,
+          user: clientData.mqttUser!,
+          password: clientData.mqttPw!,
+        );
+      }
+      if ((base.ipAddress.isEmpty) &&
+          clientData.ip != null &&
+          clientData.ip!.isNotEmpty) {
+        base.ipAddress = clientData.ip!.trim();
+        _getControllerIpAdr(base).text = base.ipAddress;
+      }
+    } catch (e) {
+      printDebugMsg('MQTT client cloud load failed: $e');
+      // Fall back to cached prefs / Firebase token inside MqttService.
+    }
+
+    if (base.ipAddress.isEmpty) {
+      MyGlobalMessage.show(
+        'Warning',
+        'No IP address. Tap the cloud IP button first, or enter the base IP.',
+        MyMessageType.warning,
+      );
+      return false;
+    }
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      MyGlobalMessage.show(
+        'Warning',
+        'You must be signed in to connect to a base station.',
+        MyMessageType.warning,
+      );
+      return false;
+    }
+
+    final mqtt = MqttService();
+    final isReady = await mqtt.restartService(
       base.ipAddress,
       baseId: base.bluetoothName,
     );
 
-    if(isReady) {
+    if (isReady) {
       _mqttStartListener();
       _startTimeout(5);
 
-      MqttService().tx(base.bluetoothName, mqttCmdConnectBase, {fireUid: FirebaseAuth.instance.currentUser!.uid} ,mqttTopicFromAndroid);
+      mqtt.tx(
+        base.bluetoothName,
+        mqttCmdConnectBase,
+        {fireUid: uid},
+        mqttTopicFromAndroid,
+      );
       return true;
     }
 
-    // Failed
-    MyGlobalMessage.show("Warning", "Wifi connection FAILED", MyMessageType.warning);
+    final detail = mqtt.lastError;
+    if (detail == null ||
+        (!detail.startsWith('Browser blocks') &&
+            !detail.contains('WebSocket'))) {
+      MyGlobalMessage.show(
+        'Wifi connection FAILED',
+        detail ??
+            'Could not connect to ${base.ipAddress}. '
+                'Check WiFi credentials.',
+        MyMessageType.warning,
+      );
+    }
     setState(() {
       base.isConnected = false;
     });
@@ -537,10 +610,11 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
   TextEditingController _getControllerIpAdr(BaseStationData station) {
     final controller = _controllersIpAddress.putIfAbsent(
       station.docId,
-          () => TextEditingController(text: station.ipAddress),
+      () => TextEditingController(text: station.ipAddress),
     );
 
-    if (controller.text != station.ipAddress) {
+    // Don't overwrite while the user is typing; only sync when unfocused.
+    if (!_focusNodeIP.hasFocus && controller.text != station.ipAddress) {
       controller.text = station.ipAddress;
     }
 
@@ -794,16 +868,24 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                                   
                                   InkWell(
                                       onTap: () async {
-                                        if(currentBase.ipAddress == ""){
-                                          MyGlobalMessage.show("Warning", "No IP Address", MyMessageType.warning);
+                                        final ipFromField =
+                                            _getControllerIpAdr(currentBase)
+                                                .text
+                                                .trim();
+                                        currentBase.ipAddress = ipFromField;
+
+                                        if (currentBase.ipAddress.isEmpty) {
+                                          MyGlobalMessage.show(
+                                            "Warning",
+                                            "No IP Address",
+                                            MyMessageType.warning,
+                                          );
                                           return;
                                         }
 
-                                        if(currentBase.isConnected == false){
-                                          // Connect MQTT
-                                          _mqttConnectBase(currentBase);
-                                        }
-                                        else {
+                                        if (currentBase.isConnected == false) {
+                                          await _mqttConnectBase(currentBase);
+                                        } else {
                                           // Disconnect
                                           setState(() {
                                             currentBase.isConnected = false;

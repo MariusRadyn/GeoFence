@@ -6,6 +6,7 @@ import 'package:geofence/account_deletion_service.dart';
 import 'package:geofence/network_avatar.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'edit_profile_pic_page.dart';
 //import 'firebase.dart';
 import 'home_page.dart';
@@ -26,6 +27,21 @@ class ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    final uri = Uri.parse(privacyPolicyUrl);
+    final opened = await launchUrl(
+      uri,
+      mode: kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      MyGlobalMessage.show(
+        'Privacy policy',
+        'Could not open the privacy policy link.',
+        MyMessageType.warning,
+      );
+    }
   }
 
   void _showDeleteDataDialog(BuildContext context) {
@@ -338,7 +354,7 @@ class ProfilePageState extends State<ProfilePage> {
                       // OK Button
                       myTextButton(
                         onPressed: () async {
-                          await FirebaseAuth.instance.signOut();
+                          await context.read<UserDataService>().logout();
                           if (!context.mounted) return;
                           Navigator.pop(context);
                         },
@@ -558,8 +574,6 @@ class ProfilePageState extends State<ProfilePage> {
                           isReadOnly: true,
                         ),
 
-                        SizedBox(height: 20),
-
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const MyText(
@@ -597,7 +611,19 @@ class ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
                   ),
-                )
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: GestureDetector(
+                    onTap: _openPrivacyPolicy,
+                    child: const MyText(
+                      text: 'Privacy policy',
+                      color: Colors.white38,
+                      fontsize: 11,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

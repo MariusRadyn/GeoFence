@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:geofence/home_page.dart';
 import 'package:geofence/utils.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -22,10 +23,20 @@ class SplashScreenState extends State<SplashScreen>
   late Animation<double> _zoomAnimation;
   late Animation<double> _brandOpacityAnimation;
   late Animation<double> _bgScaleAnimation;
+  String _versionLabel = '';
+
+  Future<void> _loadVersionLabel() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() {
+      _versionLabel = '${info.version}+${info.buildNumber}';
+    });
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadVersionLabel();
 
     // Intro → spin/text → Netflix zoom-out (~3.8s)
     _controller = AnimationController(
@@ -255,6 +266,27 @@ class SplashScreenState extends State<SplashScreen>
                   ),
                 ),
               ),
+
+              if (_versionLabel.isNotEmpty)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        _versionLabel,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          letterSpacing: 0.3,
+                          color: Colors.white.withValues(alpha: 0.45),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         },

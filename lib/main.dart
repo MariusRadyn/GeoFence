@@ -1,7 +1,8 @@
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kDebugMode, kIsWeb, kProfileMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:geofence/app_flavor.dart';
@@ -26,14 +27,26 @@ const String _recaptchaV3SiteKey = String.fromEnvironment(
 
 Future<void> _activateAppCheck() async {
   try {
+    // Play Integrity only works for Play-distributed / properly attested builds.
+    // Debug + profile (and APP_CHECK_DEBUG=true) use the debug provider so
+    // local/sideload installs don't spam "App attestation failed" 403s.
+    const forceDebugAppCheck = bool.fromEnvironment(
+      'APP_CHECK_DEBUG',
+      defaultValue: false,
+    );
+    final useDebugProvider =
+        kDebugMode || kProfileMode || forceDebugAppCheck;
+
     await FirebaseAppCheck.instance.activate(
-      providerAndroid: kDebugMode
+      providerAndroid: useDebugProvider
           ? const AndroidDebugProvider()
           : const AndroidPlayIntegrityProvider(),
-      providerApple: kDebugMode
+      providerApple: useDebugProvider
           ? const AppleDebugProvider()
           : const AppleDeviceCheckProvider(),
-      providerWeb: kDebugMode || _recaptchaV3SiteKey.isEmpty
+      providerWeb: kDebugMode ||
+              forceDebugAppCheck ||
+              _recaptchaV3SiteKey.isEmpty
           ? WebDebugProvider()
           : ReCaptchaV3Provider(_recaptchaV3SiteKey),
     );
@@ -41,17 +54,17 @@ Future<void> _activateAppCheck() async {
     // Helps surface token issues early in logs.
     await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
 
-    if (kDebugMode) {
+    if (useDebugProvider) {
       printDebugMsg(
-        'App Check activated (debug). '
-        'Register the debug token printed in the console under '
-        'Firebase Console → App Check → Manage debug tokens.',
+        'App Check: debug provider active. '
+        'Look in logcat for "Enter this debug secret" / debug token, then add it under '
+        'Firebase Console → App Check → Apps → Manage debug tokens.',
       );
-      if (kIsWeb && _recaptchaV3SiteKey.isEmpty) {
-        printDebugMsg(
-          'Web release needs --dart-define=RECAPTCHA_V3_SITE_KEY=...',
-        );
-      }
+    }
+    if (kIsWeb && _recaptchaV3SiteKey.isEmpty) {
+      printDebugMsg(
+        'Web release needs --dart-define=RECAPTCHA_V3_SITE_KEY=...',
+      );
     }
   } catch (e) {
     printDebugMsg('App Check activate failed: $e');

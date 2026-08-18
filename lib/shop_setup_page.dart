@@ -5,6 +5,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geofence/network_avatar.dart';
+import 'package:geofence/shop_image_crop_page.dart';
+import 'package:geofence/shop_image_utils.dart';
 import 'package:geofence/shop_page.dart';
 import 'package:geofence/shop_spell_check.dart';
 import 'package:geofence/utils.dart';
@@ -210,6 +212,10 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
   final _priceController = TextEditingController();
   final _discountController = TextEditingController();
   final _stockCountController = TextEditingController();
+  final _weightController = TextEditingController();
+  final _lengthController = TextEditingController();
+  final _widthController = TextEditingController();
+  final _heightController = TextEditingController();
   final _picker = ImagePicker();
 
   late String _docId;
@@ -244,12 +250,20 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
           p.discount > 0 ? p.discount.toStringAsFixed(0) : '';
       _stockCountController.text =
           p.stockCount > 0 ? p.stockCount.toString() : '';
+      _weightController.text = p.weightKg.toString();
+      _lengthController.text = p.lengthCm.toString();
+      _widthController.text = p.widthCm.toString();
+      _heightController.text = p.heightCm.toString();
       _imageUrls.addAll(p.imageUrls);
       _active = p.active;
       _freeDelivery = p.freeDelivery;
       _isReady = p.isReady;
     } else {
       _stockCountController.text = '0';
+      _weightController.text = '1';
+      _lengthController.text = '20';
+      _widthController.text = '15';
+      _heightController.text = '10';
     }
   }
 
@@ -261,19 +275,23 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
     _discountController.dispose();
     _categoryController.dispose();
     _stockCountController.dispose();
+    _weightController.dispose();
+    _lengthController.dispose();
+    _widthController.dispose();
+    _heightController.dispose();
     super.dispose();
   }
 
   Future<void> _pickFromGallery() async {
     try {
       final files = await _picker.pickMultiImage(
-        imageQuality: 85,
-        maxWidth: 1600,
+        imageQuality: 92,
       );
       if (files.isEmpty) return;
       for (final file in files) {
         final bytes = await file.readAsBytes();
-        _pendingBytes.add(bytes);
+        final normalized = normalizeShopImageBytesCenterCrop(bytes);
+        if (normalized != null) _pendingBytes.add(normalized);
       }
       if (mounted) setState(() {});
     } catch (e) {
@@ -289,12 +307,19 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
       }
       final file = await _picker.pickImage(
         source: ImageSource.camera,
-        imageQuality: 85,
-        maxWidth: 1600,
+        imageQuality: 92,
       );
       if (file == null) return;
+      if (!mounted) return;
       final bytes = await file.readAsBytes();
-      setState(() => _pendingBytes.add(bytes));
+      final cropped = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ShopImageCropPage(imageBytes: bytes),
+        ),
+      );
+      if (cropped == null) return;
+      setState(() => _pendingBytes.add(cropped));
     } catch (e) {
       MyGlobalSnackBar.show('Camera error: $e');
     }
@@ -363,6 +388,10 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
         active: _active,
         stockCount: stockCount < 0 ? 0 : stockCount,
         isReady: _isReady,
+        weightKg: double.tryParse(_weightController.text.trim()) ?? 1,
+        lengthCm: double.tryParse(_lengthController.text.trim()) ?? 20,
+        widthCm: double.tryParse(_widthController.text.trim()) ?? 15,
+        heightCm: double.tryParse(_heightController.text.trim()) ?? 10,
       );
 
       await FirebaseFirestore.instance
@@ -576,6 +605,43 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                       if (n == null || n < 0) return 'Enter 0 or more';
                       return null;
                     },
+                  ),
+                  const SizedBox(height: 10),
+                  MyTextFormField(
+                    controller: _weightController,
+                    labelText: 'Weight (kg)',
+                    hintText: 'Used for Bob Go rates',
+                    inputType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
+                  ),
+                  const SizedBox(height: 10),
+                  MyTextFormField(
+                    controller: _lengthController,
+                    labelText: 'Length (cm)',
+                    inputType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
+                  ),
+                  const SizedBox(height: 10),
+                  MyTextFormField(
+                    controller: _widthController,
+                    labelText: 'Width (cm)',
+                    inputType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
+                  ),
+                  const SizedBox(height: 10),
+                  MyTextFormField(
+                    controller: _heightController,
+                    labelText: 'Height (cm)',
+                    inputType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
                   ),
                   const SizedBox(height: 8),
                   SwitchListTile(

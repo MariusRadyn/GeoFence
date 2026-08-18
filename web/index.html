@@ -47,6 +47,12 @@
       } else if (path.slice(-12) === 'privacy.html') {
         window.__skipFlutter = true;
         location.replace(accountHost + '/privacy.html');
+      } else if (path.slice(-10) === 'terms.html') {
+        window.__skipFlutter = true;
+        location.replace(accountHost + '/terms.html');
+      } else if (path.slice(-13) === 'warranty.html') {
+        window.__skipFlutter = true;
+        location.replace(accountHost + '/warranty.html');
       }
     })();
   </script>

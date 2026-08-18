@@ -24,6 +24,9 @@ class MqttService {
   bool autoReconnect = false;
   bool _initialized = false;
 
+  /// Last failure reason from [restartService] / [_connect] (for UI messages).
+  String? lastError;
+
   MqttClient? client;
   final Map<String, List<void Function(String)>> _topicCallbacks = {};
   StreamSubscription? _updatesSubscription;
@@ -51,7 +54,26 @@ class MqttService {
     return ok;
   }
 
-  static const Duration brokerReachabilityTimeout = Duration(seconds: 2);
+  static const Duration brokerReachabilityTimeout = Duration(seconds: 5);
+
+  /// Strip scheme / path / trailing port so "http://192.168.1.10:1883/" works.
+  static String normalizeHost(String raw) {
+    var s = raw.trim();
+    if (s.isEmpty) return s;
+
+    s = s.replaceFirst(RegExp(r'^(mqtts?|wss?|https?)://', caseSensitive: false), '');
+    final slash = s.indexOf('/');
+    if (slash >= 0) s = s.substring(0, slash);
+
+    // Drop ":port" for IPv4 / hostnames (not IPv6).
+    if (!s.startsWith('[')) {
+      final colon = s.lastIndexOf(':');
+      if (colon > 0 && int.tryParse(s.substring(colon + 1)) != null) {
+        s = s.substring(0, colon);
+      }
+    }
+    return s.trim();
+  }
 
   /// Quick check — TCP on Android, WebSocket on web.
   Future<bool> isBrokerReachable(String ip, {Duration? timeout}) async {
@@ -70,21 +92,32 @@ class MqttService {
   }
 
   Future<bool> restartService(String ip, {String? baseId}) async {
+    lastError = null;
     try {
       if (baseId != null) _baseId = baseId;
 
-      if (!await isBrokerReachable(ip)) {
-        if (kIsWeb) {
-          MyGlobalMessage.show(
-            'Web MQTT',
-            'Cannot reach base WebSocket on port $mqttWsPort.\n'
-            'On the Pi run:\n'
-            '  python3 MqttCredentials.py --setup\n'
-            'and open firewall port $mqttWsPort.',
-            MyMessageType.warning,
-          );
-        }
+      final trimmedIp = normalizeHost(ip);
+      if (trimmedIp.isEmpty) {
+        lastError = 'No IP address';
         return false;
+      }
+
+      if (kIsWeb && Uri.base.scheme == 'https') {
+        lastError =
+            'Browser blocks insecure MQTT (ws://) from an https:// page.\n'
+            'Use the Android app on the same Wi‑Fi, or enable WSS on the base.';
+        MyGlobalMessage.show('Web MQTT', lastError!, MyMessageType.warning);
+        return false;
+      }
+
+      // Probe is advisory only — some networks fail the TCP check while MQTT
+      // connect still works (and vice versa). Always attempt a real connect.
+      final reachable = await isBrokerReachable(trimmedIp);
+      if (!reachable) {
+        printDebugMsg(
+          'MQTT reachability probe failed for $trimmedIp — '
+          'attempting MQTT connect anyway',
+        );
       }
 
       autoReconnect = false;
@@ -98,15 +131,27 @@ class MqttService {
       _subscribedTopics.clear();
 
       bool ok = true;
-      ok = await _init(ip);
-      if (!ok) return false;
+      ok = await _init(trimmedIp);
+      if (!ok) {
+        lastError ??= 'MQTT init failed';
+        return false;
+      }
       ok = await _connect();
 
       _listenerStarted = false;
       _startListener();
 
+      if (!ok) {
+        final portHint = kIsWeb ? mqttWsPort : mqttTcpPort;
+        lastError ??= !reachable
+            ? 'Cannot reach base at $trimmedIp:$portHint.\n'
+                'Phone must be on the same Wi‑Fi as the base.\n'
+                'Check the IP (cloud button) and that Mosquitto is running.'
+            : 'MQTT broker refused the connection (check MQTT user/password).';
+      }
       return ok;
     } catch (e) {
+      lastError = '$e';
       MyGlobalMessage.show('Error', '$e', MyMessageType.debug);
       return false;
     }
@@ -129,9 +174,12 @@ class MqttService {
         ..onDisconnected = _onDisconnected
         ..onAutoReconnected = _onAutoReconnected
         ..onAutoReconnect = _onAutoReconnect
-        ..onSubscribed = _onSuscribed;
+        ..onSubscribed = _onSuscribed
+        ..onSubscribeFail = (topic) {
+          printDebugMsg('MQTT subscribe FAILED: $topic');
+        };
 
-      client!.connectTimeoutPeriod = 4000;
+      client!.connectTimeoutPeriod = 8000;
       client!.autoReconnect = autoReconnect;
       client!.resubscribeOnAutoReconnect = true;
       _initialized = true;
@@ -228,15 +276,21 @@ class MqttService {
       if (client!.connectionStatus != null &&
           client!.connectionStatus!.state == MqttConnectionState.connected) {
         printDebugMsg('Connected successfully!');
+        lastError = null;
         return true;
       } else {
         final returnCode = client!.connectionStatus?.returnCode;
         printDebugMsg('Connection failed (return code: $returnCode)');
+        lastError =
+            'MQTT connect failed (code: $returnCode). '
+            'Check broker credentials for this base.';
       }
     } on TimeoutException {
       printDebugMsg('MQTT connect timed out');
+      lastError = 'Base connect timed out';
     } catch (e) {
       printDebugMsg('MQTT Connect Error: $e');
+      lastError = 'Base connect error: $e';
     }
     return false;
   }
@@ -248,15 +302,25 @@ class MqttService {
   }
 
   void _subscribe(String topic) {
-    if (_subscribedTopics.contains(topic)) return;
     if (client == null) return;
 
-    _subscribedTopics.add(topic);
-    client!.subscribe(topic, MqttQos.atMostOnce);
+    // Exact shared topic (mqtt/to/android).
+    _subscribeOne(topic, MqttQos.atLeastOnce);
+    // Device-directed replies (mqtt/to/android/android_xxxxxxxx).
+    if (myDeviceId.isNotEmpty) {
+      _subscribeOne('$topic/$myDeviceId', MqttQos.atLeastOnce);
+    }
+    // Catch any extra reply path the base uses under this prefix.
+    _subscribeOne('$topic/#', MqttQos.atLeastOnce);
+  }
 
-    final topic0 = '$topic/$myDeviceId';
-    client!.subscribe(topic0, MqttQos.atLeastOnce);
-    printDebugMsg('Subscribing: $topic');
+  void _subscribeOne(String topic, MqttQos qos) {
+    if (client == null) return;
+    if (_subscribedTopics.contains(topic)) return;
+
+    _subscribedTopics.add(topic);
+    client!.subscribe(topic, qos);
+    printDebugMsg('MQTT subscribe $topic');
   }
 
   void _disconnect() {
@@ -334,6 +398,8 @@ class MqttService {
             final payload = MqttPublishPayload.bytesToStringAsString(
               publishMessage.payload.message,
             );
+
+            printDebugMsg('MQTT RX [$topic]: $payload');
 
             if (!_messageStreamController.isClosed) {
               _messageStreamController.add(payload);

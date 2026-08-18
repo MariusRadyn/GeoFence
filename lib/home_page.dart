@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:geofence/app_flavor.dart';
 import 'package:geofence/iot_data_summary_page.dart';
 //import 'package:geofence/firebase.dart';
+import 'package:geofence/contact_us_page.dart';
 import 'package:geofence/login_page.dart';
+import 'package:geofence/legal_documents_page.dart';
 import 'package:geofence/network_avatar.dart';
 import 'package:geofence/operators_page.dart';
 import 'package:geofence/Tracking_page.dart';
@@ -14,6 +16,7 @@ import 'package:geofence/base_station_page.dart';
 import 'package:geofence/geo_fence_page.dart';
 import 'package:geofence/profile_page.dart';
 import 'package:geofence/settings_page.dart';
+import 'package:geofence/order_history_page.dart';
 import 'package:geofence/shop_page.dart';
 import 'package:geofence/shop_setup_page.dart';
 import 'package:geofence/tracking_history_page.dart';
@@ -32,13 +35,15 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => HomePageState();
 }
 
-class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
+class HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _controllerDraw;
   late Animation<double> _animationDraw;
   final double drawerWidth = 250;
   Timer? _loadingTimer;
   bool busyLoggingIn = false;
   bool _profileLaunchHandled = false;
+  String? _profileLoadRequestedForUid;
 
   final Color colorMenuIcons = Colors.blue;
   final Color colorMenuHeader = Colors.white;
@@ -52,6 +57,7 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _validateUser();
     _controllerDraw = AnimationController(
       vsync: this,
@@ -80,6 +86,7 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _userController.dispose();
     _emailController.dispose();
     _pwController.dispose();
@@ -181,7 +188,7 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
         const MyCustomTileWithPic(
           imagePath: iconShop,
           header: 'Online Shop',
-          description: 'Browse Limitless IoT products and checkout securely',
+          description: 'Browse Limitless IoT products, Bob Pay and Bob Go',
           widget: ShopPage(),
         ),
       );
@@ -201,16 +208,24 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
     return tiles;
   }
 
-  List<Widget> _buildDrawerItems(UserDataService user) {
-    final items = <Widget>[];
-
-    void open(Widget page) {
-      toggleDrawer();
+  void _openDrawerPage(Widget page) {
+    // Close the drawer first, then push — avoids jank from animating both at once.
+    if (_controllerDraw.isCompleted || _controllerDraw.value > 0) {
+      _controllerDraw.reverse();
+    }
+    Future.delayed(const Duration(milliseconds: 180), () {
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => page),
       );
-    }
+    });
+  }
+
+  List<Widget> _buildDrawerItems(UserDataService user) {
+    final items = <Widget>[];
+
+    void open(Widget page) => _openDrawerPage(page);
 
     ListTile drawerTile({
       required IconData icon,
@@ -297,10 +312,10 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
     final showGeneralSection = AppConfig.showOperators ||
         AppConfig.showWages ||
         AppConfig.showShop;
-    final showSetupSection = AppConfig.showSettings ||
-        AppConfig.canSetupShop(
-          userIsDeveloper: user.userdata?.isDeveloper == true,
-        );
+    final userIsDeveloper = user.userdata?.isDeveloper == true;
+    final showSetupShop = enableSetupShop || userIsDeveloper;
+    // Setup always shown so Legal Documents remains reachable.
+    const showSetupSection = true;
 
     if (showGeneralSection) {
       items.add(heading('General', first: !showTrackingSection && !showIotSection));
@@ -324,6 +339,11 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
           title: 'Online Shop',
           onTap: () => open(const ShopPage()),
         ));
+        items.add(drawerTile(
+          icon: Icons.receipt_long_outlined,
+          title: 'Order History',
+          onTap: () => open(const OrderHistoryPage()),
+        ));
       }
     }
 
@@ -339,16 +359,25 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
           onTap: () => open(SettingsPage(userId: user.userdata!.userID)),
         ));
       }
-      if (AppConfig.canSetupShop(
-        userIsDeveloper: user.userdata?.isDeveloper == true,
-      )) {
+      if (showSetupShop) {
         items.add(drawerTile(
           icon: Icons.store_mall_directory_outlined,
           title: 'Setup Shop',
           onTap: () => open(const ShopSetupPage()),
         ));
       }
+      items.add(drawerTile(
+        icon: Icons.gavel_outlined,
+        title: 'Legal Documents',
+        onTap: () => open(const LegalDocumentsPage()),
+      ));
     }
+
+    items.add(drawerTile(
+      icon: Icons.lightbulb_outline,
+      title: 'Contact Us',
+      onTap: () => open(const ContactUsPage()),
+    ));
 
     items.add(const SizedBox(height: 5));
     return items;
@@ -376,48 +405,44 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
   }
 
   Future<void> _login({
-    required bool isLoading,
-    required bool userLoggedIn,
     required UserDataService user,
-  }) async{
-    await user.load();
+  }) async {
+    // Prefer live auth/profile state — tap-time flags go stale during await.
+    if (FirebaseAuth.instance.currentUser != null && user.userdata == null) {
+      await user.load();
+    }
+    if (!mounted) return;
 
-    if (!isLoading && userLoggedIn) {
-      if (user.userdata
-          ?.emailValidated != true) {
+    final fullyLoggedIn =
+        FirebaseAuth.instance.currentUser != null && user.userdata != null;
+
+    if (fullyLoggedIn) {
+      if (user.userdata?.emailValidated != true) {
         MyGlobalMessage.show(
-            "Verify Email",
-            "Please open your email.\nClick on the verify link",
-            MyMessageType.info
+          'Verify Email',
+          'Please open your email.\nClick on the verify link',
+          MyMessageType.info,
         );
         return;
       }
 
-      if(mounted){
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                ProfilePage(
-                ),
-          ),
-        );
-      }//showLogoutDialog(context);
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ProfilePage()),
+      );
+      return;
     }
 
-    if (!isLoading && !userLoggedIn) {
-      if(mounted){
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => LoginPage(),
-          ),
-        );
-      }
-
-      //await _loginScreen();
-      await user.load();
+    // Not signed in (or profile missing) — always open credentials.
+    if (busyLoggingIn) {
+      setState(() => busyLoggingIn = false);
     }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => LoginPage()),
+    );
+    if (!mounted) return;
+    await user.load();
   }
 
   // void _signUpScreen (){
@@ -930,6 +955,18 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
       }
     }
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    final user = context.read<UserDataService>();
+    if (user.isLoggingOut || FirebaseAuth.instance.currentUser == null) {
+      return;
+    }
+    user.load();
+    context.read<SettingsService>().load();
+  }
+
   void _startTimeout(int sec) {
     // Already armed — don't restart on every rebuild.
     if (_loadingTimer != null) return;
@@ -961,24 +998,55 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
 
           return Consumer2<SettingsService, UserDataService>(
               builder: (context, settings, user,__) {
-                final isLoading = settings.isLoading || user.isLoading ||
-                    snapshot.connectionState == ConnectionState.waiting ||
-                    busyLoggingIn;
-                final userLoggedIn = snapshot.hasData && user.userdata != null;
+                final authWaiting =
+                    snapshot.connectionState == ConnectionState.waiting;
+                final authUser = snapshot.data;
+                final profilePending =
+                    authUser != null && user.userdata == null;
+                // Only block UI while a load is actually in progress — not when
+                // auth exists but Firestore profile is missing/failed (that used
+                // to leave the spinner up until the 10s timeout).
+                final profileSyncing =
+                    profilePending && (user.isLoading || settings.isLoading);
+                final showLoadingOverlay =
+                    authWaiting || busyLoggingIn || profileSyncing;
+                final userLoggedIn =
+                    authUser != null && user.userdata != null;
 
                 String image = "";
                 if (user.userdata != null) {
                   image = user.userdata!.imageURL ?? "";
                 }
 
-                if (isLoading) {
-                  _startTimeout(10);
+                if (showLoadingOverlay) {
+                  _startTimeout(20);
                 } else {
                   _cancelLoadingTimeout();
                 }
 
-                if (isLoading) {
-                  return myProgressCircle();
+                if (authUser == null) {
+                  _profileLoadRequestedForUid = null;
+                  if (busyLoggingIn) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      setState(() => busyLoggingIn = false);
+                    });
+                  }
+                  _cancelLoadingTimeout();
+                } else if (!user.isLoggingOut &&
+                    user.userdata == null &&
+                    !user.isLoading &&
+                    _profileLoadRequestedForUid != authUser.uid) {
+                  _profileLoadRequestedForUid = authUser.uid;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    if (user.isLoggingOut ||
+                        FirebaseAuth.instance.currentUser == null) {
+                      return;
+                    }
+                    user.load();
+                    settings.load();
+                  });
                 }
 
                 if (widget.openProfileOnLaunch && !_profileLaunchHandled) {
@@ -992,30 +1060,10 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                 return Scaffold(
 
                   backgroundColor: const Color(0xFF020617),
-                  body: Stack(
+                  body: homeBackground(
+                    child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        // Same full-bleed background as splash
-                        Image.asset(
-                          iconSplashBackground,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: double.infinity,
-                        ),
-                        // Soft vignette matching splash
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: RadialGradient(
-                              center: const Alignment(0, -0.1),
-                              radius: 1.1,
-                              colors: [
-                                Colors.transparent,
-                                Colors.black.withValues(alpha: 0.35),
-                              ],
-                              stops: const [0.45, 1.0],
-                            ),
-                          ),
-                        ),
                         Positioned.fill(
                           child: Column(
                               children: [
@@ -1050,8 +1098,6 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                           child: GestureDetector(
                                             onTap: () async {
                                               await _login(
-                                                isLoading: isLoading,
-                                                userLoggedIn: userLoggedIn,
                                                 user: user,
                                               );
                                             },
@@ -1095,8 +1141,6 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                           GestureDetector(
                                             onTap: ()async{
                                               await _login(
-                                                isLoading: isLoading,
-                                                userLoggedIn: userLoggedIn,
                                                 user: user,
                                               );
                                             },
@@ -1258,9 +1302,10 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                                         selectedTileColor: colorTile,
                                                       ),
                                                       child: ListView(
-                                                    padding: EdgeInsets.zero,
-                                                    children: _buildDrawerItems(user),
-                                                  ),
+                                                        padding: EdgeInsets.zero,
+                                                        children:
+                                                            _buildDrawerItems(user),
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
@@ -1272,9 +1317,50 @@ class HomePageState extends State<HomePage> with SingleTickerProviderStateMixin{
                                 );
                               }
                           ),
-                      ]
+                        if (showLoadingOverlay)
+                          Positioned.fill(
+                            child: ColoredBox(
+                              color: const Color(0xFF020617).withValues(alpha: 0.92),
+                              child: Center(
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 32),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 28,
+                                    vertical: 32,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: colorAppTitle,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.white12),
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      myProgressCircle(),
+                                      if (profilePending) ...[
+                                        const SizedBox(height: 16),
+                                        const MyText(
+                                          text: "Logging in...",
+                                          color: Colors.white,
+                                          fontsize: 16,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        const MyText(
+                                          text:
+                                              "Please wait while we set up your account.",
+                                          color: Colors.grey,
+                                          fontsize: 13,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-
                 );
               }
           );    // Not logged in

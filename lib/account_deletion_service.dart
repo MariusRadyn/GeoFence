@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:geofence/shop_page.dart';
 import 'package:geofence/utils.dart';
 
 /// Deletes Firestore/Storage app data for the signed-in user.
@@ -97,7 +98,10 @@ class AccountDeletionService {
     await _deleteCollection(userRef.collection(collectionGeoFences));
     await _deleteCollection(userRef.collection(collectionBaseStations));
     await _deleteCollection(userRef.collection(collectionOperators));
-    await _deleteCollection(userRef.collection('shop_orders'));
+    await _deleteNestedCollection(
+      userRef.collection(collectionShopOrders),
+      [collectionShopReturns, collectionShopCancellations],
+    );
   }
 
   static Future<void> _resetUserProfileDoc(User user) async {

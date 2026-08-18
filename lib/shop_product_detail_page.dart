@@ -1,8 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:geofence/network_avatar.dart';
 import 'package:geofence/shop_page.dart';
+import 'package:geofence/shop_product_image.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -184,27 +186,13 @@ class _ShopProductDetailPageState extends State<ShopProductDetailPage> {
   }
 
   Widget _buildMainImage(String? url) {
-    if (url == null || url.isEmpty) {
-      return ColoredBox(
-        color: colorAppBar,
-        child: Center(
-          child: Image.asset(
-            iconShopNoImage,
-            fit: BoxFit.contain,
-            height: 220,
-          ),
-        ),
-      );
-    }
-    return ColoredBox(
-      color: Colors.white.withValues(alpha: 0.95),
-      child: Center(
-        child: NetworkAvatar(
-          imageUrl: url,
-          size: 280,
-          fit: BoxFit.contain,
-          fallbackAsset: iconShopNoImage,
-        ),
+    return AspectRatio(
+      aspectRatio: 1,
+      child: ColoredBox(
+        color: (url != null && url.isNotEmpty)
+            ? Colors.white.withValues(alpha: 0.95)
+            : colorAppBar,
+        child: ShopProductImage(imageUrl: url),
       ),
     );
   }
@@ -212,71 +200,69 @@ class _ShopProductDetailPageState extends State<ShopProductDetailPage> {
   Widget _buildGallery() {
     final images = _images;
     if (images.isEmpty) {
-      return SizedBox(
-        height: 280,
-        child: _buildMainImage(null),
-      );
+      return _buildMainImage(null);
     }
 
-    return SizedBox(
-      height: 300,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Left thumbnail strip
-          SizedBox(
-            width: 72,
-            child: ListView.separated(
-              padding: const EdgeInsets.only(right: 8),
-              itemCount: images.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (_, i) {
-                final selected = i == _selectedImage;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() => _selectedImage = i);
-                    _pageController.animateToPage(
-                      i,
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeOut,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mainSide = math.min(constraints.maxWidth - 80, 420.0);
+        return SizedBox(
+          height: mainSide,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 72,
+                child: ListView.separated(
+                  padding: const EdgeInsets.only(right: 8),
+                  itemCount: images.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final selected = i == _selectedImage;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() => _selectedImage = i);
+                        _pageController.animateToPage(
+                          i,
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOut,
+                        );
+                      },
+                      child: Container(
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.95),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: selected ? colorOrange : Colors.white24,
+                            width: selected ? 2 : 1,
+                          ),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: ShopProductImage(
+                          imageUrl: images[i],
+                          side: 64,
+                        ),
+                      ),
                     );
                   },
-                  child: Container(
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.95),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: selected ? colorOrange : Colors.white24,
-                        width: selected ? 2 : 1,
-                      ),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: NetworkAvatar(
-                      imageUrl: images[i],
-                      size: 64,
-                      fit: BoxFit.cover,
-                      fallbackAsset: iconShopNoImage,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          // Main scrollable images
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: images.length,
-                onPageChanged: (i) => setState(() => _selectedImage = i),
-                itemBuilder: (_, i) => _buildMainImage(images[i]),
+                ),
               ),
-            ),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: images.length,
+                    onPageChanged: (i) => setState(() => _selectedImage = i),
+                    itemBuilder: (_, i) => _buildMainImage(images[i]),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
