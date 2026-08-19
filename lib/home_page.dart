@@ -23,6 +23,7 @@ import 'package:geofence/tracking_history_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/wages_summary_page.dart';
 import 'package:geofence/whats_new_page.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'iot_monitors_page.dart';
 
@@ -44,6 +45,7 @@ class HomePageState extends State<HomePage>
   bool busyLoggingIn = false;
   bool _profileLaunchHandled = false;
   String? _profileLoadRequestedForUid;
+  String _versionLabel = '';
 
   final Color colorMenuIcons = Colors.blue;
   final Color colorMenuHeader = Colors.white;
@@ -58,6 +60,7 @@ class HomePageState extends State<HomePage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadVersionLabel();
     _validateUser();
     _controllerDraw = AnimationController(
       vsync: this,
@@ -82,6 +85,14 @@ class HomePageState extends State<HomePage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+  }
+
+  Future<void> _loadVersionLabel() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() {
+      _versionLabel = '${info.version}+${info.buildNumber}';
+    });
   }
 
   @override
@@ -190,17 +201,6 @@ class HomePageState extends State<HomePage>
           header: 'Online Shop',
           description: 'Browse Limitless IoT products, Bob Pay and Bob Go',
           widget: ShopPage(),
-        ),
-      );
-    }
-
-    if (AppConfig.addTrackingHistory) {
-      addTile(
-        MyCustomTileWithPic(
-          imagePath: iconFleet,
-          header: 'Tracking History',
-          description: 'View past tracking sessions and rebate summaries',
-          widget: const TrackingHistoryPage(),
         ),
       );
     }
@@ -1267,7 +1267,9 @@ class HomePageState extends State<HomePage>
                                                               Padding(
                                                                 padding: const EdgeInsets.symmetric(horizontal: 5.0),
                                                                 child: MyText(
-                                                                  text: APP_VERSION,
+                                                                  text: _versionLabel.isNotEmpty
+                                                                      ? _versionLabel
+                                                                      : APP_VERSION,
                                                                   color: Colors
                                                                       .grey,
                                                                 ),
