@@ -100,7 +100,16 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
     _timeout = Timer(Duration(seconds: sec), () {
       if (!mounted) return;
-      MyGlobalMessage.show("Timeout", "No Reply From Base Station", MyMessageType.warning);
+      final pending = _pendingMonitorCmd;
+      _pendingMonitorCmd = null;
+      MyGlobalMessage.show(
+        'Timeout',
+        pending == mqttCmdFind
+            ? 'Find was sent, but the monitor did not reply.\n'
+                'Check Monitor ID and that the IoT is online on Wi‑Fi/MQTT.'
+            : 'No Reply From Base Station',
+        MyMessageType.warning,
+      );
     });
   }
 
@@ -459,15 +468,6 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
   Future<bool> _findIot(MonitorSettings monitor) async {
     final settingService = context.read<SettingsService>();
-    if (settingService.isBaseStationConnected == false) {
-      MyGlobalMessage.show(
-        'Connection',
-        'Please connect to a Base Station first',
-        MyMessageType.info,
-      );
-      return false;
-    }
-
     final id = monitor.monitorId.trim();
     if (id.isEmpty || id == 'none') {
       MyGlobalMessage.show(
@@ -478,19 +478,23 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       return false;
     }
 
-    if (!MqttService().isConnected) {
-      MyGlobalMessage.show(
-        'Connection',
-        'MQTT is not connected. Connect to a Base Station first.',
-        MyMessageType.warning,
-      );
-      return false;
+    // Base UI flag can stay true after the WebSocket dropped — reconnect.
+    if (!settingService.isBaseStationConnected ||
+        !MqttService().isBrokerConnected) {
+      _findRequest = true;
+      final ok = await _mqttConnectBase();
+      if (!ok) {
+        _findRequest = false;
+        return false;
+      }
+      // CONNECT_BASE ack will call _findIot again via _findRequest.
+      return true;
     }
 
     _mqttStartListener();
     _pendingMonitorCmd = mqttCmdFind;
     _startTimeout(8);
-    MqttService().tx(
+    final sent = MqttService().tx(
       id,
       mqttCmdFind,
       {
@@ -502,7 +506,18 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       },
       mqttTopicFromAndroid,
     );
-    MyGlobalSnackBar.show('Finding ${monitor.monitorName}…');
+    if (!sent) {
+      _timeout?.cancel();
+      _pendingMonitorCmd = null;
+      MyGlobalMessage.show(
+        'Find',
+        MqttService().lastError ??
+            'Could not publish Find. Reconnect to the base and try again.',
+        MyMessageType.warning,
+      );
+      return false;
+    }
+    MyGlobalSnackBar.show('Find sent to base → $id');
     return true;
   }
 
@@ -782,21 +797,6 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
             // Find Monitor (beep + flash on the paired IoT)
             onTapFind: () async {
-              if (monitor.monitorId.isEmpty || monitor.monitorId == 'none') {
-                MyGlobalMessage.show(
-                  'Monitor Not Found',
-                  'No monitor ID found. Please press Pair first.',
-                  MyMessageType.info,
-                );
-                return;
-              }
-
-              if (!context.read<SettingsService>().isBaseStationConnected) {
-                _findRequest = true;
-                await _mqttConnectBase();
-                return;
-              }
-
               await _findIot(monitor);
             },
 

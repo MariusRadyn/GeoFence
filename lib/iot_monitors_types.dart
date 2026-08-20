@@ -1,4 +1,6 @@
 //import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -365,13 +367,16 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   }
 
   Future<void> _animateTap(
-    VoidCallback action,
+    FutureOr<void> Function() action,
     void Function(bool) setPressed,
   ) async {
     setState(() => setPressed(true));
-    action();
-    await Future.delayed(const Duration(milliseconds: 150));
-    if (mounted) setState(() => setPressed(false));
+    try {
+      await action();
+    } finally {
+      await Future.delayed(const Duration(milliseconds: 150));
+      if (mounted) setState(() => setPressed(false));
+    }
   }
 
   @override
@@ -595,7 +600,14 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                         child: animatedActionButton(
                           pressed: _findButtonPressed,
                           onTap: () => _animateTap(
-                            widget.onTapFind,
+                            () {
+                              // Flush ID text into the model before Find.
+                              final typed = _controllerId.text.trim();
+                              if (typed.isNotEmpty) {
+                                widget.monitorData.monitorId = typed;
+                              }
+                              return widget.onTapFind();
+                            },
                             (v) => _findButtonPressed = v,
                           ),
                           child: Column(

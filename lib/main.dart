@@ -37,6 +37,19 @@ Future<void> _activateAppCheck() async {
     final useDebugProvider =
         kDebugMode || kProfileMode || forceDebugAppCheck;
 
+    // On production web, WebDebugProvider requires a registered debug token.
+    // If no reCAPTCHA key is provided, skip App Check so Firestore/Auth can
+    // still work for browser-installed PWAs.
+    if (kIsWeb &&
+        !kDebugMode &&
+        !forceDebugAppCheck &&
+        _recaptchaV3SiteKey.isEmpty) {
+      printDebugMsg(
+        'App Check skipped on web release (missing RECAPTCHA_V3_SITE_KEY).',
+      );
+      return;
+    }
+
     await FirebaseAppCheck.instance.activate(
       providerAndroid: useDebugProvider
           ? const AndroidDebugProvider()

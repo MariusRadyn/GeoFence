@@ -24,6 +24,12 @@ class MqttService {
   bool autoReconnect = false;
   bool _initialized = false;
 
+  /// True only when the broker socket is actually connected (not a stale flag).
+  bool get isBrokerConnected =>
+      isConnected &&
+      client != null &&
+      client!.connectionStatus?.state == MqttConnectionState.connected;
+
   /// Last failure reason from [restartService] / [_connect] (for UI messages).
   String? lastError;
 
@@ -82,7 +88,9 @@ class MqttService {
       timeout: timeout ?? brokerReachabilityTimeout,
     );
     if (!ok) {
-      final portHint = kIsWeb ? mqttWsPort : mqttTcpPort;
+      final portHint = kIsWeb
+          ? (Uri.base.scheme == 'https' ? mqttWssPort : mqttWsPort)
+          : mqttTcpPort;
       printDebugMsg(
         'MQTT broker not reachable at $ip:$portHint '
         '(${kIsWeb ? 'WebSocket' : 'TCP'})',
@@ -99,14 +107,6 @@ class MqttService {
       final trimmedIp = normalizeHost(ip);
       if (trimmedIp.isEmpty) {
         lastError = 'No IP address';
-        return false;
-      }
-
-      if (kIsWeb && Uri.base.scheme == 'https') {
-        lastError =
-            'Browser blocks insecure MQTT (ws://) from an https:// page.\n'
-            'Use the Android app on the same Wi‑Fi, or enable WSS on the base.';
-        MyGlobalMessage.show('Web MQTT', lastError!, MyMessageType.warning);
         return false;
       }
 
@@ -142,12 +142,24 @@ class MqttService {
       _startListener();
 
       if (!ok) {
-        final portHint = kIsWeb ? mqttWsPort : mqttTcpPort;
-        lastError ??= !reachable
-            ? 'Cannot reach base at $trimmedIp:$portHint.\n'
-                'Phone must be on the same Wi‑Fi as the base.\n'
-                'Check the IP (cloud button) and that Mosquitto is running.'
-            : 'MQTT broker refused the connection (check MQTT user/password).';
+        final portHint = kIsWeb
+            ? (Uri.base.scheme == 'https' ? mqttWssPort : mqttWsPort)
+            : mqttTcpPort;
+        if (kIsWeb && Uri.base.scheme == 'https') {
+          lastError ??=
+              'Cannot open secure MQTT (wss://$trimmedIp:$portHint).\n'
+              '1) On phone Chrome open https://$trimmedIp:$portHint\n'
+              '2) Tap Advanced → Proceed (trust the base certificate once)\n'
+              '3) Come back here and connect again.\n'
+              'Also check Pi Mosquitto is listening on 9002 and UFW allows it.';
+          MyGlobalMessage.show('Web MQTT', lastError!, MyMessageType.warning);
+        } else {
+          lastError ??= !reachable
+              ? 'Cannot reach base at $trimmedIp:$portHint.\n'
+                  'Phone must be on the same Wi‑Fi as the base.\n'
+                  'Check the IP (cloud button) and that Mosquitto is running.'
+              : 'MQTT broker refused the connection (check MQTT user/password).';
+        }
       }
       return ok;
     } catch (e) {
@@ -161,7 +173,9 @@ class MqttService {
     try {
       ipAdr = ip;
       autoReconnect = true;
-      port = kIsWeb ? mqttWsPort : mqttTcpPort;
+      port = kIsWeb
+          ? (Uri.base.scheme == 'https' ? mqttWssPort : mqttWsPort)
+          : mqttTcpPort;
 
       if (ipAdr.isEmpty) return false;
 
@@ -184,7 +198,7 @@ class MqttService {
       client!.resubscribeOnAutoReconnect = true;
       _initialized = true;
       printDebugMsg(
-        'MQTT init ${kIsWeb ? 'WebSocket' : 'TCP'} $ipAdr:$port',
+        'MQTT init ${kIsWeb ? (Uri.base.scheme == 'https' ? 'WSS' : 'WS') : 'TCP'} $ipAdr:$port',
       );
       return true;
     } catch (e) {
@@ -446,22 +460,42 @@ class MqttService {
     });
   }
 
-  void tx(String toDeviceId, String cmd, dynamic jsonMsg, String topic) {
-    if (client == null) return;
+  /// Publish to the broker. Returns false if not connected or publish failed.
+  bool tx(String toDeviceId, String cmd, dynamic jsonMsg, String topic) {
+    if (!isBrokerConnected) {
+      lastError = 'MQTT is not connected';
+      printDebugMsg('MQTT TX skipped (not connected): $cmd → $toDeviceId');
+      return false;
+    }
 
-    final payload = jsonEncode({
-      mqttJsonFromDeviceId: myDeviceId,
-      mqttJsonToDeviceId: toDeviceId,
-      mqttJsonPayload: jsonMsg,
-      mqttJsonCmd: cmd,
-      mqttJsonTopic: topic,
-    });
+    try {
+      final payload = jsonEncode({
+        mqttJsonFromDeviceId: myDeviceId,
+        mqttJsonToDeviceId: toDeviceId,
+        mqttJsonPayload: jsonMsg,
+        mqttJsonCmd: cmd,
+        mqttJsonTopic: topic,
+      });
 
-    final builder = MqttClientPayloadBuilder();
-    builder.addString(payload);
+      final builder = MqttClientPayloadBuilder();
+      builder.addString(payload);
+      final bytes = builder.payload;
+      if (bytes == null || bytes.isEmpty) {
+        lastError = 'MQTT payload encode failed';
+        return false;
+      }
 
-    client!.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
-    printDebugMsg('MQTT TX: $payload');
+      // QoS0 on web avoids PUBACK stalls some browsers hit on WSS.
+      final qos = kIsWeb ? MqttQos.atMostOnce : MqttQos.atLeastOnce;
+      final msgId = client!.publishMessage(topic, qos, bytes);
+      printDebugMsg('MQTT TX (id=$msgId): $payload');
+      lastError = null;
+      return true;
+    } catch (e) {
+      lastError = 'MQTT publish failed: $e';
+      printDebugMsg('MQTT TX error: $e');
+      return false;
+    }
   }
 
   void _dispatchMessage(String topic, String message) {

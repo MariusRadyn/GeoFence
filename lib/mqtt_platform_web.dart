@@ -6,11 +6,15 @@ import 'dart:html' as html;
 import 'package:mqtt_client/mqtt_browser_client.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 
-const int _wsPort = 9001;
+bool get _useWss => html.window.location.protocol == 'https:';
+
+int get _wsPort => _useWss ? 9002 : 9001;
+
+String get _wsScheme => _useWss ? 'wss' : 'ws';
 
 MqttClient createMqttClient(String host, String clientId) {
   // Mosquitto websockets path is /mqtt
-  final client = MqttBrowserClient('ws://$host/mqtt', clientId);
+  final client = MqttBrowserClient('$_wsScheme://$host/mqtt', clientId);
   client.port = _wsPort;
   client.websocketProtocols = MqttClientConstants.protocolsSingleDefault;
   client.setProtocolV311();
@@ -38,7 +42,7 @@ Future<bool> isMqttBrokerReachable(String host, {Duration? timeout}) async {
   }
 
   try {
-    socket = html.WebSocket('ws://$host:$_wsPort/mqtt');
+    socket = html.WebSocket('$_wsScheme://$host:$_wsPort/mqtt');
     timer = Timer(deadline, () => finish(false));
     socket.onOpen.listen((_) => finish(true));
     socket.onError.listen((_) => finish(false));
