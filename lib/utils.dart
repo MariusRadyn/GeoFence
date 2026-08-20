@@ -136,6 +136,8 @@ const accountDeletionUrl = '$_accountPagesHost/delete-account.html';
 const accountDataDeletionUrl = '$_accountPagesHost/delete-data.html';
 const privacyPolicyUrl = '$_accountPagesHost/privacy.html';
 const termsAndConditionsUrl = '$_accountPagesHost/terms.html';
+/// Must match Version in account-pages/terms.html
+const termsAndConditionsVersion = '1.1';
 const warrantyAndReturnsUrl = '$_accountPagesHost/warranty.html';
 const profileLaunchPath = '/profile';
 bool _launchOpensProfile = false;
@@ -340,6 +342,7 @@ const mqttCmdDisconnect = "#DISCONNECT";
 const mqttCmdAck = "#ACK";
 const mqttCmdPing = "#PING";
 const mqttCmdFind = "#FIND";
+const mqttCmdSendWifi = "#SEND_WIFI";
 const mqttCmdConnectBase = "#CONNECT_BASE";
 const mqttCmdLiveMonitorData = "#MONITOR_DATA";
 const mqttCmdTagRequest = "#TAG_REQ";
@@ -2418,6 +2421,8 @@ class UserData{
   bool hasError = false;
   bool emailValidated = false;
   bool isDeveloper = false;
+  bool termsAccepted = false;
+  String termsVersion = "";
 
   UserData({
     this.displayName = "",
@@ -2428,6 +2433,8 @@ class UserData{
     this.imageFilename,
     this.emailValidated = false,
     this.isDeveloper = false,
+    this.termsAccepted = false,
+    this.termsVersion = "",
   });
 
   factory UserData.fromMap(Map<String, dynamic> map){
@@ -2439,6 +2446,8 @@ class UserData{
       imageFilename: map['imageFilename'] ?? "",
       emailValidated: map['emailValidated'] ?? false,
       isDeveloper: map['isDeveloper'] == true,
+      termsAccepted: map['termsAccepted'] == true,
+      termsVersion: map['termsVersion']?.toString() ?? "",
     );
   }
   Map<String, dynamic> toMap(){
@@ -2450,6 +2459,8 @@ class UserData{
       'imageFilename': imageFilename,
       'emailValidated': emailValidated,
       'isDeveloper': isDeveloper,
+      'termsAccepted': termsAccepted,
+      'termsVersion': termsVersion,
     };
   }
   UserData copyWith({
@@ -2460,6 +2471,8 @@ class UserData{
     String? imageFilename,
     bool? emailValidated,
     bool? isDeveloper,
+    bool? termsAccepted,
+    String? termsVersion,
   }){
     return UserData(
       displayName: displayName ?? this.displayName,
@@ -2469,6 +2482,8 @@ class UserData{
       imageFilename: imageFilename ?? this.imageFilename,
       emailValidated: emailValidated ?? this.emailValidated,
       isDeveloper: isDeveloper ?? this.isDeveloper,
+      termsAccepted: termsAccepted ?? this.termsAccepted,
+      termsVersion: termsVersion ?? this.termsVersion,
     );
   }
 }
@@ -2602,8 +2617,16 @@ class UserDataService extends ChangeNotifier {
     final firestore = FirebaseFirestore.instance;
 
     try {
+      final payload = newUserData.toMap();
+      if (newUserData.termsAccepted) {
+        payload['termsAcceptedAt'] = FieldValue.serverTimestamp();
+        if ((payload['termsVersion'] as String?)?.isEmpty ?? true) {
+          payload['termsVersion'] = termsAndConditionsVersion;
+        }
+      }
+
       await firestore.collection(collectionUsers).doc(uid).set({
-        fieldsUserData: newUserData.toMap(),
+        fieldsUserData: payload,
       }, SetOptions(merge: true));
 
       await load();

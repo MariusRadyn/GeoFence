@@ -1,11 +1,10 @@
-//import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geofence/home_page.dart';
-//import 'package:teamplayerwebapp/theme/theme_manager.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
-//import 'package:teamplayerwebapp/utils/helpers.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -20,6 +19,7 @@ class SignupPageState extends State<SignupPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pwController = TextEditingController();
   final TextEditingController _pw2Controller = TextEditingController();
+  bool _acceptedTerms = false;
 
   @override
   void dispose() {
@@ -29,6 +29,21 @@ class SignupPageState extends State<SignupPage> {
     _pw2Controller.dispose();
 
     super.dispose();
+  }
+
+  Future<void> _openTerms() async {
+    final uri = Uri.parse(termsAndConditionsUrl);
+    final opened = await launchUrl(
+      uri,
+      mode: kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      MyGlobalMessage.show(
+        'Terms and Conditions',
+        'Could not open the link.',
+        MyMessageType.warning,
+      );
+    }
   }
 
   @override
@@ -45,7 +60,6 @@ class SignupPageState extends State<SignupPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              // Email Address
               MyTextFormField(
                 controller: _emailController,
                 hintText: "Enter Email Address",
@@ -53,7 +67,6 @@ class SignupPageState extends State<SignupPage> {
 
               SizedBox(height: 20),
 
-              // Password
               MyTextFormField(
                 controller: _pwController,
                 hintText: "Password",
@@ -62,16 +75,50 @@ class SignupPageState extends State<SignupPage> {
 
               SizedBox(height: 20),
 
-              // Confirm Password
               MyTextFormField(
                 controller: _pw2Controller,
                 hintText: "Confirm Password",
                 isPasswordField: true,
               ),
 
+              SizedBox(height: 12),
+
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: _acceptedTerms,
+                    activeColor: colorOrange,
+                    onChanged: (v) =>
+                        setState(() => _acceptedTerms = v == true),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Text('I have read and accept the '),
+                          GestureDetector(
+                            onTap: _openTerms,
+                            child: const Text(
+                              'Terms and Conditions',
+                              style: TextStyle(
+                                color: colorOrange,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                          const Text('.'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
               SizedBox(height: 20),
 
-              // Signup Button
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -91,6 +138,14 @@ class SignupPageState extends State<SignupPage> {
                               style: TextStyle(color: Colors.white),
                             ),
                             onPressed: () {
+                              if (!_acceptedTerms) {
+                                MyGlobalMessage.show(
+                                  'Terms required',
+                                  'Please accept the Terms and Conditions to create an account.',
+                                  MyMessageType.info,
+                                );
+                                return;
+                              }
                               if (_pwController.text != _pw2Controller.text) {
                                 Navigator.of(context).push(MaterialPageRoute(
                                     builder: (context) => MyDialogWidget(
@@ -125,7 +180,8 @@ class SignupPageState extends State<SignupPage> {
     String email = _emailController.text;
     String password = _pwController.text;
 
-    AuthResult? result = await _auth.fireAuthCreateUserWithEmail(context, email, password);
+    AuthResult? result =
+        await _auth.fireAuthCreateUserWithEmail(context, email, password);
 
     if (result.user != null) {
       userData?.userID = result.user!.uid;
@@ -133,14 +189,25 @@ class SignupPageState extends State<SignupPage> {
 
       printDebugMsg('User created successfully');
 
-      fireDbCreateUser(result.user!);
-      if(!mounted) return;
-      
+      if (!mounted) return;
+      await context.read<UserDataService>().create(
+            UserData(
+              displayName: username,
+              email: email,
+              emailValidated: result.user!.emailVerified,
+              termsAccepted: true,
+              termsVersion: termsAndConditionsVersion,
+            ),
+            uid: result.user!.uid,
+          );
+      if (!mounted) return;
+
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => HomePage(),
-        ));
+        ),
+      );
     } else {
       printDebugMsg('Error creating user');
     }

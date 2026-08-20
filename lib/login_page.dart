@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'firebase.dart';
 
@@ -84,7 +86,8 @@ class LoginPageState extends State<LoginPage> {
 
   void _signUpScreen (){
     double width = MediaQuery.of(context).size.width * 0.8;
-    double height = MediaQuery.of(context).size.height * 0.6;
+    double height = MediaQuery.of(context).size.height * 0.72;
+    bool acceptedTerms = false;
 
     // Keep email/password already typed on the login form (shared controllers).
     // Only reset the confirm-password field used by signup.
@@ -93,133 +96,295 @@ class LoginPageState extends State<LoginPage> {
     showDialog<void>(
       context: context,
       builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: SizedBox(
-            width: width > 500 ? 500 : width, // Custom width
-            height: height > 600 ? 600 : height, // Custom height
-            child: Container(
-              decoration: BoxDecoration(
-                  gradient: myTileGradient(),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: Colors.blue,
-                      width: 2
-                  )
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              child: SizedBox(
+                width: width > 500 ? 500 : width,
+                height: height > 680 ? 680 : height,
+                child: Container(
+                  decoration: BoxDecoration(
+                      gradient: myTileGradient(),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: Colors.blue,
+                          width: 2
+                      )
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+
+                        const MyText(
+                          text: "Sign Up",
+                          fontsize: 20,
+                        ),
+
+                        SizedBox(height: 10),
+
+                        Padding(
+                          padding: const EdgeInsets.only(left: 20, right: 20),
+                          child: MyTextFormField(
+                            controller: _userController,
+                            hintText: "Enter Username",
+                            backgroundColor: colorAppBackground,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+
+                        SizedBox(height: 20),
+
+                        Padding(
+                          padding: EdgeInsets.only(left: 20, right: 20),
+                          child: MyTextFormField(
+                            controller: _emailController,
+                            inputType: TextInputType.emailAddress,
+                            hintText: "Enter Email Address",
+                            backgroundColor: colorAppBackground,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+
+                        SizedBox(height: 20),
+
+                        Padding(
+                          padding: EdgeInsets.only(left: 20, right: 20),
+                          child: MyTextFormField(
+                            controller: _pwController,
+                            hintText: "Password",
+                            backgroundColor: colorAppBackground,
+                            foregroundColor: Colors.white,
+                            isPasswordField: true,
+                          ),
+                        ),
+
+                        SizedBox(height: 20),
+
+                        Padding(
+                          padding: EdgeInsets.only(left: 20, right: 20),
+                          child: MyTextFormField(
+                            controller: _pwController2,
+                            hintText: "Confirm Password",
+                            backgroundColor: colorAppBackground,
+                            foregroundColor: Colors.white,
+                            isPasswordField: true,
+                          ),
+                        ),
+
+                        SizedBox(height: 12),
+
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Checkbox(
+                                value: acceptedTerms,
+                                activeColor: colorOrange,
+                                side: const BorderSide(color: Colors.white54),
+                                onChanged: (v) {
+                                  setDialogState(() {
+                                    acceptedTerms = v == true;
+                                  });
+                                },
+                              ),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Wrap(
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      const Text(
+                                        'I have read and accept the ',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      GestureDetector(
+                                        onTap: _openTermsAndConditions,
+                                        child: const Text(
+                                          'Terms and Conditions',
+                                          style: TextStyle(
+                                            color: colorOrange,
+                                            fontSize: 13,
+                                            decoration: TextDecoration.underline,
+                                            decorationColor: colorOrange,
+                                          ),
+                                        ),
+                                      ),
+                                      const Text(
+                                        '.',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        SizedBox(height: 20),
+
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            myTextButton(
+                              text: 'Cancel',
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                            ),
+
+                            SizedBox(width: 10),
+
+                            myTextButton(
+                              text:'OK',
+                              onPressed: () async {
+                                if (!acceptedTerms) {
+                                  MyGlobalMessage.show(
+                                    'Terms required',
+                                    'Please accept the Terms and Conditions to create an account.',
+                                    MyMessageType.info,
+                                  );
+                                  return;
+                                }
+
+                                final user = await _signUp(
+                                  acceptedTerms: acceptedTerms,
+                                );
+
+                                if (user != null) {
+                                  if(!mounted) return;
+                                  // ignore: use_build_context_synchronously
+                                  Navigator.of(context).pop();
+                                  if(!mounted) return;
+                                  // ignore: use_build_context_synchronously
+                                  _showEmailVerificationDialog(context);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-
-                  // Heading
-                  const MyText(
-                    text: "Sign Up",
-                    fontsize: 20,
-                  ),
-
-                  SizedBox(height: 10),
-
-                  // Username
-                  Padding(
-                    padding: const EdgeInsets.only(left: 20, right: 20),
-                    child: MyTextFormField(
-                      controller: _userController,
-                      hintText: "Enter Username",
-                      backgroundColor: colorAppBackground,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Email
-                  Padding(
-                    padding: EdgeInsets.only(left: 20, right: 20),
-                    child: MyTextFormField(
-                      controller: _emailController,
-                      inputType: TextInputType.emailAddress,
-                      hintText: "Enter Email Address",
-                      backgroundColor: colorAppBackground,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Password 1
-                  Padding(
-                    padding: EdgeInsets.only(left: 20, right: 20),
-                    child: MyTextFormField(
-                      controller: _pwController,
-                      hintText: "Password",
-                      backgroundColor: colorAppBackground,
-                      foregroundColor: Colors.white,
-                      isPasswordField: true,
-                    ),
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Password 2
-                  Padding(
-                    padding: EdgeInsets.only(left: 20, right: 20),
-                    child: MyTextFormField(
-                      controller: _pwController2,
-                      hintText: "Confirm Password",
-                      backgroundColor: colorAppBackground,
-                      foregroundColor: Colors.white,
-                      isPasswordField: true,
-                    ),
-                  ),
-
-                  SizedBox(height: 30),
-
-                  // Buttons Cancel / OK
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-
-                      // Cancel Button
-                      myTextButton(
-                        text: 'Cancel',
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                      ),
-
-                      SizedBox(width: 10),
-
-                      // OK Button
-                      myTextButton(
-                        text:'OK',
-                        onPressed: () async {
-                          final user = await _signUp();
-
-                          if (user != null) {
-                            if(!mounted) return;
-                            // ignore: use_build_context_synchronously
-                            Navigator.of(context).pop(); // close current dialog FIRST
-                            // Verification email already sent in fireAuthCreateUserWithEmail.
-                            if(!mounted) return;
-
-                            // ignore: use_build_context_synchronously
-                            _showEmailVerificationDialog(context);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ]),
-            ),
-          ));
+            );
+          },
+        );
       },
     );
   }
-  Future<User?> _signUp() async {
+
+  Future<void> _openTermsAndConditions() async {
+    final uri = Uri.parse(termsAndConditionsUrl);
+    final opened = await launchUrl(
+      uri,
+      mode: kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      MyGlobalMessage.show(
+        'Terms and Conditions',
+        'Could not open the link.',
+        MyMessageType.warning,
+      );
+    }
+  }
+
+  /// Dialog for first-time Google sign-in (new account).
+  Future<bool> _promptAcceptTerms() async {
+    bool accepted = false;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: colorAppBackground,
+              title: const MyText(
+                text: 'Terms and Conditions',
+                fontsize: 18,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const MyText(
+                    text:
+                        'To create a Limitless IOT account you must accept our Terms and Conditions.',
+                    color: Colors.white70,
+                    fontsize: 14,
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _openTermsAndConditions,
+                    child: const Text(
+                      'Read Terms and Conditions',
+                      style: TextStyle(
+                        color: colorOrange,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: accepted,
+                    activeColor: colorOrange,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const MyText(
+                      text: 'I accept the Terms and Conditions',
+                      color: Colors.white70,
+                      fontsize: 13,
+                    ),
+                    onChanged: (v) =>
+                        setDialogState(() => accepted = v == true),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const MyText(text: 'Cancel', color: Colors.white70),
+                ),
+                TextButton(
+                  onPressed: accepted ? () => Navigator.pop(ctx, true) : null,
+                  child: MyText(
+                    text: 'Continue',
+                    color: accepted ? colorOrange : Colors.grey,
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    return result == true;
+  }
+
+  Future<User?> _signUp({bool acceptedTerms = false}) async {
     UserDataService userService = context.read<UserDataService>();
     AuthResult result = AuthResult();
 
+    if (!acceptedTerms) {
+      MyGlobalMessage.show(
+        'Terms required',
+        'Please accept the Terms and Conditions to create an account.',
+        MyMessageType.info,
+      );
+      return null;
+    }
     if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
       MyGlobalMessage.show("Info", 'Please enter email and password.', MyMessageType.info);
       return null;
@@ -257,6 +422,8 @@ class LoginPageState extends State<LoginPage> {
                 displayName: _userController.text,
                 email: _emailController.text,
                 emailValidated: result.user!.emailVerified,
+                termsAccepted: true,
+                termsVersion: termsAndConditionsVersion,
               ),
               uid: result.user!.uid
           );
@@ -605,12 +772,25 @@ class LoginPageState extends State<LoginPage> {
             .get();
 
         if (!doc.exists) {
+          final accepted = await _promptAcceptTerms();
+          if (!accepted) {
+            await FirebaseAuth.instance.signOut();
+            MyGlobalMessage.show(
+              'Terms required',
+              'You must accept the Terms and Conditions to create an account.',
+              MyMessageType.info,
+            );
+            return false;
+          }
+
           await userService.create(
             UserData(
               displayName: authUser.displayName ?? "",
               email: authUser.email ?? "",
               emailValidated: true,
               imageURL: authUser.photoURL ?? "",
+              termsAccepted: true,
+              termsVersion: termsAndConditionsVersion,
             ),
             uid: authUser.uid,
           );

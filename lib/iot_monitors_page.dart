@@ -47,6 +47,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   bool _pairRequest = false;
   bool _connectRequest = false;
   bool _findRequest = false;
+  bool _wifiRequest = false;
   bool _swapDialogOpen = false;
   String? _pendingMonitorCmd;
   //bool _isUploading = false;
@@ -107,7 +108,10 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         pending == mqttCmdFind
             ? 'Find was sent, but the monitor did not reply.\n'
                 'Check Monitor ID and that the IoT is online on Wi‑Fi/MQTT.'
-            : 'No Reply From Base Station',
+            : pending == mqttCmdSendWifi
+                ? 'No reply from base for WiFi push.\n'
+                    'Check MQTT connection; IoT must be in BLE range of the Pi.'
+                : 'No Reply From Base Station',
         MyMessageType.warning,
       );
     });
@@ -247,6 +251,14 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         MyGlobalSnackBar.show('Device found — listen for beeps');
       }
 
+      // Base accepted force WiFi BLE push
+      if (cmd == mqttCmdSendWifi) {
+        _timeout?.cancel();
+        _pendingMonitorCmd = null;
+        debugPrint('SEND_WIFI ack from base');
+        MyGlobalSnackBar.show('Base pushing WiFi over Bluetooth…');
+      }
+
       // Calibration Mode
       if(cmd == mqttCmdCalibrate ||
           (cmd == mqttCmdAck && _pendingMonitorCmd == mqttCmdCalibrate)){
@@ -287,6 +299,11 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         if(_findRequest){
           _findRequest = false;
           _findIot(monitorService.lstMonitors[_tabController!.index]);
+        }
+
+        if(_wifiRequest){
+          _wifiRequest = false;
+          _sendWifiCreds(monitorService.lstMonitors[_tabController!.index]);
         }
 
         var base = context.read<BaseStationService>().lstBaseStations.firstWhere((x) => x.ipAddress == ip);
@@ -405,6 +422,54 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       _startTimeout(8);
       MqttService().tx("", mqttCmdDiscover, payload, mqttTopicFromAndroid);
     }
+    return true;
+  }
+
+  /// Ask the base to push WiFi/MQTT credentials to the IoT over Bluetooth.
+  Future<bool> _sendWifiCreds(MonitorSettings monitor) async {
+    final settingService = context.read<SettingsService>();
+    final id = monitor.monitorId.trim();
+    // Empty / none → base pushes to all currently BLE-connected IoTs.
+    final toId = (id.isEmpty || id == 'none') ? '' : id;
+
+    if (!settingService.isBaseStationConnected ||
+        !MqttService().isBrokerConnected) {
+      _wifiRequest = true;
+      final ok = await _mqttConnectBase();
+      if (!ok) {
+        _wifiRequest = false;
+        return false;
+      }
+      return true;
+    }
+
+    _mqttStartListener();
+    _pendingMonitorCmd = mqttCmdSendWifi;
+    _startTimeout(10);
+    final sent = MqttService().tx(
+      toId,
+      mqttCmdSendWifi,
+      {
+        mqttJsonIotType: monitor.monitorType,
+      },
+      mqttTopicFromAndroid,
+    );
+    if (!sent) {
+      _timeout?.cancel();
+      _pendingMonitorCmd = null;
+      MyGlobalMessage.show(
+        'WiFi',
+        MqttService().lastError ??
+            'Could not request WiFi push. Reconnect to the base and try again.',
+        MyMessageType.warning,
+      );
+      return false;
+    }
+    MyGlobalSnackBar.show(
+      toId.isEmpty
+          ? 'Requesting WiFi push to all BLE IoTs…'
+          : 'Requesting WiFi push → $toId',
+    );
     return true;
   }
 
@@ -793,6 +858,11 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
               if (await _mqttConnectBase()) {
                 _pairRequest = true;
               }
+            },
+
+            // Force base to send WiFi/MQTT creds over BLE
+            onTapSendWifi: () async {
+              await _sendWifiCreds(monitor);
             },
 
             // Find Monitor (beep + flash on the paired IoT)

@@ -300,6 +300,7 @@ class IotDistanceWheelType extends StatefulWidget {
   final Function(String) onChangedTicks;
   final Function(String) onChangedMonId;
   final Function() onTapPair;
+  final Function() onTapSendWifi;
   final Function() onTapFind;
   final Function() onTapConnect;
   final Function() onTapCalibrate;
@@ -312,6 +313,7 @@ class IotDistanceWheelType extends StatefulWidget {
     required this.onChangedTicks,
     required this.onChangedMonId,
     required this.onTapPair,
+    required this.onTapSendWifi,
     required this.onTapFind,
     required this.onTapConnect,
     required this.onTapCalibrate,
@@ -333,6 +335,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   late FocusNode _focusNodeTicksPerM;
   late FocusNode _focusNodeCalDistance;
   bool _pairButtonPressed = false;
+  bool _wifiButtonPressed = false;
   bool _findButtonPressed = false;
   bool _calibrateButtonPressed = false;
   bool _connectButtonPressed = false;
@@ -521,7 +524,8 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                           '2. On the wheel, press \'STOP\' 6 times\n'
                           '3. Allow wheel to connect to Base\n'
                           '4. Wait until LCD says \'Click PAIR in App\'\n'
-                          '5. Click \'PAIR\'\n',
+                          '5. Click \'PAIR\'\n'
+                          'WiFi: force base to push WiFi/MQTT over Bluetooth\n',
                       ),
                      ),
                   ),
@@ -591,6 +595,42 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                                       : Colors.grey
                                 ),
                               )
+                            ],
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: animatedActionButton(
+                          pressed: _wifiButtonPressed,
+                          onTap: () => _animateTap(
+                            () {
+                              final typed = _controllerId.text.trim();
+                              if (typed.isNotEmpty) {
+                                widget.monitorData.monitorId = typed;
+                              }
+                              return widget.onTapSendWifi();
+                            },
+                            (v) => _wifiButtonPressed = v,
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.wifi,
+                                size: 30,
+                                color: settingService.isBaseStationConnected
+                                    ? Colors.lightBlueAccent
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                "WiFi",
+                                style: TextStyle(
+                                  color: settingService.isBaseStationConnected
+                                      ? Colors.white
+                                      : Colors.grey,
+                                ),
+                              ),
                             ],
                           ),
                         ),
