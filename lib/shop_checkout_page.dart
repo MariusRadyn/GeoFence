@@ -35,6 +35,7 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
   bool _loadingRates = false;
   bool _paying = false;
   bool _applyingSuggestion = false;
+  bool _loadingSuggestions = false;
   List<AddressSuggestion> _suggestions = [];
   List<Map<String, dynamic>> _rates = [];
   Map<String, dynamic>? _selectedRate;
@@ -108,9 +109,21 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
   }
 
   Future<void> _fetchSuggestions(String query) async {
-    final list = await _suggest.search(query);
-    if (!mounted || _street.text.trim() != query) return;
-    setState(() => _suggestions = list);
+    if (mounted) setState(() => _loadingSuggestions = true);
+    try {
+      final list = await _suggest.search(query);
+      if (!mounted || _street.text.trim() != query) return;
+      setState(() {
+        _suggestions = list;
+        _loadingSuggestions = false;
+      });
+    } catch (_) {
+      if (!mounted || _street.text.trim() != query) return;
+      setState(() {
+        _suggestions = [];
+        _loadingSuggestions = false;
+      });
+    }
   }
 
   Future<void> _applySuggestion(AddressSuggestion suggestion) async {
@@ -391,6 +404,21 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Required' : null,
                       ),
+                      if (_loadingSuggestions)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6, bottom: 2),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colorIceBlue,
+                              ),
+                            ),
+                          ),
+                        ),
                       if (_suggestions.isNotEmpty)
                         Container(
                           margin: const EdgeInsets.only(top: 4, bottom: 6),

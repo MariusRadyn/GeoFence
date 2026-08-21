@@ -976,6 +976,9 @@ class _ShopPageState extends State<ShopPage> {
     final filtered = _filterAndSort(products);
 
     return CustomScrollView(
+      // Keep off-screen tile cache small — helps iOS Safari memory.
+      // ignore: deprecated_member_use
+      cacheExtent: kIsWeb ? 180 : 250,
       slivers: [
         SliverToBoxAdapter(child: _buildPromoBanner()),
         SliverToBoxAdapter(
@@ -1091,41 +1094,45 @@ class _ShopPageState extends State<ShopPage> {
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
                   final product = filtered[i];
-                  return _ProductCard(
-                    product: product,
-                    compact: kIsWeb ||
-                        MediaQuery.sizeOf(context).width < 480,
-                    priceLabel: _money.format(product.salePrice),
-                    listPriceLabel: product.hasDeal
-                        ? _money.format(product.price)
-                        : null,
-                    onOpen: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              ShopProductDetailPage(product: product),
-                        ),
-                      );
-                    },
-                    onAdd: () {
-                      if (!product.isReady) {
-                        MyGlobalSnackBar.show(
-                          '${product.name} is coming soon',
+                  return RepaintBoundary(
+                    child: _ProductCard(
+                      product: product,
+                      compact: kIsWeb ||
+                          MediaQuery.sizeOf(context).width < 480,
+                      priceLabel: _money.format(product.salePrice),
+                      listPriceLabel: product.hasDeal
+                          ? _money.format(product.price)
+                          : null,
+                      onOpen: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ShopProductDetailPage(product: product),
+                          ),
                         );
-                        return;
-                      }
-                      if (product.stockCount <= 0) {
-                        MyGlobalSnackBar.show(
-                          '${product.name} is out of stock',
-                        );
-                        return;
-                      }
-                      cart.add(product);
-                      MyGlobalSnackBar.show('${product.name} added to basket');
-                    },
+                      },
+                      onAdd: () {
+                        if (!product.isReady) {
+                          MyGlobalSnackBar.show(
+                            '${product.name} is coming soon',
+                          );
+                          return;
+                        }
+                        if (product.stockCount <= 0) {
+                          MyGlobalSnackBar.show(
+                            '${product.name} is out of stock',
+                          );
+                          return;
+                        }
+                        cart.add(product);
+                        MyGlobalSnackBar.show('${product.name} added to basket');
+                      },
+                    ),
                   );
                 },
                 childCount: filtered.length,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: false,
               ),
             ),
           ),

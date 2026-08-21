@@ -78,6 +78,7 @@ class NetworkAvatar extends StatelessWidget {
           width: size,
           height: size,
           fit: fit,
+          fallbackAsset: fallbackAsset,
         ),
       );
     }

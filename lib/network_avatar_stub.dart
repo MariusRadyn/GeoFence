@@ -6,6 +6,7 @@ Widget buildWebNetworkImage({
   required double width,
   required double height,
   required BoxFit fit,
+  String? fallbackAsset,
 }) {
   throw UnsupportedError('Web network image is only available on web');
 }

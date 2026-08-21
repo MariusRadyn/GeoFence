@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geofence/utils.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -25,6 +26,10 @@ class AddressSuggestion {
 
 class AddressSuggestionService {
   AddressSuggestionService();
+
+  /// Default bias: Pietermaritzburg / KZN when GPS is unavailable.
+  static const double _defaultLat = -29.6006;
+  static const double _defaultLon = 30.3796;
 
   Position? _here;
   bool _askedLocation = false;
@@ -58,19 +63,31 @@ class AddressSuggestionService {
     return _here;
   }
 
+  double get _lat => _here?.latitude ?? _defaultLat;
+  double get _lon => _here?.longitude ?? _defaultLon;
+
   Future<List<AddressSuggestion>> search(String query) async {
     final q = query.trim();
     if (q.length < 3) return [];
     await loadMapsApiKey();
     await ensureLocation();
 
-    if (resolvedMapsApiKey.isNotEmpty) {
+    // Google Places REST autocomplete is not CORS-friendly in browsers.
+    // Only call it from native (Android/iOS/desktop) when a key is present.
+    if (!kIsWeb && resolvedMapsApiKey.isNotEmpty) {
       try {
         final google = await _searchGoogle(q);
         if (google.isNotEmpty) return google;
       } catch (e) {
         printDebugMsg('Places autocomplete: $e');
       }
+    }
+
+    try {
+      final nominatim = await _searchNominatim(q);
+      if (nominatim.isNotEmpty) return nominatim;
+    } catch (e) {
+      printDebugMsg('Nominatim autocomplete: $e');
     }
 
     try {
@@ -82,10 +99,14 @@ class AddressSuggestionService {
   }
 
   Future<AddressSuggestion> details(AddressSuggestion suggestion) async {
-    if (suggestion.street.isNotEmpty && suggestion.postalCode.isNotEmpty) {
+    if (suggestion.street.isNotEmpty &&
+        (suggestion.postalCode.isNotEmpty || suggestion.city.isNotEmpty)) {
       return suggestion;
     }
-    if (resolvedMapsApiKey.isEmpty || suggestion.placeId.startsWith('photon:')) {
+    if (resolvedMapsApiKey.isEmpty ||
+        suggestion.placeId.startsWith('photon:') ||
+        suggestion.placeId.startsWith('nominatim:') ||
+        kIsWeb) {
       return suggestion;
     }
     try {
@@ -101,14 +122,12 @@ class AddressSuggestionService {
       'input': query,
       'key': resolvedMapsApiKey,
       'components': 'country:za',
-      'types': 'address',
       'language': 'en',
+      // Broader than `address` so partial street names still match.
+      'types': 'geocode',
+      'location': '$_lat,$_lon',
+      'radius': '50000',
     };
-    final here = _here;
-    if (here != null) {
-      params['location'] = '${here.latitude},${here.longitude}';
-      params['radius'] = '35000';
-    }
     final uri = Uri.https(
       'maps.googleapis.com',
       '/maps/api/place/autocomplete/json',
@@ -117,7 +136,16 @@ class AddressSuggestionService {
     final res = await http.get(uri).timeout(const Duration(seconds: 8));
     if (res.statusCode != 200) return [];
     final body = jsonDecode(res.body);
-    if (body is! Map || body['status'] != 'OK') return [];
+    if (body is! Map) return [];
+    final status = '${body['status'] ?? ''}';
+    if (status != 'OK' && status != 'ZERO_RESULTS') {
+      printDebugMsg(
+        'Places autocomplete status=$status '
+        'error=${body['error_message'] ?? ''}',
+      );
+      return [];
+    }
+    if (status != 'OK') return [];
     final predictions = body['predictions'];
     if (predictions is! List) return [];
     return predictions.take(6).map((raw) {
@@ -196,17 +224,95 @@ class AddressSuggestionService {
     );
   }
 
+  /// OpenStreetMap Nominatim — works from browsers (CORS) and needs no API key.
+  Future<List<AddressSuggestion>> _searchNominatim(String query) async {
+    final params = <String, String>{
+      'q': query,
+      'format': 'jsonv2',
+      'addressdetails': '1',
+      'countrycodes': 'za',
+      'limit': '6',
+      'viewbox':
+          '${_lon - 0.35},${_lat + 0.35},${_lon + 0.35},${_lat - 0.35}',
+      'bounded': '0',
+    };
+    final uri = Uri.https(
+      'nominatim.openstreetmap.org',
+      '/search',
+      params,
+    );
+    final headers = <String, String>{
+      'Accept': 'application/json',
+    };
+    // Browsers forbid setting User-Agent; native can send a proper one.
+    if (!kIsWeb) {
+      headers['User-Agent'] = 'LimitlessIOT/1.0 (info@trinityglobal.co.za)';
+    }
+    final res = await http.get(
+      uri,
+      headers: headers,
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      printDebugMsg('Nominatim HTTP ${res.statusCode}');
+      return [];
+    }
+    final body = jsonDecode(res.body);
+    if (body is! List) return [];
+
+    final out = <AddressSuggestion>[];
+    for (final raw in body) {
+      if (raw is! Map) continue;
+      final parsed = _fromNominatim(raw);
+      if (parsed.label.isEmpty) continue;
+      out.add(parsed);
+    }
+    return out;
+  }
+
+  AddressSuggestion _fromNominatim(Map raw) {
+    final address = raw['address'];
+    final map = address is Map ? Map<String, dynamic>.from(address) : {};
+    final number = '${map['house_number'] ?? ''}'.trim();
+    final streetName = '${map['road'] ?? map['pedestrian'] ?? map['path'] ?? ''}'
+        .trim();
+    final name = '${raw['name'] ?? ''}'.trim();
+    final street = [
+      number,
+      streetName.isNotEmpty ? streetName : name,
+    ].where((s) => s.isNotEmpty).join(' ').trim();
+
+    final suburb = '${map['suburb'] ?? map['neighbourhood'] ?? map['quarter'] ?? ''}'
+        .trim();
+    final city =
+        '${map['city'] ?? map['town'] ?? map['village'] ?? map['municipality'] ?? ''}'
+            .trim();
+    final postal = '${map['postcode'] ?? ''}'.trim();
+    final display = '${raw['display_name'] ?? ''}'.trim();
+    final parts = <String>[
+      if (street.isNotEmpty) street,
+      if (suburb.isNotEmpty) suburb,
+      if (city.isNotEmpty && city != suburb) city,
+      if (postal.isNotEmpty) postal,
+    ];
+
+    return AddressSuggestion(
+      placeId: 'nominatim:${raw['place_id'] ?? display}',
+      label: parts.isNotEmpty ? parts.join(', ') : display,
+      street: street.isNotEmpty ? street : display.split(',').first.trim(),
+      suburb: suburb,
+      city: city,
+      postalCode: postal,
+    );
+  }
+
   Future<List<AddressSuggestion>> _searchPhoton(String query) async {
     final params = <String, String>{
       'q': query,
-      'limit': '6',
+      'limit': '8',
       'lang': 'en',
+      'lat': '$_lat',
+      'lon': '$_lon',
     };
-    final here = _here;
-    if (here != null) {
-      params['lat'] = '${here.latitude}';
-      params['lon'] = '${here.longitude}';
-    }
     final uri = Uri.https('photon.komoot.io', '/api/', params);
     final res = await http.get(
       uri,
@@ -218,23 +324,33 @@ class AddressSuggestionService {
     final features = body['features'];
     if (features is! List) return [];
 
-    final out = <AddressSuggestion>[];
+    final za = <AddressSuggestion>[];
+    final other = <AddressSuggestion>[];
     for (final raw in features) {
       if (raw is! Map) continue;
       final props = raw['properties'];
       if (props is! Map) continue;
-      final country = '${props['countrycode'] ?? props['country'] ?? ''}'
-          .toLowerCase();
-      if (country.isNotEmpty &&
-          country != 'za' &&
-          country != 'south africa') {
-        continue;
-      }
       final parsed = _fromPhoton(props);
       if (parsed.label.isEmpty) continue;
-      out.add(parsed);
+      if (_isSouthAfrica(props)) {
+        za.add(parsed);
+      } else {
+        other.add(parsed);
+      }
     }
-    return out;
+    // Prefer ZA, but don't return empty if the country field was missing.
+    final preferred = za.isNotEmpty ? za : other;
+    return preferred.take(6).toList();
+  }
+
+  bool _isSouthAfrica(Map props) {
+    final country = '${props['countrycode'] ?? props['country'] ?? ''}'
+        .toLowerCase()
+        .trim();
+    if (country.isEmpty) return true;
+    return country == 'za' ||
+        country == 'south africa' ||
+        country == 'zaf';
   }
 
   AddressSuggestion _fromPhoton(Map props) {
@@ -245,8 +361,9 @@ class AddressSuggestionService {
         .where((s) => s.isNotEmpty)
         .join(' ')
         .trim();
-    final suburb = '${props['district'] ?? props['suburb'] ?? props['locality'] ?? ''}'
-        .trim();
+    final suburb =
+        '${props['district'] ?? props['suburb'] ?? props['locality'] ?? ''}'
+            .trim();
     final city = '${props['city'] ?? props['county'] ?? ''}'.trim();
     final postal = '${props['postcode'] ?? ''}'.trim();
     final parts = <String>[
