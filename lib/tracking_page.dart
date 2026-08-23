@@ -269,33 +269,38 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
         _isLoadingVehicles = true;
       });
 
-      final vehiclesSnapshot = await _firestore
+      final basesSnapshot = await _firestore
           .collection(collectionUsers)
           .doc(userId)
-          .collection(collectionMonitors)
-          .where('type',isEqualTo: monitorTypeVehicle)
+          .collection(collectionBaseStations)
           .get();
 
-      if(vehiclesSnapshot.docs.isNotEmpty){
-        List<Map<String, dynamic>> vehicles = [];
+      List<Map<String, dynamic>> vehicles = [];
+
+      for (final baseDoc in basesSnapshot.docs) {
+        final vehiclesSnapshot = await baseDoc.reference
+            .collection(collectionMonitors)
+            .where(fireMonitorType, isEqualTo: monitorTypeVehicle)
+            .get();
 
         for (var doc in vehiclesSnapshot.docs) {
           final data = doc.data();
           vehicles.add({
             'id': doc.id,
-            'name': data['name'] ?? 'Unknown Vehicle',
-            'registrationNumber': data['registrationNumber'] ?? '',
-            'fuelConsumption': data['fuelConsumption'] ?? 0.0,
+            'name': data[fireMonitorName] ?? 'Unknown Vehicle',
+            'registrationNumber': data[fireMonitorReg] ?? '',
+            'fuelConsumption': data[fireMonitorFuelConsumption] ?? 0.0,
           });
         }
+      }
 
+      if (vehicles.isNotEmpty) {
         setState(() {
           _vehicles = vehicles;
           _selectedVehicleId = vehicles[0]['id'];
           _isLoadingVehicles = false;
         });
-      }
-      else{
+      } else {
         setState(() {
           _isLoadingVehicles = false;
         });

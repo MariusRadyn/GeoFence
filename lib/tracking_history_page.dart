@@ -73,19 +73,24 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
     printDebugMsg(jsonEncode(_vehicles)); // Pretty-print JSON format
   }
   Future<List<Map<String, dynamic>>> getVehicles() async {
-    final QuerySnapshot snapshot = await FirebaseFirestore.instance
+    final uid = _auth.currentUser!.uid;
+    final basesSnapshot = await FirebaseFirestore.instance
         .collection(collectionUsers)
-        .doc(_auth.currentUser!.uid)
-        .collection(collectionMonitors)
+        .doc(uid)
+        .collection(collectionBaseStations)
         .get();
 
-    return snapshot.docs.map((doc) {
-      return {
-        'vehicle_id': doc.id, // Add document ID manually
-        ...doc.data() as Map<String, dynamic>, // Merge Firestore fields
-      };
-    }).toList();
-
+    final vehicles = <Map<String, dynamic>>[];
+    for (final baseDoc in basesSnapshot.docs) {
+      final snapshot = await baseDoc.reference.collection(collectionMonitors).get();
+      for (final doc in snapshot.docs) {
+        vehicles.add({
+          'vehicle_id': doc.id,
+          ...doc.data(),
+        });
+      }
+    }
+    return vehicles;
   }
   void _deleteSession(QueryDocumentSnapshot session, String vehicle, String reg) async {
     showDialog(

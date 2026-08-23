@@ -160,6 +160,35 @@ const collectionLocations = 'locations';
 const collectionMonitors = 'monitors';
 const collectionIotData = 'iotData';
 const collectionBaseStations = 'baseStations';
+
+/// users/{uid}/baseStations/{baseDocId}/monitors
+CollectionReference<Map<String, dynamic>> userBaseMonitorsRef(
+  String uid,
+  String baseStationDocId,
+) {
+  return FirebaseFirestore.instance
+      .collection(collectionUsers)
+      .doc(uid)
+      .collection(collectionBaseStations)
+      .doc(baseStationDocId)
+      .collection(collectionMonitors);
+}
+
+DocumentReference<Map<String, dynamic>> userMonitorRef(
+  String uid,
+  String baseStationDocId,
+  String monitorDocId,
+) {
+  return userBaseMonitorsRef(uid, baseStationDocId).doc(monitorDocId);
+}
+
+/// Parses base station doc id from a nested monitor document path.
+String? baseStationDocIdFromMonitorPath(String path) {
+  final segments = path.split('/');
+  final idx = segments.indexOf(collectionBaseStations);
+  if (idx == -1 || idx + 1 >= segments.length) return null;
+  return segments[idx + 1];
+}
 const collectionClients = 'clients';
 const collectionOperators = 'operators';
 const collectionContactMessages = 'contact_messages';
@@ -3019,6 +3048,7 @@ class MonitorSettings {
   bool wheelSignal;
   String monDocId;
   String userDocId;
+  String baseStationDocId;
 
   MonitorSettings({
     // Firebase
@@ -3045,6 +3075,7 @@ class MonitorSettings {
     this.wheelSignal = false,
     this.monDocId = "",
     this.userDocId = "",
+    this.baseStationDocId = "",
   });
 
   // From Firebase
@@ -3097,22 +3128,87 @@ class MonitorSettingsService extends ChangeNotifier {
   final List<MonitorSettings> _monitors = [];
   MonitorSettings? _selected;
   bool isLoading = true;
-  StreamSubscription<QuerySnapshot>? _monitorsSub;
+  StreamSubscription<QuerySnapshot>? _basesSub;
+  final Map<String, StreamSubscription<QuerySnapshot>> _monitorsSubs = {};
   StreamSubscription<User?>? _authSub;
+  String? _activeUid;
+
   List<MonitorSettings> get lstMonitors => List.unmodifiable(_monitors);
+
+  List<MonitorSettings> getMonitorsForBase(String baseStationDocId) {
+    return _monitors
+        .where((m) => m.baseStationDocId == baseStationDocId && !m.markedToDelete)
+        .toList();
+  }
 
   MonitorSettingsService() {
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user == null) {
-        _monitorsSub?.cancel();
-        _monitorsSub = null;
+        _clearListeners();
         _monitors.clear();
+        _activeUid = null;
         isLoading = false;
         notifyListeners();
       } else {
         load();
       }
     });
+  }
+
+  void _clearListeners() {
+    _basesSub?.cancel();
+    _basesSub = null;
+    for (final sub in _monitorsSubs.values) {
+      sub.cancel();
+    }
+    _monitorsSubs.clear();
+  }
+
+  Future<void> _migrateLegacyMonitors(String uid) async {
+    final legacyRef = FirebaseFirestore.instance
+        .collection(collectionUsers)
+        .doc(uid)
+        .collection(collectionMonitors);
+    final legacyProbe = await legacyRef.limit(1).get();
+    if (legacyProbe.docs.isEmpty) return;
+
+    final allLegacy = await legacyRef.get();
+    final basesRef = FirebaseFirestore.instance
+        .collection(collectionUsers)
+        .doc(uid)
+        .collection(collectionBaseStations);
+    final bases = await basesRef.get();
+
+    String targetBaseId;
+    if (bases.docs.isEmpty) {
+      final doc = await basesRef.add({
+        fireBaseName: 'Base 1',
+        fireBaseDesc: 'none',
+        fireBaseIp: '0:0:0:0',
+        fireBaseId: '',
+        fireBaseBtMac: '',
+        fireBaseImage: '',
+      });
+      targetBaseId = doc.id;
+    } else {
+      targetBaseId = bases.docs.first.id;
+    }
+
+    for (final doc in allLegacy.docs) {
+      final newMonRef = userBaseMonitorsRef(uid, targetBaseId).doc(doc.id);
+      await newMonRef.set(doc.data());
+      final iotSnap = await doc.reference.collection(collectionIotData).get();
+      for (final iotDoc in iotSnap.docs) {
+        await newMonRef
+            .collection(collectionIotData)
+            .doc(iotDoc.id)
+            .set(iotDoc.data());
+      }
+      await doc.reference.delete();
+    }
+    printDebugMsg(
+      'Migrated ${allLegacy.docs.length} legacy monitor(s) to base $targetBaseId',
+    );
   }
 
   Future<void> load() async {
@@ -3126,78 +3222,122 @@ class MonitorSettingsService extends ChangeNotifier {
       return;
     }
 
-    await _monitorsSub?.cancel();
-    _monitorsSub = FirebaseFirestore.instance
+    _activeUid = uid;
+    _clearListeners();
+    _monitors.clear();
+
+    try {
+      await _migrateLegacyMonitors(uid);
+    } catch (e) {
+      printDebugMsg('Legacy monitor migration error: $e');
+    }
+
+    _basesSub = FirebaseFirestore.instance
         .collection(collectionUsers)
         .doc(uid)
-        .collection(collectionMonitors)
+        .collection(collectionBaseStations)
         .snapshots()
         .listen(
-      (snapshot) {
-        final list = snapshot.docs
-            .map((doc) => MonitorSettings.fromMap(doc.data(), doc.id, uid))
-            .where((m) => !m.markedToDelete)
-            .toList();
-
-        try {
-          setMonitors(list);
-        } catch (e) {
-          printDebugMsg(e.toString());
-        } finally {
-          isLoading = false;
-          notifyListeners();
-        }
+      (baseSnap) {
+        if (_activeUid != uid) return;
+        _syncMonitorListeners(uid, baseSnap.docs.map((d) => d.id).toList());
       },
       onError: (e) {
-        printDebugMsg('Monitors listener error: $e');
+        printDebugMsg('Base stations listener error: $e');
         isLoading = false;
         notifyListeners();
       },
     );
   }
 
+  void _syncMonitorListeners(String uid, List<String> baseIds) {
+    for (final id in _monitorsSubs.keys.toList()) {
+      if (!baseIds.contains(id)) {
+        _monitorsSubs[id]?.cancel();
+        _monitorsSubs.remove(id);
+        _monitors.removeWhere((m) => m.baseStationDocId == id);
+      }
+    }
+
+    if (baseIds.isEmpty) {
+      isLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    for (final baseId in baseIds) {
+      if (_monitorsSubs.containsKey(baseId)) continue;
+      _monitorsSubs[baseId] = userBaseMonitorsRef(uid, baseId).snapshots().listen(
+        (snapshot) {
+          if (_activeUid != uid) return;
+          _onMonitorsSnapshot(uid, baseId, snapshot);
+        },
+        onError: (e) {
+          printDebugMsg('Monitors listener error ($baseId): $e');
+          isLoading = false;
+          notifyListeners();
+        },
+      );
+    }
+  }
+
+  void _onMonitorsSnapshot(
+    String uid,
+    String baseId,
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    _monitors.removeWhere((m) => m.baseStationDocId == baseId);
+    final list = snapshot.docs
+        .map((doc) {
+          final monitor = MonitorSettings.fromMap(doc.data(), doc.id, uid);
+          monitor.baseStationDocId = baseId;
+          return monitor;
+        })
+        .where((m) => !m.markedToDelete)
+        .toList();
+    _monitors.addAll(list);
+    isLoading = false;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _authSub?.cancel();
-    _monitorsSub?.cancel();
+    _clearListeners();
     super.dispose();
   }
 
-  Future<void> save(MonitorSettings monitor, {bool showSavedMessage = true}) async{
-    try{
+  Future<void> save(
+    MonitorSettings monitor, {
+    bool showSavedMessage = true,
+  }) async {
+    try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
+      if (monitor.baseStationDocId.isEmpty) {
+        MyGlobalSnackBar.show('Cloud Error: base station not set');
+        return;
+      }
 
-      final ref = FirebaseFirestore.instance
-          .collection(collectionUsers)
-          .doc(uid)
-          .collection(collectionMonitors);
+      final ref = userBaseMonitorsRef(uid, monitor.baseStationDocId);
 
-      if(monitor.monDocId.isNotEmpty){
-
-        // Update
+      if (monitor.monDocId.isNotEmpty) {
         await ref.doc(monitor.monDocId).set(
           monitor.toMap(),
           SetOptions(merge: true),
         );
-      }
-      else{
-
-        // Add New
+      } else {
         final docref = ref.doc();
         monitor.monDocId = docref.id;
-
         await docref.set(
           monitor.toMap(),
           SetOptions(merge: true),
         );
       }
-      await load();
       if (showSavedMessage) {
         MyGlobalSnackBar.show('Saved');
       }
-    }
-    catch (e){
+    } catch (e) {
       MyGlobalSnackBar.show('Cloud Error: $e');
     }
   }
@@ -3537,17 +3677,34 @@ class BaseStationService extends ChangeNotifier {
   Future<void> delete(BaseStationData base) async{
     try {
       User? user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
 
-      // 1️⃣ Delete from Firestore
-      await FirebaseFirestore.instance
+      final baseRef = FirebaseFirestore.instance
           .collection(collectionUsers)
-          .doc(user?.uid)
+          .doc(user.uid)
           .collection(collectionBaseStations)
-          .doc(base.docId)
-          .delete();
+          .doc(base.docId);
 
+      while (true) {
+        final monitors = await baseRef.collection(collectionMonitors).limit(50).get();
+        if (monitors.docs.isEmpty) break;
+        for (final monitorDoc in monitors.docs) {
+          while (true) {
+            final iotData = await monitorDoc.reference
+                .collection(collectionIotData)
+                .limit(100)
+                .get();
+            if (iotData.docs.isEmpty) break;
+            for (final iotDoc in iotData.docs) {
+              await iotDoc.reference.delete();
+            }
+          }
+          await monitorDoc.reference.delete();
+        }
+      }
+
+      await baseRef.delete();
       await load();
-
     } catch (e) {
       MyGlobalSnackBar.show('Delete Failed: $e');
     }

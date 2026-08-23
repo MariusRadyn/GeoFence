@@ -53,17 +53,16 @@ class IotDataPageState extends State<IotDataPage> {
   Stream<QuerySnapshot> _iotDataStreamForMonitor(
     DateTime from,
     DateTime to,
-    String monDocId,
+    MonitorSettings monitor,
   ) {
     final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || monitor.baseStationDocId.isEmpty) {
+      return const Stream.empty();
+    }
     final DateTime rangeStart = _startOfDay(from);
     final DateTime rangeEndExclusive = _endOfDayExclusive(to);
 
-    return _firestore
-        .collection(collectionUsers)
-        .doc(uid)
-        .collection(collectionMonitors)
-        .doc(monDocId)
+    return userMonitorRef(uid, monitor.baseStationDocId, monitor.monDocId)
         .collection(collectionIotData)
         .where(
           fireIotTimestamp,
@@ -246,7 +245,7 @@ class IotDataPageState extends State<IotDataPage> {
                             streamIotData: _iotDataStreamForMonitor(
                               fromDate,
                               toDate,
-                              actualMonitor.monDocId,
+                              actualMonitor,
                             ),
                             userDocId: FirebaseAuth.instance.currentUser?.uid ,
                           )),

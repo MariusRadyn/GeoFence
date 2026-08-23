@@ -735,10 +735,11 @@ class LoginPageState extends State<LoginPage> {
   }
   Future<void> _reloadUserScopedData() async {
     if (!mounted) return;
+    // Monitors first — may migrate legacy docs and create a default base station.
+    await context.read<MonitorSettingsService>().load();
     await Future.wait([
       context.read<SettingsService>().load(),
       context.read<BaseStationService>().load(),
-      context.read<MonitorSettingsService>().load(),
       context.read<OperatorService>().load(),
     ]);
   }

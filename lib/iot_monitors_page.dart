@@ -25,6 +25,13 @@ import 'package:provider/provider.dart';
 import 'mqtt_service.dart';
 import 'edit_profile_pic_page.dart';
 
+class _BaseMonitorUiState {
+  TabController? tabController;
+  List<ScrollController> scrollControllers = [];
+  List<GlobalKey<IotDistanceWheelTypeState>> tabKeys = [];
+  bool hasScrolled = false;
+}
+
 class IotMonitorsPage extends StatefulWidget {
   const IotMonitorsPage({super.key});
 
@@ -34,16 +41,11 @@ class IotMonitorsPage extends StatefulWidget {
 
 class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderStateMixin {
   StreamSubscription<String>? _mqttSubscription;
-  TabController? _tabController;
-  List<ScrollController> _scrollControllers = [];
-  late final List<GlobalKey<IotDistanceWheelTypeState>> _tabKeys;
-
-  VoidCallback? _baseListener;
-  //final Map<String, Future<DocumentSnapshot<Map<String, dynamic>>>> _docFutures = {};
+  TabController? _baseTabController;
+  final Map<String, _BaseMonitorUiState> _baseUi = {};
   final int _selectedIndex = 0;
-  bool scanBusy = false;
-  bool _hasScrolled = false;
   //final ImagePicker _imagePicker = ImagePicker();
+  bool scanBusy = false;
   bool _pairRequest = false;
   bool _connectRequest = false;
   bool _findRequest = false;
@@ -58,11 +60,32 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   ];
   Timer? _timeout;
 
+  _BaseMonitorUiState _uiForBase(String baseDocId) {
+    return _baseUi.putIfAbsent(baseDocId, () => _BaseMonitorUiState());
+  }
+
+  BaseStationData? _currentBase(BaseStationService baseService) {
+    if (_baseTabController == null ||
+        baseService.lstBaseStations.isEmpty) {
+      return null;
+    }
+    final idx = _baseTabController!.index.clamp(
+      0,
+      baseService.lstBaseStations.length - 1,
+    );
+    return baseService.lstBaseStations[idx];
+  }
+
+  List<MonitorSettings> _monitorsForBase(
+    MonitorSettingsService monitorService,
+    String baseDocId,
+  ) {
+    return monitorService.getMonitorsForBase(baseDocId);
+  }
+
   @override
   void initState() {
     super.initState();
-
-    _tabKeys = [];
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -83,14 +106,14 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
   @override
   void dispose() {
-    if (_baseListener != null) {
-      context.read<BaseStationService>().removeListener(_baseListener!);
-      _baseListener = null;
-    }
     _mqttSubscription?.cancel();
-    _tabController?.dispose();
-    for (var controller in _scrollControllers) {
-      controller.dispose();
+    _baseTabController?.removeListener(_onBaseTabChanged);
+    _baseTabController?.dispose();
+    for (final ui in _baseUi.values) {
+      ui.tabController?.dispose();
+      for (final controller in ui.scrollControllers) {
+        controller.dispose();
+      }
     }
     super.dispose();
   }
@@ -139,29 +162,40 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
       if(!mounted) return;
       final monitorService = context.read<MonitorSettingsService>();
+      final baseService = context.read<BaseStationService>();
+      final currentBase = _currentBase(baseService);
+      if (currentBase == null) return;
+
+      final baseMonitors =
+          _monitorsForBase(monitorService, currentBase.docId);
+
       MonitorSettings currentMonitor() {
         if (fromId != null) {
           final id = fromId.toString();
-          for (final m in monitorService.lstMonitors) {
+          for (final m in baseMonitors) {
             if (m.monitorId == id) return m;
           }
         }
-        if (_tabController != null &&
-            _tabController!.index >= 0 &&
-            _tabController!.index < monitorService.lstMonitors.length) {
-          return monitorService.lstMonitors[_tabController!.index];
+        final ui = _uiForBase(currentBase.docId);
+        if (ui.tabController != null &&
+            ui.tabController!.index >= 0 &&
+            ui.tabController!.index < baseMonitors.length) {
+          return baseMonitors[ui.tabController!.index];
         }
-        return monitorService.lstMonitors.first;
+        if (baseMonitors.isNotEmpty) return baseMonitors.first;
+        return MonitorSettings(baseStationDocId: currentBase.docId);
       }
 
       // Pair - Set Device ID
       if (cmd == mqttCmdDiscover) {
         scanBusy = false;
-        final monitor = monitorService.lstMonitors[_tabController!.index];
+        final ui = _uiForBase(currentBase.docId);
+        if (ui.tabController == null || baseMonitors.isEmpty) return;
+        final monitor = baseMonitors[ui.tabController!.index];
         final String iotId = fromId.toString();
 
         MonitorSettings? monitorOld;
-        for (final m in monitorService.lstMonitors) {
+        for (final m in baseMonitors) {
           if (m.monitorId == iotId) {
             monitorOld = m;
             break;
@@ -276,7 +310,13 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         final dist = payload[mqttJsonWheelDistance];
         final ticks = payload[mqttJsonWheelTicks];
 
-        if(dist is num && ticks is num) _updateWheelDistance(dist.toDouble(), ticks.toInt());
+        if(dist is num && ticks is num) {
+          _updateWheelDistance(
+            currentBase.docId,
+            dist.toDouble(),
+            ticks.toInt(),
+          );
+        }
         debugPrint('Wheel distance: ${monitor.wheelDistance}');
       }
 
@@ -284,30 +324,37 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       if (cmd == mqttCmdConnectBase) {
         _timeout?.cancel();
         context.read<SettingsService>().setIsBaseConnected(true);
-        var ip = context.read<SettingsService>().fireSettings!.connectedDeviceIp;
+        final base = currentBase;
+        base.isConnected = true;
 
         if(_pairRequest){
           _pairRequest = false;
-          _pairMonitor(ip);
+          _pairMonitor();
         }
 
         if(_connectRequest){
           _connectRequest = false;
-          _connectIot(ip, monitorService.lstMonitors[_tabController!.index]);
+          final ui = _uiForBase(base.docId);
+          if (ui.tabController != null && baseMonitors.isNotEmpty) {
+            _connectIot(baseMonitors[ui.tabController!.index]);
+          }
         }
 
         if(_findRequest){
           _findRequest = false;
-          _findIot(monitorService.lstMonitors[_tabController!.index]);
+          final ui = _uiForBase(base.docId);
+          if (ui.tabController != null && baseMonitors.isNotEmpty) {
+            _findIot(baseMonitors[ui.tabController!.index]);
+          }
         }
 
         if(_wifiRequest){
           _wifiRequest = false;
-          _sendWifiCreds(monitorService.lstMonitors[_tabController!.index]);
+          final ui = _uiForBase(base.docId);
+          if (ui.tabController != null && baseMonitors.isNotEmpty) {
+            _sendWifiCreds(baseMonitors[ui.tabController!.index]);
+          }
         }
-
-        var base = context.read<BaseStationService>().lstBaseStations.firstWhere((x) => x.ipAddress == ip);
-        base.isConnected = true;
 
         final payload = jsonData[mqttJsonPayload];
         final savedCreds = await MqttCredentialsPreferences.saveFromPayload(
@@ -318,33 +365,22 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           printDebugMsg('MQTT credentials saved for ${base.bluetoothName}');
         }
 
-        MyGlobalSnackBar.show("Connected: $ip");
+        MyGlobalSnackBar.show("Connected: ${base.ipAddress}");
       }
     });
   }
-  Future<bool> _mqttConnectBase () async {
-    String? ip = context.read<SettingsService>().fireSettings?.connectedDeviceIp;
-    String? deviceId = context.read<SettingsService>().fireSettings?.connectedDeviceId;
+  Future<bool> _mqttConnectBase(BaseStationData base) async {
+    final ip = base.ipAddress.trim();
+    final deviceId = base.bluetoothName.trim();
 
-    if(ip == null || deviceId == null) {
+    if (ip.isEmpty || ip == '0:0:0:0' || deviceId.isEmpty) {
       MyGlobalMessage.show(
-          'Base Stations',
-          'No previously connected base stations. Please set one in Base Stations page',
-          MyMessageType.info
+        'Base Station',
+        'Set IP address and Bluetooth ID for "${base.baseName}" on the Base Stations page.',
+        MyMessageType.info,
       );
       return false;
     }
-
-    if(context.read<BaseStationService>().lstBaseStations.isEmpty){
-      MyGlobalMessage.show(
-          'Base Stations',
-          'No Base Stations found. Please set one in Base Stations page',
-          MyMessageType.info
-      );
-      return false;
-    }
-
-    BaseStationData base = context.read<BaseStationService>().lstBaseStations.firstWhere((x)  => x.bluetoothName == deviceId);
 
     final host = MqttService.normalizeHost(ip);
     await MqttCredentialsPreferences.syncFromFirestore(base.bluetoothName);
@@ -383,7 +419,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   }
 
   // Methods
-  Future<bool> _calibrateIot(String ip, MonitorSettings monitor) async {
+  Future<bool> _calibrateIot(MonitorSettings monitor) async {
     final settingService = context.read<SettingsService>();
     if(settingService.isBaseStationConnected == false){
       MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
@@ -403,17 +439,29 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     }
     return true;
   }
-  Future<bool> _pairMonitor(String ip)async{
+  Future<bool> _pairMonitor() async {
     final settingsService = context.read<SettingsService>();
-    final monitorService = context.read<MonitorSettingsService>();
-
-    if(settingsService.isBaseStationConnected == false){
-      MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
+    if (settingsService.isBaseStationConnected == false) {
+      MyGlobalMessage.show(
+        "Connection",
+        "Please connect to a Base Station first",
+        MyMessageType.info,
+      );
       return false;
     }
 
-    final payload =  {
-      mqttJsonIotType: monitorService.lstMonitors[_selectedIndex].monitorType,
+    final monitorService = context.read<MonitorSettingsService>();
+    final base = _currentBase(context.read<BaseStationService>());
+    if (base == null) return false;
+    final baseMonitors = _monitorsForBase(monitorService, base.docId);
+    if (baseMonitors.isEmpty) return false;
+
+    final ui = _uiForBase(base.docId);
+    final tabIndex = ui.tabController?.index ?? 0;
+    final safeIndex = tabIndex.clamp(0, baseMonitors.length - 1);
+
+    final payload = {
+      mqttJsonIotType: baseMonitors[safeIndex].monitorType,
     };
 
     if(MqttService().isConnected){
@@ -435,7 +483,12 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     if (!settingService.isBaseStationConnected ||
         !MqttService().isBrokerConnected) {
       _wifiRequest = true;
-      final ok = await _mqttConnectBase();
+      final base = _currentBase(context.read<BaseStationService>());
+      if (base == null) {
+        _wifiRequest = false;
+        return false;
+      }
+      final ok = await _mqttConnectBase(base);
       if (!ok) {
         _wifiRequest = false;
         return false;
@@ -495,7 +548,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       mqttTopicFromAndroid,
     );
   }
-  Future<bool> _connectIot(String ip, MonitorSettings monitor)async{
+  Future<bool> _connectIot(MonitorSettings monitor)async{
     final settingService = context.read<SettingsService>();
     if(settingService.isBaseStationConnected == false){
       MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
@@ -547,7 +600,12 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     if (!settingService.isBaseStationConnected ||
         !MqttService().isBrokerConnected) {
       _findRequest = true;
-      final ok = await _mqttConnectBase();
+      final base = _currentBase(context.read<BaseStationService>());
+      if (base == null) {
+        _findRequest = false;
+        return false;
+      }
+      final ok = await _mqttConnectBase(base);
       if (!ok) {
         _findRequest = false;
         return false;
@@ -586,22 +644,29 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     return true;
   }
 
-  void _onBotNavBarTap(int index, MonitorSettingsService monService) {
+  void _onBotNavBarTap(
+    int index,
+    MonitorSettingsService monService,
+    BaseStationData base,
+  ) {
+    final baseMonitors = _monitorsForBase(monService, base.docId);
+    final ui = _uiForBase(base.docId);
+
     // Add
-    if(index == 0)_addMonitor();
+    if (index == 0) _addMonitor(base.docId);
 
     // Delete
-    if(index == 1) {
-      if (monService.lstMonitors.isEmpty) return;
-      final mon = monService.lstMonitors[ _tabController!.index];
+    if (index == 1) {
+      if (baseMonitors.isEmpty || ui.tabController == null) return;
+      final mon = baseMonitors[ui.tabController!.index];
 
       myQuestionAlertBox(
-          context: context,
-          header: "Delete",
-          message: "${mon.monitorName}\n${mon.reg}\n\nAre you sure?",
-          onPress: (){
-            _markMonitorForDelete(mon);
-          }
+        context: context,
+        header: "Delete",
+        message: "${mon.monitorName}\n${mon.reg}\n\nAre you sure?",
+        onPress: () {
+          _markMonitorForDelete(mon);
+        },
       );
     }
   }
@@ -613,38 +678,33 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     lstPairedDevices = await getBluetoothDevices();
   }
   void _saveMonitor(MonitorSettings monitor) async {
-    if (_tabController == null) return;
     final monitorService = context.read<MonitorSettingsService>();
     await monitorService.save(monitor);
   }
-  void _addMonitor() async {
+  void _addMonitor(String baseStationDocId) async {
     if (!mounted) return;
 
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final ref = FirebaseFirestore.instance
-        .collection(collectionUsers)
-        .doc(uid)
-        .collection(collectionMonitors);
-
     final monitor = MonitorSettings(
       monitorName: 'New Monitor',
+      baseStationDocId: baseStationDocId,
     );
 
-    final doc = await ref.add(monitor.toMap());
+    final doc = await userBaseMonitorsRef(uid, baseStationDocId).add(monitor.toMap());
 
-    if(!mounted) return;
-    final monitorService = context.read<MonitorSettingsService>();
-    await monitorService.load();
     if (!mounted) return;
+    final ui = _uiForBase(baseStationDocId);
+    final monitorService = context.read<MonitorSettingsService>();
+    final baseMonitors = _monitorsForBase(monitorService, baseStationDocId);
 
-    if (_tabController != null &&  monitorService.lstMonitors.isNotEmpty) {
-      final newIndex = monitorService.lstMonitors.indexWhere((d) => d.monDocId == doc.id);
+    if (ui.tabController != null && baseMonitors.isNotEmpty) {
+      final newIndex = baseMonitors.indexWhere((d) => d.monDocId == doc.id);
       if (newIndex != -1) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          _tabController!.animateTo(newIndex);
+          ui.tabController!.animateTo(newIndex);
         });
       }
     }
@@ -652,37 +712,38 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   Future<void> _markMonitorForDelete(MonitorSettings monitor) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      if (user == null || monitor.baseStationDocId.isEmpty) return;
 
-      await FirebaseFirestore.instance
-          .collection(collectionUsers)
-          .doc(user.uid)
-          .collection(collectionMonitors)
-          .doc(monitor.monDocId)
-          .set({fireMonitorMarkedToDelete: true}, SetOptions(merge: true));
+      await userMonitorRef(
+        user.uid,
+        monitor.baseStationDocId,
+        monitor.monDocId,
+      ).set({fireMonitorMarkedToDelete: true}, SetOptions(merge: true));
 
       if (!mounted) return;
       final monitorService = context.read<MonitorSettingsService>();
-      await monitorService.load();
+      final baseMonitors =
+          _monitorsForBase(monitorService, monitor.baseStationDocId);
+      final ui = _uiForBase(monitor.baseStationDocId);
 
       setState(() {
-        _tabController?.dispose();
+        ui.tabController?.dispose();
 
-        if (monitorService.lstMonitors.isNotEmpty) {
-          _tabController = TabController(
-            length: monitorService.lstMonitors.length,
+        if (baseMonitors.isNotEmpty) {
+          ui.tabController = TabController(
+            length: baseMonitors.length,
             vsync: this,
           );
 
           int newIndex = 0;
-          if (_tabController!.index >= monitorService.lstMonitors.length) {
-            newIndex = monitorService.lstMonitors.length - 1;
+          if (ui.tabController!.index >= baseMonitors.length) {
+            newIndex = baseMonitors.length - 1;
           } else {
-            newIndex = _tabController!.index;
+            newIndex = ui.tabController!.index;
           }
-          _tabController!.animateTo(newIndex);
+          ui.tabController!.animateTo(newIndex);
         } else {
-          _tabController = null;
+          ui.tabController = null;
         }
       });
 
@@ -696,46 +757,66 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       }
     }
   }
-  void _updateTabs(int length) {
+  void _updateBaseTabs(int length) {
     if (length == 0) {
-      if (_scrollControllers.isNotEmpty) {
-        for (var c in _scrollControllers) {
-          c.dispose();
-        }
-        _scrollControllers = [];
-      }
+      _baseTabController?.dispose();
+      _baseTabController = null;
       return;
     }
 
-    if (_tabController == null || _tabController!.length != length) {
-      final oldIndex = _tabController?.index ?? 0;
+    if (_baseTabController == null || _baseTabController!.length != length) {
+      final oldIndex = _baseTabController?.index ?? 0;
+      _baseTabController?.removeListener(_onBaseTabChanged);
+      _baseTabController?.dispose();
+      _baseTabController = TabController(
+        length: length,
+        vsync: this,
+        initialIndex: oldIndex.clamp(0, length - 1),
+      );
+      _baseTabController!.addListener(_onBaseTabChanged);
+    }
+  }
 
-      _tabController?.dispose();
-      _tabController = TabController(
+  void _updateMonitorTabs(String baseDocId, int length) {
+    final ui = _uiForBase(baseDocId);
+    if (length == 0) {
+      if (ui.scrollControllers.isNotEmpty) {
+        for (final c in ui.scrollControllers) {
+          c.dispose();
+        }
+        ui.scrollControllers = [];
+      }
+      ui.tabController?.dispose();
+      ui.tabController = null;
+      return;
+    }
+
+    if (ui.tabController == null || ui.tabController!.length != length) {
+      final oldIndex = ui.tabController?.index ?? 0;
+      ui.tabController?.dispose();
+      ui.tabController = TabController(
         length: length,
         vsync: this,
         initialIndex: oldIndex.clamp(0, length - 1),
       );
     }
 
-    if (_tabKeys.length < length){
-      final toAdd = length - _tabKeys.length;
-      _tabKeys.addAll(
+    if (ui.tabKeys.length < length) {
+      final toAdd = length - ui.tabKeys.length;
+      ui.tabKeys.addAll(
         List.generate(toAdd, (_) => GlobalKey<IotDistanceWheelTypeState>()),
       );
     }
 
-    // Manage scroll controllers
-    if (_scrollControllers.length != length) {
-      if (_scrollControllers.length < length) {
-        // Add new ones
-        final toAdd = length - _scrollControllers.length;
-        _scrollControllers.addAll(List.generate(toAdd, (_) => ScrollController()));
+    if (ui.scrollControllers.length != length) {
+      if (ui.scrollControllers.length < length) {
+        final toAdd = length - ui.scrollControllers.length;
+        ui.scrollControllers
+            .addAll(List.generate(toAdd, (_) => ScrollController()));
       } else {
-        // Remove extra ones
-        while (_scrollControllers.length > length) {
-          _scrollControllers.last.dispose();
-          _scrollControllers.removeLast();
+        while (ui.scrollControllers.length > length) {
+          ui.scrollControllers.last.dispose();
+          ui.scrollControllers.removeLast();
         }
       }
     }
@@ -754,19 +835,25 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       });
     });
   }
-  void _updateWheelDistance(double distance, int ticks) {
-    if(_tabController == null) return;
-    if (_tabController!.index < 0 || _tabController!.index >= _tabKeys.length) return;
+  void _updateWheelDistance(String baseDocId, double distance, int ticks) {
+    final ui = _uiForBase(baseDocId);
+    if (ui.tabController == null) return;
+    if (ui.tabController!.index < 0 ||
+        ui.tabController!.index >= ui.tabKeys.length) {
+      return;
+    }
 
-    _tabKeys[_tabController!.index].currentState?.updateDistance(distance);
-    _tabKeys[_tabController!.index].currentState?.updateTicks(ticks);
+    ui.tabKeys[ui.tabController!.index].currentState?.updateDistance(distance);
+    ui.tabKeys[ui.tabController!.index].currentState?.updateTicks(ticks);
   }
 
-  Widget _buildBody(MonitorSettings monitor, Key key) {
-    try{
-      final settingService = context.read<SettingsService>();
-
-      switch(monitor.monitorType){
+  Widget _buildBody(
+    MonitorSettings monitor,
+    Key key,
+    BaseStationData base,
+  ) {
+    try {
+      switch (monitor.monitorType) {
         case monitorTypeVehicle:
           return IotVehicleType(
             monitorData: monitor,
@@ -854,8 +941,8 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
             },
 
             // Pair Monitor
-            onTapPair: () async{
-              if (await _mqttConnectBase()) {
+            onTapPair: () async {
+              if (await _mqttConnectBase(base)) {
                 _pairRequest = true;
               }
             },
@@ -872,40 +959,48 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
             // Calibrate Monitor
             onTapCalibrate: () async {
-              if(monitor.monitorId.isEmpty){
-                MyGlobalMessage.show("Monitor Not Found", "No monitor ID found. Please press 'Pair' button", MyMessageType.info);
+              if (monitor.monitorId.isEmpty) {
+                MyGlobalMessage.show(
+                  "Monitor Not Found",
+                  "No monitor ID found. Please press 'Pair' button",
+                  MyMessageType.info,
+                );
                 return;
               }
 
-              if(!context.read<SettingsService>().isBaseStationConnected) {
+              if (!context.read<SettingsService>().isBaseStationConnected) {
                 _connectRequest = true;
-                if(!await _mqttConnectBase()) return;
+                if (!await _mqttConnectBase(base)) return;
               }
 
-              await _calibrateIot(settingService.fireSettings!.connectedDeviceIp, monitor);
+              await _calibrateIot(monitor);
             },
 
             // Connect Monitor
             onTapConnect: () async {
-              if(monitor.monitorId.isEmpty){
-                MyGlobalMessage.show("Monitor Not Found", "No monitor ID found. Please press 'Pair' button", MyMessageType.info);
+              if (monitor.monitorId.isEmpty) {
+                MyGlobalMessage.show(
+                  "Monitor Not Found",
+                  "No monitor ID found. Please press 'Pair' button",
+                  MyMessageType.info,
+                );
                 return;
               }
 
-              if(context.read<SettingsService>().isBaseStationConnected) {
-                if(monitor.isConnectedToIot){
+              final ui = _uiForBase(base.docId);
+              if (context.read<SettingsService>().isBaseStationConnected) {
+                if (monitor.isConnectedToIot) {
                   monitor.isConnectedToIot = false;
                   _disconnectIot(monitor);
                 } else {
                   monitor.isConnectedToIot = false;
                   monitor.isConnectingToIot = true;
-                  _hasScrolled = false;
-                  _connectIot(settingService.fireSettings!.connectedDeviceIp, monitor);
+                  ui.hasScrolled = false;
+                  _connectIot(monitor);
                 }
-              }
-              else {
+              } else {
                 _connectRequest = true;
-                await _mqttConnectBase();
+                await _mqttConnectBase(base);
               }
             },
           );
@@ -922,22 +1017,232 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     }
   }
 
+  void _onBaseTabChanged() {
+    if (_baseTabController == null || _baseTabController!.indexIsChanging) {
+      return;
+    }
+    setState(() {
+      _pairRequest = false;
+      _connectRequest = false;
+      _findRequest = false;
+      _wifiRequest = false;
+      _pendingMonitorCmd = null;
+      _timeout?.cancel();
+    });
+  }
+
+  Widget _buildBaseMonitorsPanel(
+    BaseStationData base,
+    MonitorSettingsService monitors,
+  ) {
+    final baseMonitors = _monitorsForBase(monitors, base.docId);
+    final ui = _uiForBase(base.docId);
+    _updateMonitorTabs(base.docId, baseMonitors.length);
+
+    if (ui.tabController != null &&
+        baseMonitors.isNotEmpty &&
+        baseMonitors[ui.tabController!.index].isConnectedToIot &&
+        !ui.hasScrolled) {
+      ui.hasScrolled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (ui.tabController == null) return;
+        _scrollToBottomOnce(ui.scrollControllers[ui.tabController!.index]);
+      });
+    }
+
+    if (baseMonitors.isEmpty) {
+      return myCenterMsg('No iOT Monitors');
+    }
+
+    return Column(
+      children: [
+        Material(
+          color: Color.lerp(colorAppBackground, Colors.white, 0.08),
+          child: TabBar(
+            controller: ui.tabController,
+            isScrollable: true,
+            indicatorColor: Colors.blueAccent,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            tabs: baseMonitors.map((doc) => Tab(text: doc.monitorName)).toList(),
+          ),
+        ),
+        Expanded(
+          child: Container(
+            color: colorAppBackground,
+            child: TabBarView(
+              controller: ui.tabController,
+              children: List.generate(baseMonitors.length, (index) {
+                final monitor = baseMonitors[index];
+
+                return ListView(
+                  controller: ui.scrollControllers[index],
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 20, horizontal: 0),
+                  children: [
+                    Center(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.transparent,
+                          border: Border.all(
+                            color: Colors.transparent,
+                            width: 1,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Stack(
+                            children: [
+                              Center(
+                                child: Container(
+                                  padding: const EdgeInsets.all(1),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.blue,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      final (ProfilePicData? profilePic) =
+                                          await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              EditProfilePicPage(
+                                            docId: monitor.monDocId,
+                                            imageURL: monitor.imageURL,
+                                            imageFilename:
+                                                monitor.imageFilename,
+                                            profileType: profileTypeOperator,
+                                          ),
+                                        ),
+                                      );
+                                      if (profilePic?.imageURL != null &&
+                                          profilePic!.update) {
+                                        setState(() {
+                                          monitor.imageURL =
+                                              profilePic.imageURL;
+                                          monitor.imageFilename =
+                                              profilePic.imageFilename;
+                                        });
+                                        context
+                                            .read<MonitorSettingsService>()
+                                            .save(monitor);
+                                      }
+                                    },
+                                    child: Builder(
+                                      builder: (context) {
+                                        final hasPhoto =
+                                            monitor.imageURL != null &&
+                                                monitor.imageURL!.isNotEmpty;
+                                        if (kIsWeb) {
+                                          return hasPhoto
+                                              ? NetworkCircleAvatar(
+                                                  imageUrl: monitor.imageURL,
+                                                  version:
+                                                      monitor.imageFilename,
+                                                  radius: 55,
+                                                  backgroundColor:
+                                                      Colors.transparent,
+                                                )
+                                              : CircleAvatar(
+                                                  radius: 55,
+                                                  backgroundColor:
+                                                      Colors.transparent,
+                                                  backgroundImage:
+                                                      getMonitorImage(monitor),
+                                                );
+                                        }
+                                        final displayUrl =
+                                            resolvedNetworkImageUrl(
+                                          monitor.imageURL,
+                                          version: monitor.imageFilename,
+                                        );
+                                        return CircleAvatar(
+                                          radius: 55,
+                                          backgroundColor: Colors.transparent,
+                                          backgroundImage: hasPhoto
+                                              ? CachedNetworkImageProvider(
+                                                  displayUrl,
+                                                ) as ImageProvider
+                                              : getMonitorImage(monitor),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    GestureDetector(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          MyText(text: monitor.monitorType!, fontsize: 20),
+                          const Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.white,
+                            size: 30,
+                          ),
+                        ],
+                      ),
+                      onTap: () async {
+                        final selectedType = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => IotListPage(),
+                          ),
+                        );
+                        if (selectedType != null && selectedType is String) {
+                          setState(() {
+                            monitor.monitorType = selectedType;
+                            context
+                                .read<MonitorSettingsService>()
+                                .save(monitor);
+                          });
+                        }
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: 10,
+                        right: 10,
+                        bottom: 10,
+                      ),
+                      child: Divider(color: Colors.blue, thickness: 1),
+                    ),
+                    if (ui.tabKeys.isNotEmpty)
+                      _buildBody(monitor, ui.tabKeys[index], base),
+                  ],
+                );
+              }),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer3<MonitorSettingsService, SettingsService, BaseStationService>(
-      builder: (context, monitors, settings, base,_){
-        if (monitors.isLoading || base.isLoading || settings.isLoading || settings.isConnecting) {
+      builder: (context, monitors, settings, baseService, _) {
+        if (monitors.isLoading ||
+            baseService.isLoading ||
+            settings.isLoading ||
+            settings.isConnecting) {
           return myProgressCircle();
         }
-        
-        if (_tabController != null && monitors.lstMonitors[_tabController!.index].isConnectedToIot && !_hasScrolled) {
-          _hasScrolled = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scrollToBottomOnce(_scrollControllers[_tabController!.index]);
-          });
-        }
 
-        _updateTabs(monitors.lstMonitors.length);
+        _updateBaseTabs(baseService.lstBaseStations.length);
+        final currentBase = _currentBase(baseService);
+        final currentBaseMonitors = currentBase == null
+            ? <MonitorSettings>[]
+            : _monitorsForBase(monitors, currentBase.docId);
 
         return Scaffold(
           appBar: AppBar(
@@ -950,210 +1255,62 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
                 myConnectionStatus(settings: settings),
               ],
             ),
-            bottom: monitors.lstMonitors.isNotEmpty
+            bottom: baseService.lstBaseStations.isNotEmpty
                 ? TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              indicatorColor: Colors.blueAccent,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.grey,
-              tabs: monitors.lstMonitors
-                  .map((doc) => Tab(text: doc.monitorName))
-                  .toList(),
-            )
-                :null
+                    controller: _baseTabController,
+                    isScrollable: true,
+                    indicatorColor: Colors.blueAccent,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.grey,
+                    tabs: baseService.lstBaseStations
+                        .map((b) => Tab(text: b.baseName))
+                        .toList(),
+                  )
+                : null,
           ),
-          bottomNavigationBar: BottomNavigationBar(
-              currentIndex: _selectedIndex,
-              backgroundColor: colorAppBar,
-              unselectedItemColor: Colors.white,
-              selectedItemColor: Colors.white,
-              onTap: (index) {
-                _onBotNavBarTap(index, monitors);
-              },
-              items: [
-                // Add Button
-                BottomNavigationBarItem(
-                    icon: Icon(
-                      Icons.add,
-                      color: Colors.white
+          bottomNavigationBar: currentBase == null
+              ? null
+              : BottomNavigationBar(
+                  currentIndex: _selectedIndex,
+                  backgroundColor: colorAppBar,
+                  unselectedItemColor: Colors.white,
+                  selectedItemColor: Colors.white,
+                  onTap: (index) {
+                    _onBotNavBarTap(index, monitors, currentBase);
+                  },
+                  items: [
+                    const BottomNavigationBarItem(
+                      icon: Icon(Icons.add, color: Colors.white),
+                      label: 'Add',
                     ),
-                    label: 'Add'
+                    BottomNavigationBarItem(
+                      icon: Icon(
+                        Icons.delete_forever,
+                        color: currentBaseMonitors.isEmpty
+                            ? Colors.grey
+                            : Colors.white,
+                      ),
+                      label: 'Delete',
+                    ),
+                  ],
                 ),
-
-                // Delete Button
-                BottomNavigationBarItem(
-                  icon: Icon(
-                    Icons.delete_forever,
-                    color: monitors.lstMonitors.isEmpty
-                        ? Colors.grey
-                        : Colors.white,
-                  ),
-                  label: 'Delete',
+          body: baseService.lstBaseStations.isEmpty
+              ? myCenterMsg(
+                  'No Base Stations. Add one on the Base Stations page.',
+                )
+              : TabBarView(
+                  controller: _baseTabController,
+                  children: baseService.lstBaseStations
+                      .map(
+                        (baseStation) => _buildBaseMonitorsPanel(
+                          baseStation,
+                          monitors,
+                        ),
+                      )
+                      .toList(),
                 ),
-              ]
-          ),
-
-          body: monitors.lstMonitors.isEmpty
-            ?  myCenterMsg('No iOT Monitors')
-              :Container(
-            color: colorAppBackground,
-            child: TabBarView(
-              controller: _tabController,
-              children: List.generate(monitors.lstMonitors.length, (index){
-                final monitor = monitors.lstMonitors[index];
-
-                  return ListView(
-                    controller: _scrollControllers[index],
-                    padding: const EdgeInsets.symmetric( vertical: 20, horizontal: 0),
-                    children: [
-
-                      // Picture header Container
-                      Center(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.transparent,
-                            border: Border.all( color: Colors.transparent, width: 1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Stack(
-                              children: [
-
-                                // iOT Monitor Picture
-                                Center(
-                                  child: Container(
-                                    padding: const EdgeInsets.all(1), // border thickness
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue, // border color
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child:GestureDetector(
-                                      onTap: () async {
-                                        final (ProfilePicData? profilePic) = await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => EditProfilePicPage(
-                                              docId: monitor.monDocId,
-                                              imageURL: monitor.imageURL,
-                                              imageFilename: monitor.imageFilename,
-                                              profileType: profileTypeOperator,
-                                            ),
-                                          ),
-                                        );
-                                        if(profilePic?.imageURL != null && profilePic!.update){
-                                          setState(() {
-                                            monitor.imageURL = profilePic.imageURL;
-                                            monitor.imageFilename = profilePic.imageFilename;
-
-                                          });
-                                          context.read<MonitorSettingsService>().save(monitor);
-                                        }
-                                      },
-                                      child: Builder(
-                                        builder: (context) {
-                                          final hasPhoto = monitor.imageURL !=
-                                                  null &&
-                                              monitor.imageURL!.isNotEmpty;
-                                          // Web: HTML <img> (CORS). Android: CachedNetworkImage.
-                                          if (kIsWeb) {
-                                            return hasPhoto
-                                                ? NetworkCircleAvatar(
-                                                    imageUrl: monitor.imageURL,
-                                                    version:
-                                                        monitor.imageFilename,
-                                                    radius: 55,
-                                                    backgroundColor:
-                                                        Colors.transparent,
-                                                  )
-                                                : CircleAvatar(
-                                                    radius: 55,
-                                                    backgroundColor:
-                                                        Colors.transparent,
-                                                    backgroundImage:
-                                                        getMonitorImage(
-                                                            monitor),
-                                                  );
-                                          }
-                                          final displayUrl =
-                                              resolvedNetworkImageUrl(
-                                            monitor.imageURL,
-                                            version: monitor.imageFilename,
-                                          );
-                                          return CircleAvatar(
-                                            radius: 55,
-                                            backgroundColor: Colors.transparent,
-                                            backgroundImage: hasPhoto
-                                                ? CachedNetworkImageProvider(
-                                                    displayUrl,
-                                                  ) as ImageProvider
-                                                : getMonitorImage(monitor),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  )
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      SizedBox(height: 15),
-
-                      // Select Monitor Type
-                      GestureDetector(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            MyText(text: monitor.monitorType!, fontsize: 20),
-
-                            Icon(
-                              Icons.arrow_drop_down,
-                              color: Colors.white,
-                              size: 30,
-                            ),
-                          ],
-                        ),
-                        onTap: () async {
-                          final selectedType = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                            builder: (context) => IotListPage()
-                            ),
-                          );
-
-                          // Only update if the user actually picked something
-                          // (prevents errors if they hit the back button)
-                          if (selectedType != null && selectedType is String) {
-                            setState(() {
-                              monitor.monitorType = selectedType;
-
-                              // Optional: Save the change to your service/database immediately
-                              context.read<MonitorSettingsService>().save(monitor);
-                            });
-                          }
-                        },
-                      ),
-
-                      Padding(
-                        padding: const EdgeInsets.only(left: 10, right: 10, bottom: 10),
-                        child: Divider(color: Colors.blue,thickness: 1,),
-                      ),
-
-                      //--------------------------------------------------------------
-                      // Monitor Types
-                      //--------------------------------------------------------------
-                      if(_tabKeys.isNotEmpty) _buildBody(monitor,_tabKeys[index])
-                    ],
-                  );
-                },
-              ).toList(),
-            ),
-          ),
         );
-      });
-    }
+      },
+    );
+  }
 }

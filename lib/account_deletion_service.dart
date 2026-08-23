@@ -90,18 +90,35 @@ class AccountDeletionService {
       userRef.collection(collectionTrackingSessions),
       [collectionLocations],
     );
+    await _deleteBaseStationsWithMonitors(userRef);
     await _deleteNestedCollection(
       userRef.collection(collectionMonitors),
       [collectionIotData],
     );
 
     await _deleteCollection(userRef.collection(collectionGeoFences));
-    await _deleteCollection(userRef.collection(collectionBaseStations));
     await _deleteCollection(userRef.collection(collectionOperators));
     await _deleteNestedCollection(
       userRef.collection(collectionShopOrders),
       [collectionShopReturns, collectionShopCancellations],
     );
+  }
+
+  static Future<void> _deleteBaseStationsWithMonitors(
+    DocumentReference<Map<String, dynamic>> userRef,
+  ) async {
+    while (true) {
+      final snap = await userRef.collection(collectionBaseStations).limit(50).get();
+      if (snap.docs.isEmpty) break;
+
+      for (final baseDoc in snap.docs) {
+        await _deleteNestedCollection(
+          baseDoc.reference.collection(collectionMonitors),
+          [collectionIotData],
+        );
+        await baseDoc.reference.delete();
+      }
+    }
   }
 
   static Future<void> _resetUserProfileDoc(User user) async {

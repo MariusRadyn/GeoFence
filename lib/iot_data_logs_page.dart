@@ -90,14 +90,20 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                   ),
                 ),
                 onPressed: () async {
-                _firestore
-                  .collection(collectionUsers)
-                  .doc(userDocId)
-                  .collection(collectionMonitors)
-                  .doc(monDocId)
-                  .collection(collectionIotData)
-                  .doc(iotDocId)
-                  .delete();
+                  if (userDocId == null ||
+                      monDocId == null ||
+                      widget.monitor.baseStationDocId.isEmpty) {
+                    Navigator.pop(context);
+                    return;
+                  }
+                  userMonitorRef(
+                    userDocId,
+                    widget.monitor.baseStationDocId,
+                    monDocId,
+                  )
+                      .collection(collectionIotData)
+                      .doc(iotDocId)
+                      .delete();
 
                   Navigator.pop(context);
                 }
