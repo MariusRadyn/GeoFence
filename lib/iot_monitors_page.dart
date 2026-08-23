@@ -1057,13 +1057,13 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     return Column(
       children: [
         Material(
-          color: Color.lerp(colorAppBackground, Colors.white, 0.08),
+          color: colorAppBar,
           child: TabBar(
             controller: ui.tabController,
             isScrollable: true,
-            indicatorColor: Colors.blueAccent,
+            indicatorColor: colorOrange,
             labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
+            unselectedLabelColor: Colors.grey,
             tabs: baseMonitors.map((doc) => Tab(text: doc.monitorName)).toList(),
           ),
         ),

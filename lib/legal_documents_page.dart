@@ -66,22 +66,6 @@ class LegalDocumentsPage extends StatelessWidget {
               'Warranty and Returns',
             ),
           ),
-          const SizedBox(height: 10),
-          _LegalTile(
-            icon: Icons.delete_forever_outlined,
-            title: 'Delete Account',
-            subtitle: 'Request permanent deletion of your account',
-            onTap: () =>
-                _open(context, accountDeletionUrl, 'Delete Account'),
-          ),
-          const SizedBox(height: 10),
-          _LegalTile(
-            icon: Icons.folder_delete_outlined,
-            title: 'Delete Data',
-            subtitle: 'Request deletion of your stored app data',
-            onTap: () =>
-                _open(context, accountDataDeletionUrl, 'Delete Data'),
-          ),
         ],
       ),
     );

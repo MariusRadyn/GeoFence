@@ -32,6 +32,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
 
   final Map<String, TextEditingController> _controllersName = {};
   final Map<String, TextEditingController> _controllersDesc = {};
+  final Map<String, TextEditingController> _controllersAddress = {};
   final Map<String, TextEditingController> _controllersBluetooth = {};
   final Map<String, TextEditingController> _controllersIpAddress = {};
 
@@ -55,11 +56,13 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
 
   String? oldBaseName;
   String? oldBaseDesc;
+  String? oldBaseAddress;
   String? oldBaseIp;
   String? oldBaseBluetoothId;
 
   late FocusNode _focusNodeName;
   late FocusNode _focusNodeDesc;
+  late FocusNode _focusNodeAddress;
   late FocusNode _focusNodeIP;
 
   @override
@@ -73,10 +76,12 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
 
     _focusNodeName = FocusNode();
     _focusNodeDesc = FocusNode();
+    _focusNodeAddress = FocusNode();
     _focusNodeIP = FocusNode();
 
     _focusNodeName.addListener(() => _handleFocusChange(_focusNodeName, 'name'));
     _focusNodeDesc.addListener(() => _handleFocusChange(_focusNodeDesc, 'desc'));
+    _focusNodeAddress.addListener(() => _handleFocusChange(_focusNodeAddress, 'address'));
     _focusNodeIP.addListener(() => _handleFocusChange(_focusNodeIP, 'ip'));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -94,11 +99,13 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
   void dispose() {
     for(final c in _controllersName.values){c.dispose();}
     for(final c in _controllersDesc.values){c.dispose();}
+    for(final c in _controllersAddress.values){c.dispose();}
     for(final c in _controllersIpAddress.values){c.dispose();}
     for(final c in _controllersBluetooth.values){c.dispose();}
 
     _focusNodeName.dispose();
     _focusNodeDesc.dispose();
+    _focusNodeAddress.dispose();
     _focusNodeIP.dispose();
 
     _flutterTts.stop();
@@ -125,6 +132,8 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
 
   // MQTT
   void _mqttStartListener() {
+    if (_mqttSubscription != null) return;
+
     _mqttSubscription = MqttService().messageStream.listen((msg) async {
       if(!mounted) return;
 
@@ -282,12 +291,14 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
 
     if (field == 'name') base.baseName = _getControllerName(base).text;
     if (field == 'desc') base.baseDesc = _getControllerDesc(base).text;
+    if (field == 'address') base.address = _getControllerAddress(base).text;
     if (field == 'ip') base.ipAddress = _getControllerIpAdr(base).text;
 
     if (!node.hasFocus) {
       bool hasChanged =
           (oldBaseName ?? '') != base.baseName ||
           (oldBaseDesc ?? '') != base.baseDesc ||
+          (oldBaseAddress ?? '') != base.address ||
           (oldBaseIp ?? '') != base.ipAddress;
 
       if(!hasChanged)  {
@@ -299,6 +310,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
      if(node.hasFocus){
        if (field == 'name') oldBaseName = _getControllerName(base).text;
        if (field == 'desc') oldBaseDesc = _getControllerDesc(base).text;
+       if (field == 'address') oldBaseAddress = _getControllerAddress(base).text;
        if (field == 'ip') oldBaseIp = _getControllerIpAdr(base).text;
      }
   }
@@ -601,6 +613,16 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
           () => TextEditingController(text: station.baseDesc),
     );
   }
+  TextEditingController _getControllerAddress(BaseStationData station) {
+    final controller = _controllersAddress.putIfAbsent(
+      station.docId,
+      () => TextEditingController(text: station.address),
+    );
+    if (!_focusNodeAddress.hasFocus && controller.text != station.address) {
+      controller.text = station.address;
+    }
+    return controller;
+  }
   TextEditingController _getControllerBluetooth(BaseStationData station) {
     return _controllersBluetooth.putIfAbsent(
       station.docId,
@@ -699,6 +721,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
 
                       final controllerName = _getControllerName(currentBase);
                       final controllerDesc = _getControllerDesc(currentBase);
+                      final controllerAddress = _getControllerAddress(currentBase);
                       final controllerIpAddress = _getControllerIpAdr(currentBase);
                       final controllerBluetooth = _getControllerBluetooth(currentBase);
 
@@ -741,6 +764,25 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                                   onFieldSubmitted: (value){
                                     setState(() {
                                       currentBase.baseDesc = value;
+                                      _saveBase(currentBase);
+                                    });
+                                  },
+                                ),
+                              ),
+
+                              // Address
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                                child: MyTextFormField(
+                                  focusNode: _focusNodeAddress,
+                                  backgroundColor: colorAppBackground,
+                                  foregroundColor: Colors.white,
+                                  controller: controllerAddress,
+                                  hintText: "Street address / site location",
+                                  labelText: "Address",
+                                  onFieldSubmitted: (value){
+                                    setState(() {
+                                      currentBase.address = value;
                                       _saveBase(currentBase);
                                     });
                                   },

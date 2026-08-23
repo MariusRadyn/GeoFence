@@ -256,6 +256,7 @@ const fireGeoRadiusMeters = 'radiusMeters';
 // Firebase - Base Station Settings
 const fireBaseName = 'name';
 const fireBaseDesc = 'description';
+const fireBaseAddress = 'address';
 const fireBaseIp = 'ipAdr';
 const fireBaseId = 'baseId';
 const fireBaseBtMac = 'bluetoothMAC';
@@ -3184,6 +3185,7 @@ class MonitorSettingsService extends ChangeNotifier {
       final doc = await basesRef.add({
         fireBaseName: 'Base 1',
         fireBaseDesc: 'none',
+        fireBaseAddress: '',
         fireBaseIp: '0:0:0:0',
         fireBaseId: '',
         fireBaseBtMac: '',
@@ -3505,6 +3507,7 @@ class BaseStationData {
   // Persisted (Firebase) fields
   String baseName;
   String baseDesc;
+  String address;
   String ipAddress;
   String bluetoothName;
   String bluetoothMac;
@@ -3519,6 +3522,7 @@ class BaseStationData {
     // Firebase
     this.baseName = "New Base",
     this.baseDesc = "none",
+    this.address = "",
     this.ipAddress = "0:0:0:0",
     this.bluetoothName = "",
     this.bluetoothMac = "",
@@ -3532,14 +3536,20 @@ class BaseStationData {
 
   // From Firebase
   factory BaseStationData.fromMap(Map<String, dynamic> map, String docId) {
+    String asString(dynamic value, [String fallback = '']) {
+      if (value == null) return fallback;
+      return value.toString();
+    }
+
     return BaseStationData(
       docId: docId,
-      baseName: map[fireBaseName] ?? 'none',
-      baseDesc: map[fireBaseDesc] ?? 'none',
-      ipAddress: map[fireBaseIp] ?? 'New Item',
-      bluetoothName: map[fireBaseId] ?? 'None',
-      bluetoothMac: map[fireMonitorBtMac] ?? '',
-      image: map[fireBaseImage] ?? '',
+      baseName: asString(map[fireBaseName], 'none'),
+      baseDesc: asString(map[fireBaseDesc], 'none'),
+      address: asString(map[fireBaseAddress]),
+      ipAddress: asString(map[fireBaseIp], '0:0:0:0'),
+      bluetoothName: asString(map[fireBaseId]),
+      bluetoothMac: asString(map[fireBaseBtMac]),
+      image: asString(map[fireBaseImage]),
     );
   }
 
@@ -3548,6 +3558,7 @@ class BaseStationData {
     return {
       fireBaseName : baseName,
       fireBaseDesc : baseDesc,
+      fireBaseAddress : address,
       fireBaseIp : ipAddress,
       fireBaseId : bluetoothName,
       fireBaseBtMac : bluetoothMac,

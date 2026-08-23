@@ -679,6 +679,16 @@ class _ChangesTab extends StatelessWidget {
 
   static const _updates = <_WhatsNewItem>[
     _WhatsNewItem(
+      title: 'Distance Wheel IoT firmware',
+      date: 'Aug 2026',
+      bullets: [
+        'Live Monitor exits on any key and notifies the app to disconnect',
+        'Pair mode enters after exactly five Stop presses (within 5 seconds)',
+        'Re-pair waits for fresh Bluetooth WiFi credentials when base WiFi changes',
+        'WiFi reconnects properly after SSID or password update during pairing',
+      ],
+    ),
+    _WhatsNewItem(
       title: 'GeoFence map overhaul',
       date: 'Aug 2026',
       bullets: [

@@ -23,6 +23,8 @@ class MqttService {
   bool _listenerStarted = false;
   bool autoReconnect = false;
   bool _initialized = false;
+  int _autoReconnectAttempts = 0;
+  DateTime? _autoReconnectWindowStart;
 
   /// True only when the broker socket is actually connected (not a stale flag).
   bool get isBrokerConnected =>
@@ -126,6 +128,7 @@ class MqttService {
       _updatesSubscription = null;
 
       _disconnect();
+      _resetAutoReconnectBudget();
 
       _topicCallbacks.clear();
       _subscribedTopics.clear();
@@ -179,7 +182,7 @@ class MqttService {
 
       if (ipAdr.isEmpty) return false;
 
-      myDeviceId = await ClientIdManager.getClientId();
+      myDeviceId = await _resolveClientId();
 
       client = createMqttClient(ipAdr, myDeviceId)
         ..logging(on: false)
@@ -309,6 +312,33 @@ class MqttService {
     return false;
   }
 
+  /// Stable app id (prefs) plus a short web session suffix so hot reload /
+  /// multiple tabs do not fight the broker with the same MQTT client id.
+  Future<String> _resolveClientId() async {
+    final baseId = await ClientIdManager.getClientId();
+    if (!kIsWeb) return baseId;
+    final suffix =
+        (DateTime.now().millisecondsSinceEpoch % 0x10000).toRadixString(16);
+    return '${baseId}_w$suffix';
+  }
+
+  void _resetAutoReconnectBudget() {
+    _autoReconnectAttempts = 0;
+    _autoReconnectWindowStart = null;
+  }
+
+  bool _shouldPauseAutoReconnect() {
+    final now = DateTime.now();
+    final windowStart = _autoReconnectWindowStart;
+    if (windowStart == null ||
+        now.difference(windowStart) > const Duration(seconds: 30)) {
+      _autoReconnectWindowStart = now;
+      _autoReconnectAttempts = 0;
+    }
+    _autoReconnectAttempts++;
+    return _autoReconnectAttempts > 8;
+  }
+
   Future<void> stopMessageListener() async {
     await _updatesSubscription?.cancel();
     _updatesSubscription = null;
@@ -326,6 +356,7 @@ class MqttService {
     }
     // Catch any extra reply path the base uses under this prefix.
     _subscribeOne('$topic/#', MqttQos.atLeastOnce);
+    printDebugMsg('MQTT listening on $topic (+ device + wildcard)');
   }
 
   void _subscribeOne(String topic, MqttQos qos) {
@@ -334,7 +365,6 @@ class MqttService {
 
     _subscribedTopics.add(topic);
     client!.subscribe(topic, qos);
-    printDebugMsg('MQTT subscribe $topic');
   }
 
   void _disconnect() {
@@ -362,31 +392,43 @@ class MqttService {
   // -----------------------------------------------------------
   void _onConnected() {
     isConnected = true;
+    _resetAutoReconnectBudget();
     _subscribedTopics.clear();
     _subscribe(mqttTopicToAndroid);
     _reconnectTimer?.cancel();
-    printDebugMsg('MQTT Connected');
+    printDebugMsg('MQTT connected ($myDeviceId → $ipAdr:$port)');
   }
 
   void _onSuscribed(String topic) {
-    printDebugMsg('Subscribed to $topic');
+    // Broker ack — avoid per-topic log spam on reconnect.
   }
 
   void _onDisconnected() {
     isConnected = false;
-    printDebugMsg('MQTT Disconnected');
+    printDebugMsg('MQTT disconnected');
   }
 
   void _onAutoReconnect() {
-    printDebugMsg('MQTT Auto-reconnecting…');
+    if (_shouldPauseAutoReconnect()) {
+      printDebugMsg(
+        'MQTT auto-reconnect paused (connection unstable). '
+        'Refresh the page, then connect once from Base Stations.',
+      );
+      if (client != null) {
+        client!.autoReconnect = false;
+      }
+      autoReconnect = false;
+      return;
+    }
+    printDebugMsg('MQTT auto-reconnecting…');
   }
 
   void _onAutoReconnected() {
     isConnected = true;
-    _subscribedTopics.clear();
-    _subscribe(mqttTopicToAndroid);
+    _resetAutoReconnectBudget();
+    // resubscribeOnAutoReconnect restores topics; skip manual re-subscribe.
     _reconnectTimer?.cancel();
-    printDebugMsg('Auto-reconnected successfully');
+    printDebugMsg('MQTT auto-reconnected');
   }
 
   void _rxStreamListener() {
