@@ -467,7 +467,11 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
         lstPairedBtDevices = [];
         return;
       }
-      lstPairedBtDevices = await getBluetoothDevices();
+      final devices = await getBluetoothDevices();
+      lstPairedBtDevices = devices
+          .where((d) =>
+              d.platformName.toLowerCase().startsWith('geobase'))
+          .toList();
 
       if(debug){
         lstPairedBtDevices = [
@@ -809,26 +813,24 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                                       ),
                                     ),
 
-                                    if (AppConfig.enableBluetooth) ...[
-                                      SizedBox(width: 10),
-                                      // Bluetooth Button
-                                      OutlinedButton(
-                                          style: OutlinedButton.styleFrom(
-                                            side: BorderSide(color: Colors.blue, width: 2),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                          onPressed: (){
-                                            oldBaseBluetoothId = currentBase.bluetoothName;
-                                            _showBluetoothDevicesPopup(currentBase);
-                                          },
-                                        child: Icon(
-                                          Icons.bluetooth,color:
-                                          Colors.lightBlueAccent
+                                    SizedBox(width: 10),
+                                    // Bluetooth Button
+                                    OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        side: BorderSide(color: Colors.blue, width: 2),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
                                         ),
                                       ),
-                                    ],
+                                      onPressed: () {
+                                        oldBaseBluetoothId = currentBase.bluetoothName;
+                                        _showBluetoothDevicesPopup(currentBase);
+                                      },
+                                      child: Icon(
+                                        Icons.bluetooth,
+                                        color: Colors.lightBlueAccent,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),

@@ -94,6 +94,17 @@ class OperatorsPageState extends State<OperatorsPage> {
     return newOperator;
   }
   void _deleteOperatorDialog(OperatorData operator) async {
+    final operatorService = context.read<OperatorService>();
+    final hasWageLinks = await operatorService.hasLinkedWageRecords(operator.docId);
+
+    if (!mounted) return;
+
+    final message = hasWageLinks
+        ? '${operator.name} ${operator.surname} has wage records linked.\n\n'
+            'They will be hidden from the operator list, but past records '
+            'will still show their name.\n\nContinue?'
+        : '${operator.name} ${operator.surname}\nAre you sure?';
+
     showDialog(
         context: context,
         builder: (context){
@@ -107,12 +118,12 @@ class OperatorsPageState extends State<OperatorsPage> {
             ),
             backgroundColor: colorAppTitle,
             shadowColor: Colors.black,
-            title: const MyText(
-                text: "Delete",
+            title: MyText(
+                text: hasWageLinks ? "Warning" : "Delete",
                 color: Colors.white
             ),
             content: MyText(
-              text: "${operator.name} ${operator.surname}\nAre you sure?",
+              text: message,
               color: Colors.grey,
               fontsize: 18,
             ),
@@ -132,9 +143,8 @@ class OperatorsPageState extends State<OperatorsPage> {
                   ),
 
                   onPressed: () async {
-                    _delete(operator);
-
                     Navigator.pop(context);
+                    await _delete(operator, hasWageLinks: hasWageLinks);
                   }
               ),
             ],
@@ -142,18 +152,23 @@ class OperatorsPageState extends State<OperatorsPage> {
         }
     );
   }
-  void _delete(OperatorData operator) async {
+  Future<void> _delete(
+    OperatorData operator, {
+    required bool hasWageLinks,
+  }) async {
     if (!mounted) return;
 
     try{
       OperatorService operatorService = context.read<OperatorService>();
-      await operatorService.delete(operator);
-
+      if (hasWageLinks) {
+        await operatorService.markForDelete(operator);
+      } else {
+        await operatorService.delete(operator);
+      }
     }
     catch (e, st) {
-      MyGlobalSnackBar.show('Image Error: $e\n$st');
+      MyGlobalSnackBar.show('Delete Error: $e\n$st');
     }
-
   }
 
   @override

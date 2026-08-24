@@ -44,7 +44,6 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   TabController? _baseTabController;
   final Map<String, _BaseMonitorUiState> _baseUi = {};
   final int _selectedIndex = 0;
-  //final ImagePicker _imagePicker = ImagePicker();
   bool scanBusy = false;
   bool _pairRequest = false;
   bool _connectRequest = false;
@@ -52,8 +51,6 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   bool _wifiRequest = false;
   bool _swapDialogOpen = false;
   String? _pendingMonitorCmd;
-  //bool _isUploading = false;
-  //double _uploadProgress = 0.0;
   List<BluetoothDevice> lstPairedDevices = [
     BluetoothDevice.fromId("00:11:22:33:44:55"),
     BluetoothDevice.fromId("11:11:22:33:44:55"),

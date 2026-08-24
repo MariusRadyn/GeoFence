@@ -220,6 +220,7 @@ const String operatorTagId = "tagId";
 const String operatorName = "name";
 const String operatorSurname = "surname";
 const String operatorVersion = "operatorsVer";
+const fireOperatorMarkedToDelete = 'markedToDelete';
 const List<String> settingOperatorTypeList = [
   operatorTypeOperator,
   operatorTypeSupervisor
@@ -3731,7 +3732,7 @@ class OperatorData{
   String? imageFilename;
   String? thumbURL;
   double rate = 0.0;
-  
+  bool markedToDelete;
 
   // Local-only (NOT saved)
   String docId;
@@ -3745,6 +3746,7 @@ class OperatorData{
     this.imageFilename,
     this.thumbURL,
     this.rate = 0.0,
+    this.markedToDelete = false,
 
     // Local
     this.docId = ""
@@ -3772,6 +3774,7 @@ class OperatorData{
       imageFilename: asString(map['photoFilename']),
       thumbURL: asString(map['thumbURL']),
       rate: asDouble(map['rate']),
+      markedToDelete: map[fireOperatorMarkedToDelete] == true,
     );
   }
   Map<String, dynamic> toMap(){
@@ -3785,6 +3788,7 @@ class OperatorData{
       'photoFilename': imageFilename,
       'thumbURL': thumbURL,
       'rate': rate,
+      fireOperatorMarkedToDelete: markedToDelete,
     };
   }
   OperatorData copyWith({
@@ -3811,7 +3815,8 @@ class OperatorData{
 }
 class OperatorService extends ChangeNotifier {
   final List<OperatorData> _lstOps = [];
-  List<OperatorData> get lstOperators => List.unmodifiable(_lstOps);
+  List<OperatorData> get lstOperators =>
+      List.unmodifiable(_lstOps.where((o) => !o.markedToDelete));
 
   bool isLoading = false;
   bool firebaseError = false;
@@ -4005,15 +4010,15 @@ class OperatorService extends ChangeNotifier {
   Future<void> delete(OperatorData operator) async{
     try {
       User? user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
 
       // 1️⃣ Delete from Firestore
       await FirebaseFirestore.instance
           .collection(collectionUsers)
-          .doc(user?.uid)
+          .doc(user.uid)
           .collection(collectionOperators)
           .doc(operator.docId)
           .delete();
-
 
       _lstOps.removeWhere((c) => c.docId == operator.docId);
       _safeNotify();
@@ -4025,6 +4030,50 @@ class OperatorService extends ChangeNotifier {
         await fireStoreDeleteFile(path);
       }
 
+    } catch (e) {
+      MyGlobalSnackBar.show('Delete Failed: $e');
+    }
+  }
+
+  /// True when any IoT/wage log references this operator doc id.
+  Future<bool> hasLinkedWageRecords(String operatorDocId) async {
+    if (operatorDocId.isEmpty) return false;
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collectionGroup(collectionIotData)
+          .where(mqttJsonUserDocId, isEqualTo: uid)
+          .where(fireIotOperatorDocId, isEqualTo: operatorDocId)
+          .limit(1)
+          .get();
+      return snap.docs.isNotEmpty;
+    } catch (e) {
+      printDebugMsg('hasLinkedWageRecords error: $e');
+      // If the query fails (e.g. missing index), assume linked so we soft-delete.
+      return true;
+    }
+  }
+
+  /// Hide operator from lists but keep Firestore doc for historical wage logs.
+  Future<void> markForDelete(OperatorData operator) async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      await FirebaseFirestore.instance
+          .collection(collectionUsers)
+          .doc(uid)
+          .collection(collectionOperators)
+          .doc(operator.docId)
+          .set({fireOperatorMarkedToDelete: true}, SetOptions(merge: true));
+
+      operator.markedToDelete = true;
+      _safeNotify();
+      setNewOperatorVersion();
+      MyGlobalSnackBar.show('Operator hidden (wage records kept)');
     } catch (e) {
       MyGlobalSnackBar.show('Delete Failed: $e');
     }

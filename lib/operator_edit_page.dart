@@ -257,16 +257,22 @@ class OperatorEditPageState extends State<OperatorEditPage> {
         .get();
 
     if(snapshot.docs.isNotEmpty){
-      if (snapshot.docs.first.id != widget.operatorData?.docId) {
-        final Map<String, dynamic> data = snapshot.docs.first.data();
-        String name = data[operatorName] ?? 'Unknown';
-        String surname = data[operatorSurname] ?? 'Unknown';
+      final existing = snapshot.docs.first;
+      if (existing.id != widget.operatorData?.docId) {
+        final Map<String, dynamic> data = existing.data();
+        if (data[fireOperatorMarkedToDelete] == true) {
+          // Tag was on a hidden operator — allow reuse.
+        } else {
+          String name = data[operatorName] ?? 'Unknown';
+          String surname = data[operatorSurname] ?? 'Unknown';
 
-        MyGlobalMessage.show("Duplicate Tag", "Tag in use by: $name $surname", MyMessageType.warning);
+          MyGlobalMessage.show("Duplicate Tag", "Tag in use by: $name $surname", MyMessageType.warning);
+          return;
+        }
+      } else {
+        // Same tag / Same Operator (Do nothing)
         return;
       }
-      // Same tag / Same Operator (Do nothing)
-      return;
     }
 
     if(widget.operatorData != null){

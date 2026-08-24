@@ -624,7 +624,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                               ),
                               const SizedBox(height: 10),
                               Text(
-                                "WiFi",
+                                "Cred",
                                 style: TextStyle(
                                   color: settingService.isBaseStationConnected
                                       ? Colors.white
