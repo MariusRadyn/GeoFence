@@ -293,6 +293,7 @@ String resolvedNetworkImageUrl(String? url, {String? version}) {
 // firebase - Iot Data
 const fireIotMonDocId = 'monDocId';
 const fireIotUserDocId = 'userDocId';
+const fireIotBaseStationDocId = 'baseStationDocId';
 const fireIotType = 'type';
 const fireIotMonName = 'iotName';
 const fireIotMonImageUrl = 'imageUrl';
@@ -395,10 +396,12 @@ const mqttJsonMqttPw = "mqttPw";
 // JSON Settings
 const mqttJsonMonitorId = "monId";
 const mqttJsonTicksPerM = "ticksPerM";
+const mqttJsonCalibrationDistance = "calibrationDistance";
 const mqttJsonIotType = "iotType";
 const mqttJsonIotName = "iotName";
 const mqttJsonMonitorDocId = "monDocId";
 const mqttJsonUserDocId = "userDocId";
+const mqttJsonBaseStationDocId = "baseStationDocId";
 
 //--Bluetooth-------------------------------------------------------------------
 const bluetoothServiceUuid = 'f3a1c2d0-6b4e-4e9a-9f3e-8d2f1c9b7a1e';

@@ -297,7 +297,6 @@ class IotDistanceWheelType extends StatefulWidget {
   final MonitorSettings monitorData;
   final Function(String) onChangedName;
   final Function(String) onChangedTicksPerM;
-  final Function(String) onChangedTicks;
   final Function(String) onChangedMonId;
   final Function() onTapPair;
   final Function() onTapSendWifi;
@@ -310,7 +309,6 @@ class IotDistanceWheelType extends StatefulWidget {
     required this.monitorData,
     required this.onChangedName,
     required this.onChangedTicksPerM,
-    required this.onChangedTicks,
     required this.onChangedMonId,
     required this.onTapPair,
     required this.onTapSendWifi,
@@ -327,7 +325,6 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   late final TextEditingController _controllerName;
   late final TextEditingController _controllerId;
   late final TextEditingController _controllerTicksPerM;
-  late final TextEditingController _controllerTicks;
   late final TextEditingController _controllerDistance;
   late final TextEditingController _controllerCalDistance;
   late FocusNode _focusNodeName;
@@ -350,7 +347,6 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
      _controllerId = TextEditingController(text: widget.monitorData.monitorId);
      _controllerName = TextEditingController(text: widget.monitorData.monitorName);
      _controllerTicksPerM = TextEditingController(text: widget.monitorData.ticksPerM.toString());
-     _controllerTicks = TextEditingController(text: widget.monitorData.ticks.toString());
      _controllerDistance = TextEditingController(text: widget.monitorData.wheelDistance.toString());
      _controllerCalDistance = TextEditingController(text: widget.monitorData.calibrationDistance.toString());
 
@@ -410,9 +406,6 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
       _controllerCalDistance.text =
           widget.monitorData.calibrationDistance.toString();
     }
-    if (_controllerTicks.text != widget.monitorData.ticks.toString()) {
-      _controllerTicks.text = widget.monitorData.ticks.toString();
-    }
     if (_controllerDistance.text !=
         widget.monitorData.wheelDistance.toString()) {
       _controllerDistance.text = widget.monitorData.wheelDistance.toString();
@@ -425,7 +418,6 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
     _controllerDistance.dispose();
     _controllerName.dispose();
     _controllerTicksPerM.dispose();
-    _controllerTicks.dispose();
 
     _focusNodeName.dispose();
     _focusNodeID.dispose();
@@ -455,17 +447,14 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   // Public methods for parent to update text Controllers
   void updateDistance(double value) {
     if (!mounted) return;
-    _controllerDistance.text = value.toStringAsFixed(2);
+    setState(() {
+      widget.monitorData.wheelDistance = value;
+      _controllerDistance.text = value.toStringAsFixed(2);
+    });
   }
   void updateCalDistance(int value) {
     if (!mounted) return;
     _controllerCalDistance.text = value.toStringAsFixed(2);
-  }
-  void updateTicks(int value) {
-    if (!mounted) return;
-    setState(() {
-      _controllerTicks.text = value.toString();
-    });
   }
 
   @override
@@ -749,7 +738,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                           text:
                             '1. Enter the calibration distance\n'
                             '2. Pre measure this exact distance\n'
-                            '3. On the wheel, press \'START\' 6 times\n'
+                            '3. On the wheel, press \'START\' 5 times\n'
                             '4. Check LCD if the wheel enters \'CALIBRATION\' mode\n'
                             '5. On the wheel, press \'START\'\n'
                             '6. Move the wheel the exact distance\n'
@@ -766,21 +755,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                     padding: const EdgeInsets.only(top: 10,left: 8, right: 8),
                     child: MyTextHeader(text:"Calibration Data"),
                   ),
-                 
-                  // Ticks
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: MyTextFormField(
-                        backgroundColor: colorCalibrateTile,
-                        foregroundColor: Colors.white,
-                        controller: _controllerTicks,
-                        hintText: "—",
-                        labelText: "Ticks",
-                        isReadOnly: true,
-                        showLine: false,
-                      ),
-                  ),                 
-                
+
                   // Calibration Distance
                   Row(
                     children: [
@@ -802,7 +777,19 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                          child: animatedActionButton(
                           pressed: _calibrateButtonPressed,
                           onTap: () => _animateTap(
-                            widget.onTapCalibrate,
+                            () async {
+                              FocusScope.of(context).unfocus();
+                              final text = _controllerCalDistance.text.trim();
+                              final parsed = int.tryParse(text) ??
+                                  double.tryParse(text)?.round();
+                              if (parsed != null && parsed > 0) {
+                                widget.monitorData.calibrationDistance = parsed;
+                                await context
+                                    .read<MonitorSettingsService>()
+                                    .save(widget.monitorData);
+                              }
+                              await widget.onTapCalibrate();
+                            },
                             (v) => _calibrateButtonPressed = v,
                           ),
                           child: Column(

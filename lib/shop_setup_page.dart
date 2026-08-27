@@ -221,6 +221,8 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
   late String _docId;
   final List<String> _imageUrls = [];
   final List<Uint8List> _pendingBytes = [];
+  /// 0.0–1.0 while uploading; empty when idle.
+  List<double> _uploadProgress = [];
   bool _active = true;
   bool _freeDelivery = true;
   bool _isReady = false;
@@ -326,18 +328,44 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
   }
 
   Future<List<String>> _uploadPendingImages() async {
-    final uploaded = <String>[];
-    for (final bytes in _pendingBytes) {
-      final name = 'Image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    if (_pendingBytes.isEmpty) return const [];
+
+    // Show a frame + progress ring for every pending photo immediately.
+    _uploadProgress = List<double>.filled(_pendingBytes.length, 0.0);
+    if (mounted) setState(() {});
+
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    final results = List<String?>.filled(_pendingBytes.length, null);
+
+    await Future.wait(List.generate(_pendingBytes.length, (i) async {
+      final bytes = _pendingBytes[i];
+      final name = 'Image_${stamp}_$i.jpg';
       final ref = FirebaseStorage.instance
           .ref()
           .child(collectionShopProducts)
           .child(_docId)
           .child(name);
-      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
-      uploaded.add(await ref.getDownloadURL());
-    }
-    return uploaded;
+      final task = ref.putData(
+        bytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      task.snapshotEvents.listen((snap) {
+        if (!mounted || i >= _uploadProgress.length) return;
+        final total = snap.totalBytes;
+        final progress =
+            total > 0 ? snap.bytesTransferred / total : 0.0;
+        setState(() {
+          _uploadProgress[i] = progress.clamp(0.0, 1.0);
+        });
+      });
+      await task;
+      results[i] = await ref.getDownloadURL();
+      if (mounted && i < _uploadProgress.length) {
+        setState(() => _uploadProgress[i] = 1.0);
+      }
+    }));
+
+    return results.whereType<String>().toList();
   }
 
   Future<void> _save() async {
@@ -368,7 +396,12 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
     );
     if (!proceed) return;
 
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      if (_pendingBytes.isNotEmpty) {
+        _uploadProgress = List<double>.filled(_pendingBytes.length, 0.0);
+      }
+    });
     try {
       final newUrls = await _uploadPendingImages();
       final allUrls = [..._imageUrls, ...newUrls];
@@ -409,7 +442,12 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
     } catch (e) {
       MyGlobalSnackBar.show('Save failed: $e');
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _uploadProgress = [];
+        });
+      }
     }
   }
 
@@ -472,11 +510,11 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
             ),
         ],
       ),
-      body: _saving
-          ? Center(child: myProgressCircle())
-          : Form(
+      body: Form(
               key: _formKey,
-              child: ListView(
+              child: AbsorbPointer(
+                absorbing: _saving,
+                child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                 children: [
                   const MyText(
@@ -493,39 +531,54 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                         ...List.generate(_imageUrls.length, (i) {
                           return _ImageThumb(
                             url: _imageUrls[i],
-                            onRemove: () =>
-                                setState(() => _imageUrls.removeAt(i)),
+                            onRemove: _saving
+                                ? null
+                                : () => setState(() => _imageUrls.removeAt(i)),
                           );
                         }),
                         ...List.generate(_pendingBytes.length, (i) {
+                          final progress = i < _uploadProgress.length
+                              ? _uploadProgress[i]
+                              : null;
                           return _ImageThumb(
                             bytes: _pendingBytes[i],
-                            onRemove: () =>
-                                setState(() => _pendingBytes.removeAt(i)),
+                            uploadProgress: progress,
+                            onRemove: _saving
+                                ? null
+                                : () => setState(
+                                      () => _pendingBytes.removeAt(i),
+                                    ),
                           );
                         }),
-                        _AddPhotoButton(
-                          label: 'Gallery',
-                          icon: Icons.photo_library_outlined,
-                          onTap: _pickFromGallery,
-                        ),
-                        _AddPhotoButton(
-                          label: kIsWeb ? 'Files' : 'Camera',
-                          icon: kIsWeb
-                              ? Icons.upload_file
-                              : Icons.photo_camera_outlined,
-                          onTap: _pickFromCamera,
-                        ),
+                        if (!_saving) ...[
+                          _AddPhotoButton(
+                            label: 'Gallery',
+                            icon: Icons.photo_library_outlined,
+                            onTap: _pickFromGallery,
+                          ),
+                          _AddPhotoButton(
+                            label: kIsWeb ? 'Files' : 'Camera',
+                            icon: kIsWeb
+                                ? Icons.upload_file
+                                : Icons.photo_camera_outlined,
+                            onTap: _pickFromCamera,
+                          ),
+                        ],
                       ],
                     ),
                   ),
                   Padding(
                     padding: const EdgeInsets.only(top: 4, bottom: 14),
                     child: Text(
-                      totalImages == 0
-                          ? 'Add one or more photos'
-                          : '$totalImages photo${totalImages == 1 ? '' : 's'}',
-                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                      _saving && _pendingBytes.isNotEmpty
+                          ? 'Uploading ${_pendingBytes.length} photo${_pendingBytes.length == 1 ? '' : 's'}…'
+                          : totalImages == 0
+                              ? 'Add one or more photos'
+                              : '$totalImages photo${totalImages == 1 ? '' : 's'}',
+                      style: TextStyle(
+                        color: _saving ? colorOrange : Colors.white38,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
 
@@ -681,10 +734,10 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      onPressed: _save,
-                      child: const Text(
-                        'Save',
-                        style: TextStyle(
+                      onPressed: _saving ? null : _save,
+                      child: Text(
+                        _saving ? 'Uploading…' : 'Save',
+                        style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
                         ),
@@ -694,6 +747,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                 ],
               ),
             ),
+      ),
     );
   }
 }
@@ -701,16 +755,20 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
 class _ImageThumb extends StatelessWidget {
   final String? url;
   final Uint8List? bytes;
-  final VoidCallback onRemove;
+  final VoidCallback? onRemove;
+  /// null = not uploading; 0–1 = upload progress.
+  final double? uploadProgress;
 
   const _ImageThumb({
     this.url,
     this.bytes,
-    required this.onRemove,
+    this.onRemove,
+    this.uploadProgress,
   });
 
   @override
   Widget build(BuildContext context) {
+    final uploading = uploadProgress != null;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Stack(
@@ -733,22 +791,46 @@ class _ImageThumb extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(
-            right: 2,
-            top: 2,
-            child: Material(
-              color: Colors.black54,
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: onRemove,
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(Icons.close, size: 14, color: Colors.white),
+          if (uploading)
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  child: Center(
+                    child: SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: CircularProgressIndicator(
+                        value: uploadProgress! <= 0
+                            ? null
+                            : uploadProgress!.clamp(0.0, 1.0),
+                        strokeWidth: 3,
+                        color: colorOrange,
+                        backgroundColor: Colors.white24,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+          if (onRemove != null)
+            Positioned(
+              right: 2,
+              top: 2,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onRemove,
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(Icons.close, size: 14, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

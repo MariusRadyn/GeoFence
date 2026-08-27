@@ -1191,8 +1191,8 @@ class _ProductCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                flex: 1,
+              AspectRatio(
+                aspectRatio: 1,
                 child: ClipRect(
                   child: Stack(
                     fit: StackFit.expand,

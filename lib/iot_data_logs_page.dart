@@ -28,7 +28,6 @@ class IotDataLogsPage extends StatefulWidget {
 
 class IotDataLogsPageState extends State<IotDataLogsPage> {
   late SettingsService settings;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final nrFormatter = NumberFormat('0.00', 'en_US');
 
   @override
@@ -43,7 +42,26 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
     return '${op.name} ${op.surname}'.trim();
   }
 
-  void _delete(String desc, String? userDocId, String? monDocId, String iotDocId) async {
+  bool _belongsToMonitor(QueryDocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>?;
+    final monId = '${data?[fireIotMonDocId] ?? ''}';
+    if (monId != widget.monitor.monDocId) return false;
+
+    final monitorBaseId = widget.monitor.baseStationDocId;
+    if (monitorBaseId.isEmpty) return true;
+
+    final docBaseId = '${data?[fireIotBaseStationDocId] ?? ''}';
+    final pathBaseId = baseStationDocIdFromMonitorPath(doc.reference.path);
+    if (docBaseId.isNotEmpty && docBaseId != monitorBaseId) return false;
+    if (pathBaseId != null &&
+        pathBaseId.isNotEmpty &&
+        pathBaseId != monitorBaseId) {
+      return false;
+    }
+    return true;
+  }
+
+  void _delete(String desc, DocumentReference docRef) async {
     showDialog(
         context: context,
         builder: (context){
@@ -90,22 +108,8 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                   ),
                 ),
                 onPressed: () async {
-                  if (userDocId == null ||
-                      monDocId == null ||
-                      widget.monitor.baseStationDocId.isEmpty) {
-                    Navigator.pop(context);
-                    return;
-                  }
-                  userMonitorRef(
-                    userDocId,
-                    widget.monitor.baseStationDocId,
-                    monDocId,
-                  )
-                      .collection(collectionIotData)
-                      .doc(iotDocId)
-                      .delete();
-
-                  Navigator.pop(context);
+                  await docRef.delete();
+                  if (context.mounted) Navigator.pop(context);
                 }
               ),
             ],
@@ -193,16 +197,35 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
         child:  StreamBuilder<QuerySnapshot>(
           stream: widget.streamIotData,
           builder: (context, iotSnapshot) {
+            if (iotSnapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: MyText(
+                    text: 'Could not load IoT data:\n${iotSnapshot.error}',
+                    color: Colors.orangeAccent,
+                  ),
+                ),
+              );
+            }
             if (iotSnapshot.connectionState == ConnectionState.waiting ||
                 operatorService.isLoading) {
-            return Center(child: myProgressCircle());
-          }
+              return Center(child: myProgressCircle());
+            }
             if (!iotSnapshot.hasData) {
               return const Center(
                 child: MyText(text: 'No Data', color: Colors.grey),
               );
             }
-            var docs = iotSnapshot.data!.docs;
+            final docs = iotSnapshot.data!.docs
+                .whereType<QueryDocumentSnapshot>()
+                .where(_belongsToMonitor)
+                .toList();
+            if (docs.isEmpty) {
+              return const Center(
+                child: MyText(text: 'No Data', color: Colors.grey),
+              );
+            }
 
             return Column(
               children: [
@@ -254,10 +277,8 @@ class IotDataLogsPageState extends State<IotDataLogsPage> {
                               subtext: 'Operator: $operatorLabel\nSupervisor: $supervisorLabel\nLines: $lines\nDistance: $dist m',
                               onTapDelete: () {
                                 _delete(
-                                  '${widget.monitor.monitorName}\n$date', 
-                                  widget.userDocId, 
-                                  widget.monitor.monDocId, 
-                                  iotData.id
+                                  '${widget.monitor.monitorName}\n$date',
+                                  iotData.reference,
                                 );
                               },
                             ),

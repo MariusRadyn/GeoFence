@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart'
     show kDebugMode, kIsWeb, kProfileMode;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:geofence/app_flavor.dart';
 import 'package:geofence/home_page.dart';
@@ -87,6 +88,12 @@ Future<void> _activateAppCheck() async {
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
+
+    // Phone UI stays portrait — no landscape when the device is turned.
+    await SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
 
     if (kIsWeb) {
       usePathUrlStrategy();

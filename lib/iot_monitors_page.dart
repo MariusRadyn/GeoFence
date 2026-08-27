@@ -49,6 +49,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   bool _connectRequest = false;
   bool _findRequest = false;
   bool _wifiRequest = false;
+  bool _calibrateRequest = false;
   bool _swapDialogOpen = false;
   String? _pendingMonitorCmd;
   List<BluetoothDevice> lstPairedDevices = [
@@ -131,7 +132,10 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
             : pending == mqttCmdSendWifi
                 ? 'No reply from base for WiFi push.\n'
                     'Check MQTT connection; IoT must be in BLE range of the Pi.'
-                : 'No Reply From Base Station',
+                : pending == mqttCmdCalibrate
+                    ? 'No reply from wheel for calibration.\n'
+                        'Check Monitor ID, Wi‑Fi/MQTT, and that calibration mode was completed on the wheel.'
+                    : 'No Reply From Base Station',
         MyMessageType.warning,
       );
     });
@@ -290,31 +294,50 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         MyGlobalSnackBar.show('Base pushing WiFi over Bluetooth…');
       }
 
-      // Calibration Mode
-      if(cmd == mqttCmdCalibrate ||
-          (cmd == mqttCmdAck && _pendingMonitorCmd == mqttCmdCalibrate)){
+      // Calibration result from wheel (#CALIBRATE only — not #ACK)
+      if (cmd == mqttCmdCalibrate) {
         _timeout?.cancel();
         _pendingMonitorCmd = null;
         final monitor = currentMonitor();
         monitorService.setConnectedToIot(monitor.monitorId, true);
-        debugPrint('IOT in Calibration Mode');
+
+        final payload = jsonData[mqttJsonPayload];
+        final ticks = _parseCalibrationTicks(payload);
+        if (ticks != null) {
+          await _applyCalibrationResult(
+            currentBase.docId,
+            monitor,
+            ticks,
+          );
+        } else {
+          MyGlobalMessage.show(
+            'Calibration',
+            'Wheel replied but no tick count was received.\n'
+                'Update the wheel and base station software, then try again.',
+            MyMessageType.warning,
+          );
+        }
+        debugPrint('IOT calibration reply: $payload');
       }
 
       // IOT Monitor Live Data
-      if(cmd == mqttCmdLiveMonitorData){
-        final monitor = currentMonitor();
+      if (cmd == mqttCmdLiveMonitorData) {
         final payload = jsonData[mqttJsonPayload];
-        final dist = payload[mqttJsonWheelDistance];
-        final ticks = payload[mqttJsonWheelTicks];
+        if (payload is! Map) return;
 
-        if(dist is num && ticks is num) {
+        final map = Map<String, dynamic>.from(payload);
+        final dist = _parseLiveNum(map[mqttJsonWheelDistance]);
+        final ticks = _parseLiveInt(map[mqttJsonWheelTicks]);
+
+        if (dist != null || ticks != null) {
           _updateWheelDistance(
             currentBase.docId,
-            dist.toDouble(),
-            ticks.toInt(),
+            baseMonitors,
+            distance: dist,
+            ticks: ticks,
+            monitorDeviceId: fromId?.toString(),
           );
         }
-        debugPrint('Wheel distance: ${monitor.wheelDistance}');
       }
 
       // Connect Base (from Base)
@@ -350,6 +373,14 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           final ui = _uiForBase(base.docId);
           if (ui.tabController != null && baseMonitors.isNotEmpty) {
             _sendWifiCreds(baseMonitors[ui.tabController!.index]);
+          }
+        }
+
+        if (_calibrateRequest) {
+          _calibrateRequest = false;
+          final ui = _uiForBase(base.docId);
+          if (ui.tabController != null && baseMonitors.isNotEmpty) {
+            _calibrateIot(baseMonitors[ui.tabController!.index]);
           }
         }
 
@@ -416,24 +447,161 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   }
 
   // Methods
+  double? _parseLiveNum(dynamic raw) {
+    if (raw is num) return raw.toDouble();
+    if (raw is String) return double.tryParse(raw.trim());
+    return null;
+  }
+
+  int? _parseLiveInt(dynamic raw) {
+    if (raw is num) return raw.toInt();
+    if (raw is String) return int.tryParse(raw.trim());
+    return null;
+  }
+
+  int? _parseCalibrationTicks(dynamic payload) {
+    if (payload is! Map) return null;
+    final map = Map<String, dynamic>.from(payload);
+    for (final key in const [mqttJsonWheelTicks, 'wheel_ticks']) {
+      final raw = map[key];
+      if (raw is num) return raw.toInt();
+      if (raw is String) {
+        final parsed = int.tryParse(raw.trim());
+        if (parsed != null) return parsed;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _applyCalibrationResult(
+    String baseDocId,
+    MonitorSettings monitor,
+    int ticks,
+  ) async {
+    final calDist = monitor.calibrationDistance;
+    if (calDist <= 0) {
+      MyGlobalMessage.show(
+        'Calibration',
+        'Enter the measured distance (meters) before calibrating.',
+        MyMessageType.warning,
+      );
+      return;
+    }
+    if (ticks <= 0) {
+      MyGlobalMessage.show(
+        'Calibration',
+        'Wheel reported zero ticks.\n'
+            'On the wheel: finish calibration (START → roll distance → STOP, '
+            'until "Calibrate END"), then press Calibrate in the app.\n'
+            'If this persists, update the wheel firmware.',
+        MyMessageType.warning,
+      );
+      return;
+    }
+
+    final newTicksPerM = ticks / calDist;
+    monitor.ticks = ticks;
+    monitor.ticksPerM = newTicksPerM;
+
+    await context.read<MonitorSettingsService>().save(monitor);
+    if (!mounted) return;
+
+    setState(() {});
+    final baseMonitors =
+        context.read<MonitorSettingsService>().getMonitorsForBase(baseDocId);
+    _updateWheelDistance(
+      baseDocId,
+      baseMonitors,
+      distance: calDist.toDouble(),
+      ticks: ticks,
+      monitorDeviceId: monitor.monitorId,
+    );
+    final syncedToWheel =
+        _pushMonitorSettingsToIot(monitor, monitor.monitorId);
+    final ticksPerMText = newTicksPerM == newTicksPerM.roundToDouble()
+        ? '${newTicksPerM.toInt()}'
+        : newTicksPerM.toStringAsFixed(2);
+    var successBody = 'Distance: $calDist\n'
+        'Ticks: $ticks\n'
+        'Ticks/m: $ticksPerMText';
+    if (!syncedToWheel) {
+      successBody +=
+          '\n\nCould not sync ticks/m to the wheel.\n'
+          'Press Connect on the monitor to apply.';
+    }
+    MyGlobalMessage.show(
+      'Calibration Successful',
+      successBody,
+      MyMessageType.success,
+    );
+  }
+
   Future<bool> _calibrateIot(MonitorSettings monitor) async {
     final settingService = context.read<SettingsService>();
-    if(settingService.isBaseStationConnected == false){
-      MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
+    if (settingService.isBaseStationConnected == false) {
+      MyGlobalMessage.show(
+        'Connection',
+        'Please connect to a Base Station first',
+        MyMessageType.info,
+      );
+      return false;
+    }
+
+    if (monitor.calibrationDistance <= 0) {
+      MyGlobalMessage.show(
+        'Calibration',
+        'Enter the measured distance in meters, then press Calibrate.',
+        MyMessageType.info,
+      );
+      return false;
+    }
+
+    if (monitor.monitorId.isEmpty || monitor.monitorId == 'none') {
+      MyGlobalMessage.show(
+        'Monitor Not Found',
+        "No monitor ID found. Please press 'Pair' first.",
+        MyMessageType.info,
+      );
       return false;
     }
 
     final payload = {
       mqttJsonIotType: monitor.monitorType,
       mqttJsonTicksPerM: monitor.ticksPerM,
+      mqttJsonCalibrationDistance: monitor.calibrationDistance,
     };
 
-    if(MqttService().isConnected){
-      _mqttStartListener();
-      _pendingMonitorCmd = mqttCmdCalibrate;
-      _startTimeout(8);
-      MqttService().tx(monitor.monitorId, mqttCmdCalibrate, payload ,mqttTopicFromAndroid);
+    if (!MqttService().isBrokerConnected) {
+      MyGlobalMessage.show(
+        'Connection',
+        MqttService().lastError ??
+            'MQTT is not connected. Connect to the base station and try again.',
+        MyMessageType.warning,
+      );
+      return false;
     }
+
+    _mqttStartListener();
+    _pendingMonitorCmd = mqttCmdCalibrate;
+    _startTimeout(15);
+    final sent = MqttService().tx(
+      monitor.monitorId,
+      mqttCmdCalibrate,
+      payload,
+      mqttTopicFromAndroid,
+    );
+    if (!sent) {
+      _timeout?.cancel();
+      _pendingMonitorCmd = null;
+      MyGlobalMessage.show(
+        'Calibration',
+        MqttService().lastError ?? 'Could not send calibration request.',
+        MyMessageType.warning,
+      );
+      return false;
+    }
+
+    MyGlobalSnackBar.show('Calibration request sent — waiting for wheel…');
     return true;
   }
   Future<bool> _pairMonitor() async {
@@ -523,27 +691,40 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     return true;
   }
 
-  void _replyFoundMonitor(MonitorSettings monitor, String toDeviceId) {
-    if (!MqttService().isConnected) return;
-    if (toDeviceId.isEmpty || toDeviceId == 'none') return;
+  bool _pushMonitorSettingsToIot(
+    MonitorSettings monitor,
+    String toDeviceId,
+  ) {
+    if (!MqttService().isBrokerConnected) return false;
+    final deviceId = toDeviceId.trim();
+    if (deviceId.isEmpty || deviceId == 'none') return false;
 
-    final userId = context.read<UserDataService>().userdata?.userID;
-    if (userId == null) return;
-
-    final payload = {
-      mqttJsonUserDocId: userId,
-      mqttJsonMonitorDocId: monitor.monDocId,
-      mqttJsonIotName: monitor.monitorName,
+    final payload = <String, dynamic>{
       mqttJsonIotType: monitor.monitorType,
       mqttJsonTicksPerM: monitor.ticksPerM,
     };
 
-    MqttService().tx(
-      toDeviceId,
+    if (monitor.monDocId.isNotEmpty) {
+      final userId = context.read<UserDataService>().userdata?.userID ??
+          FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null || userId.isEmpty) return false;
+
+      payload[mqttJsonUserDocId] = userId;
+      payload[mqttJsonMonitorDocId] = monitor.monDocId;
+      payload[mqttJsonBaseStationDocId] = monitor.baseStationDocId;
+      payload[mqttJsonIotName] = monitor.monitorName;
+    }
+
+    return MqttService().tx(
+      deviceId,
       mqttCmdFoundMonitor,
       payload,
       mqttTopicFromAndroid,
     );
+  }
+
+  void _replyFoundMonitor(MonitorSettings monitor, String toDeviceId) {
+    _pushMonitorSettingsToIot(monitor, toDeviceId);
   }
   Future<bool> _connectIot(MonitorSettings monitor)async{
     final settingService = context.read<SettingsService>();
@@ -557,12 +738,25 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       mqttJsonTicksPerM: monitor.ticksPerM,
     };
 
-    if(MqttService().isConnected){
-      _mqttStartListener();
-      _pendingMonitorCmd = mqttCmdConnectMonitor;
-      _startTimeout(8);
-      MqttService().tx(monitor.monitorId, mqttCmdConnectMonitor, payload ,mqttTopicFromAndroid);
+    if (!MqttService().isBrokerConnected) {
+      MyGlobalMessage.show(
+        'Connection',
+        MqttService().lastError ??
+            'MQTT is not connected. Connect to the base station and try again.',
+        MyMessageType.warning,
+      );
+      return false;
     }
+
+    _mqttStartListener();
+    _pendingMonitorCmd = mqttCmdConnectMonitor;
+    _startTimeout(8);
+    MqttService().tx(
+      monitor.monitorId,
+      mqttCmdConnectMonitor,
+      payload,
+      mqttTopicFromAndroid,
+    );
     return true;
   }
   Future<bool> _disconnectIot(MonitorSettings monitor)async{
@@ -832,16 +1026,34 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       });
     });
   }
-  void _updateWheelDistance(String baseDocId, double distance, int ticks) {
+  void _updateWheelDistance(
+    String baseDocId,
+    List<MonitorSettings> monitors, {
+    double? distance,
+    int? ticks,
+    String? monitorDeviceId,
+  }) {
+    if (distance == null && ticks == null) return;
+
     final ui = _uiForBase(baseDocId);
-    if (ui.tabController == null) return;
-    if (ui.tabController!.index < 0 ||
-        ui.tabController!.index >= ui.tabKeys.length) {
+    var index = ui.tabController?.index ?? 0;
+    if (monitorDeviceId != null && monitorDeviceId.isNotEmpty) {
+      final match = monitors.indexWhere((m) => m.monitorId == monitorDeviceId);
+      if (match >= 0) index = match;
+    }
+
+    if (index < 0 ||
+        index >= ui.tabKeys.length ||
+        index >= monitors.length) {
       return;
     }
 
-    ui.tabKeys[ui.tabController!.index].currentState?.updateDistance(distance);
-    ui.tabKeys[ui.tabController!.index].currentState?.updateTicks(ticks);
+    final monitor = monitors[index];
+    if (distance != null) monitor.wheelDistance = distance;
+    if (ticks != null) monitor.ticks = ticks;
+
+    final state = ui.tabKeys[index].currentState;
+    if (distance != null) state?.updateDistance(distance);
   }
 
   Widget _buildBody(
@@ -929,14 +1141,6 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
               if (!mounted) return;
             },
 
-            // Ticks
-            onChangedTicks: (value){
-              setState(() {
-                monitor.ticks = int.parse(value);
-                //_saveMonitor(monitor);
-              });
-            },
-
             // Pair Monitor
             onTapPair: () async {
               if (await _mqttConnectBase(base)) {
@@ -956,18 +1160,13 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
             // Calibrate Monitor
             onTapCalibrate: () async {
-              if (monitor.monitorId.isEmpty) {
-                MyGlobalMessage.show(
-                  "Monitor Not Found",
-                  "No monitor ID found. Please press 'Pair' button",
-                  MyMessageType.info,
-                );
+              if (!context.read<SettingsService>().isBaseStationConnected ||
+                  !MqttService().isBrokerConnected) {
+                _calibrateRequest = true;
+                if (!await _mqttConnectBase(base)) {
+                  _calibrateRequest = false;
+                }
                 return;
-              }
-
-              if (!context.read<SettingsService>().isBaseStationConnected) {
-                _connectRequest = true;
-                if (!await _mqttConnectBase(base)) return;
               }
 
               await _calibrateIot(monitor);

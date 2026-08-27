@@ -348,15 +348,11 @@ class MqttService {
   void _subscribe(String topic) {
     if (client == null) return;
 
-    // Exact shared topic (mqtt/to/android).
-    _subscribeOne(topic, MqttQos.atLeastOnce);
-    // Device-directed replies (mqtt/to/android/android_xxxxxxxx).
-    if (myDeviceId.isNotEmpty) {
-      _subscribeOne('$topic/$myDeviceId', MqttQos.atLeastOnce);
-    }
-    // Catch any extra reply path the base uses under this prefix.
+    // Single wildcard sub — covers mqtt/to/android and mqtt/to/android/{deviceId}.
+    // Do not also subscribe to those paths separately; overlapping subs deliver
+    // the same publish twice and duplicate UI handlers (e.g. two OK dialogs).
     _subscribeOne('$topic/#', MqttQos.atLeastOnce);
-    printDebugMsg('MQTT listening on $topic (+ device + wildcard)');
+    printDebugMsg('MQTT listening on $topic/#');
   }
 
   void _subscribeOne(String topic, MqttQos qos) {
