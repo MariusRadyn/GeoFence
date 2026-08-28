@@ -369,6 +369,7 @@ const mqttCmdDiscover = "#DISCOVER";
 const mqttCmdFoundMonitor = "#FOUND_MONITOR";
 const mqttCmdConnectMonitor = "#CONNECT_MONITOR";
 const mqttCmdCalibrate = "#CALIBRATE";
+const mqttCmdSyncSettings = "#SYNC_SETTINGS";
 const mqttCmdDisconnectMonitor = "#DISCONNECT_MONITOR";
 const mqttCmdDisconnect = "#DISCONNECT";
 const mqttCmdAck = "#ACK";
@@ -3049,6 +3050,7 @@ class MonitorSettings {
   bool isConnectedToIot;
   bool isConnectingToIot;
   double wheelDistance;
+  int wheelTicks;
   int calibrationDistance;
   bool wheelSignal;
   String monDocId;
@@ -3077,6 +3079,7 @@ class MonitorSettings {
     this.isConnectedToIot = false,
     this.isConnectingToIot = false,
     this.wheelDistance = 0,
+    this.wheelTicks = 0,
     this.wheelSignal = false,
     this.monDocId = "",
     this.userDocId = "",
@@ -3292,11 +3295,33 @@ class MonitorSettingsService extends ChangeNotifier {
     String baseId,
     QuerySnapshot<Map<String, dynamic>> snapshot,
   ) {
+    // Preserve local-only runtime state across Firestore rebuilds.
+    final previousByDocId = <String, MonitorSettings>{};
+    final previousByDeviceId = <String, MonitorSettings>{};
+    for (final m in _monitors) {
+      if (m.baseStationDocId != baseId) continue;
+      if (m.monDocId.isNotEmpty) previousByDocId[m.monDocId] = m;
+      final deviceId = m.monitorId.trim();
+      if (deviceId.isNotEmpty && deviceId != 'none') {
+        previousByDeviceId[deviceId] = m;
+      }
+    }
+
     _monitors.removeWhere((m) => m.baseStationDocId == baseId);
     final list = snapshot.docs
         .map((doc) {
           final monitor = MonitorSettings.fromMap(doc.data(), doc.id, uid);
           monitor.baseStationDocId = baseId;
+
+          final prev = previousByDocId[monitor.monDocId] ??
+              previousByDeviceId[monitor.monitorId.trim()];
+          if (prev != null) {
+            monitor.isConnectedToIot = prev.isConnectedToIot;
+            monitor.isConnectingToIot = prev.isConnectingToIot;
+            monitor.wheelDistance = prev.wheelDistance;
+            monitor.wheelTicks = prev.wheelTicks;
+            monitor.wheelSignal = prev.wheelSignal;
+          }
           return monitor;
         })
         .where((m) => !m.markedToDelete)
@@ -3385,7 +3410,17 @@ class MonitorSettingsService extends ChangeNotifier {
     notifyListeners();
   }
   void setConnectingToIot(String id, bool value) {
-    final mon = _monitors.firstWhere((m) => m.monitorId == id);
+    MonitorSettings? mon;
+    for (final m in _monitors) {
+      if (m.monitorId == id) {
+        mon = m;
+        break;
+      }
+    }
+    if (mon == null && _monitors.isNotEmpty) {
+      mon = _selected;
+    }
+    if (mon == null) return;
     mon.isConnectingToIot = value;
     notifyListeners();
   }

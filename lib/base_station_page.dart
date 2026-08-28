@@ -947,7 +947,10 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                                               : Colors.grey ,
                                         ),
                                         SizedBox(width: 10),
-                                        Text("Connect",
+                                        Text(
+                                          currentBase.isConnected == true
+                                              ? "Disconnect"
+                                              : "Connect",
                                           style: TextStyle(color: Colors.white),
                                         )
                                       ], )

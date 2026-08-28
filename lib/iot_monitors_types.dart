@@ -301,6 +301,7 @@ class IotDistanceWheelType extends StatefulWidget {
   final Function() onTapPair;
   final Function() onTapSendWifi;
   final Function() onTapFind;
+  final Function() onTapSyncTicksPerM;
   final Function() onTapConnect;
   final Function() onTapCalibrate;
 
@@ -313,6 +314,7 @@ class IotDistanceWheelType extends StatefulWidget {
     required this.onTapPair,
     required this.onTapSendWifi,
     required this.onTapFind,
+    required this.onTapSyncTicksPerM,
     required this.onTapConnect,
     required this.onTapCalibrate,
   });
@@ -326,6 +328,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   late final TextEditingController _controllerId;
   late final TextEditingController _controllerTicksPerM;
   late final TextEditingController _controllerDistance;
+  late final TextEditingController _controllerWheelTicks;
   late final TextEditingController _controllerCalDistance;
   late FocusNode _focusNodeName;
   late FocusNode _focusNodeID;
@@ -334,6 +337,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   bool _pairButtonPressed = false;
   bool _wifiButtonPressed = false;
   bool _findButtonPressed = false;
+  bool _syncButtonPressed = false;
   bool _calibrateButtonPressed = false;
   bool _connectButtonPressed = false;
   
@@ -348,6 +352,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
      _controllerName = TextEditingController(text: widget.monitorData.monitorName);
      _controllerTicksPerM = TextEditingController(text: widget.monitorData.ticksPerM.toString());
      _controllerDistance = TextEditingController(text: widget.monitorData.wheelDistance.toString());
+     _controllerWheelTicks = TextEditingController(text: widget.monitorData.wheelTicks.toString());
      _controllerCalDistance = TextEditingController(text: widget.monitorData.calibrationDistance.toString());
 
     _focusNodeName = FocusNode();
@@ -382,6 +387,8 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     settingService = context.watch<SettingsService>();
+    // Rebuild Connect/Disconnect label when live IoT connection changes.
+    context.watch<MonitorSettingsService>();
   }
 
   @override
@@ -410,12 +417,17 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
         widget.monitorData.wheelDistance.toString()) {
       _controllerDistance.text = widget.monitorData.wheelDistance.toString();
     }
+    if (_controllerWheelTicks.text !=
+        widget.monitorData.wheelTicks.toString()) {
+      _controllerWheelTicks.text = widget.monitorData.wheelTicks.toString();
+    }
   }
 
   @override
   void dispose() {
     _controllerId.dispose();
     _controllerDistance.dispose();
+    _controllerWheelTicks.dispose();
     _controllerName.dispose();
     _controllerTicksPerM.dispose();
 
@@ -450,6 +462,22 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
     setState(() {
       widget.monitorData.wheelDistance = value;
       _controllerDistance.text = value.toStringAsFixed(2);
+    });
+  }
+
+  void updateTicks(int value) {
+    if (!mounted) return;
+    setState(() {
+      widget.monitorData.wheelTicks = value;
+      _controllerWheelTicks.text = value.toString();
+    });
+  }
+
+  void updateLiveConnected(bool connected) {
+    if (!mounted) return;
+    setState(() {
+      widget.monitorData.isConnectedToIot = connected;
+      widget.monitorData.isConnectingToIot = false;
     });
   }
   void updateCalDistance(int value) {
@@ -666,19 +694,61 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
               
                   SizedBox(height: 5),
               
-                  // Ticks per M
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    child: MyTextFormField(
-                      focusNode: _focusNodeTicksPerM,
-                      backgroundColor: colorSetupTile,
-                      foregroundColor: Colors.white,
-                      controller: _controllerTicksPerM,
-                      hintText: "none",
-                      labelText: "Ticks per Meter",
-                      onFieldSubmitted: widget.onChangedTicksPerM,
-                      inputType: TextInputType.numberWithOptions(decimal: true),
-                    ),
+                  // Ticks per M + Sync
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 15),
+                          child: MyTextFormField(
+                            focusNode: _focusNodeTicksPerM,
+                            backgroundColor: colorSetupTile,
+                            foregroundColor: Colors.white,
+                            controller: _controllerTicksPerM,
+                            hintText: "none",
+                            labelText: "Ticks per Meter",
+                            onFieldSubmitted: widget.onChangedTicksPerM,
+                            inputType: TextInputType.numberWithOptions(decimal: true),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: animatedActionButton(
+                          pressed: _syncButtonPressed,
+                          onTap: () => _animateTap(
+                            () async {
+                              final value = _controllerTicksPerM.text.trim();
+                              if (value.isNotEmpty) {
+                                await widget.onChangedTicksPerM(value);
+                              }
+                              return widget.onTapSyncTicksPerM();
+                            },
+                            (v) => _syncButtonPressed = v,
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.sync,
+                                size: 30,
+                                color: settingService.isBaseStationConnected
+                                    ? Colors.lightBlueAccent
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                "Sync",
+                                style: TextStyle(
+                                  color: settingService.isBaseStationConnected
+                                      ? Colors.white
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
 
                   SizedBox(height: 20,)
@@ -875,7 +945,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                           fontsize: 14,
                           color: Colors.grey,
                           text:
-                            '1. Press \'CONNECT\' to start the live monitor\n'
+                            '1. Press Connect or Disconnect for live monitor\n'
                             '2. Move the wheel\n'
                         ),     
                       ],
@@ -888,20 +958,34 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                     child: MyTextHeader(text:"Live Data"),
                   ),
                  
-                  // Live Monitor Distance / Connect Button
+                  // Live Monitor Ticks / Distance / Connect Button
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      
-                      // Distance
                       Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: MyTextFormField(
-                            backgroundColor: colorCalibrateTile,
-                            foregroundColor: Colors.white,
-                            controller: _controllerDistance,
-                            labelText: "Distance",
-                          ),
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                              child: MyTextFormField(
+                                backgroundColor: colorCalibrateTile,
+                                foregroundColor: Colors.white,
+                                controller: _controllerWheelTicks,
+                                labelText: "Ticks",
+                                isReadOnly: true,
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                              child: MyTextFormField(
+                                backgroundColor: colorCalibrateTile,
+                                foregroundColor: Colors.white,
+                                controller: _controllerDistance,
+                                labelText: "Distance",
+                                isReadOnly: true,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
 
@@ -927,7 +1011,9 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                               ),
                               const SizedBox(height: 10),
                               Text(
-                                "Connect",
+                                widget.monitorData.isConnectedToIot
+                                    ? "Disconnect"
+                                    : "Connect",
                                 style: TextStyle(
                                   color: settingService.isBaseStationConnected
                                       ? Colors.white

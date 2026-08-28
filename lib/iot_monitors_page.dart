@@ -50,6 +50,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   bool _findRequest = false;
   bool _wifiRequest = false;
   bool _calibrateRequest = false;
+  bool _syncRequest = false;
   bool _swapDialogOpen = false;
   String? _pendingMonitorCmd;
   List<BluetoothDevice> lstPairedDevices = [
@@ -135,7 +136,10 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
                 : pending == mqttCmdCalibrate
                     ? 'No reply from wheel for calibration.\n'
                         'Check Monitor ID, Wi‑Fi/MQTT, and that calibration mode was completed on the wheel.'
-                    : 'No Reply From Base Station',
+                    : pending == mqttCmdSyncSettings
+                        ? 'No reply from wheel for Sync.\n'
+                            'Check Monitor ID and that the IoT is online on Wi‑Fi/MQTT.'
+                        : 'No Reply From Base Station',
         MyMessageType.warning,
       );
     });
@@ -263,7 +267,22 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         _timeout?.cancel();
         _pendingMonitorCmd = null;
         final monitor = currentMonitor();
+        monitor.wheelDistance = 0;
+        monitor.wheelTicks = 0;
+        monitorService.setConnectingToIot(monitor.monitorId, false);
         monitorService.setConnectedToIot(monitor.monitorId, true);
+        _updateLiveConnected(
+          currentBase.docId,
+          baseMonitors,
+          connected: true,
+          monitorDeviceId: monitor.monitorId,
+        );
+        final ui = _uiForBase(currentBase.docId);
+        final index = ui.tabController?.index ?? 0;
+        if (index >= 0 && index < ui.tabKeys.length) {
+          ui.tabKeys[index].currentState?.updateDistance(0);
+          ui.tabKeys[index].currentState?.updateTicks(0);
+        }
         debugPrint('IOT Connected');
       }
 
@@ -275,6 +294,12 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         _pendingMonitorCmd = null;
         final monitor = currentMonitor();
         monitorService.setConnectedToIot(monitor.monitorId, false);
+        _updateLiveConnected(
+          currentBase.docId,
+          baseMonitors,
+          connected: false,
+          monitorDeviceId: monitor.monitorId,
+        );
         debugPrint('IOT Disconnected');
       }
 
@@ -320,6 +345,27 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         debugPrint('IOT calibration reply: $payload');
       }
 
+      // Sync settings ack from wheel (#SYNC_SETTINGS)
+      if (cmd == mqttCmdSyncSettings) {
+        _timeout?.cancel();
+        _pendingMonitorCmd = null;
+        final payload = jsonData[mqttJsonPayload];
+        String ticksText = '';
+        if (payload is Map) {
+          final map = Map<String, dynamic>.from(payload);
+          final ticks = map[mqttJsonTicksPerM];
+          if (ticks != null) {
+            ticksText = '\nTicks/m on wheel: $ticks';
+          }
+        }
+        MyGlobalMessage.show(
+          'Sync',
+          'Settings received by wheel.$ticksText',
+          MyMessageType.success,
+        );
+        debugPrint('IOT SYNC_SETTINGS ack: $payload');
+      }
+
       // IOT Monitor Live Data
       if (cmd == mqttCmdLiveMonitorData) {
         final payload = jsonData[mqttJsonPayload];
@@ -328,6 +374,18 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         final map = Map<String, dynamic>.from(payload);
         final dist = _parseLiveNum(map[mqttJsonWheelDistance]);
         final ticks = _parseLiveInt(map[mqttJsonWheelTicks]);
+
+        final liveMonitor = currentMonitor();
+        if (!liveMonitor.isConnectedToIot) {
+          monitorService.setConnectingToIot(liveMonitor.monitorId, false);
+          monitorService.setConnectedToIot(liveMonitor.monitorId, true);
+          _updateLiveConnected(
+            currentBase.docId,
+            baseMonitors,
+            connected: true,
+            monitorDeviceId: liveMonitor.monitorId,
+          );
+        }
 
         if (dist != null || ticks != null) {
           _updateWheelDistance(
@@ -381,6 +439,14 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           final ui = _uiForBase(base.docId);
           if (ui.tabController != null && baseMonitors.isNotEmpty) {
             _calibrateIot(baseMonitors[ui.tabController!.index]);
+          }
+        }
+
+        if (_syncRequest) {
+          _syncRequest = false;
+          final ui = _uiForBase(base.docId);
+          if (ui.tabController != null && baseMonitors.isNotEmpty) {
+            _syncTicksPerMToIot(baseMonitors[ui.tabController!.index]);
           }
         }
 
@@ -726,6 +792,62 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   void _replyFoundMonitor(MonitorSettings monitor, String toDeviceId) {
     _pushMonitorSettingsToIot(monitor, toDeviceId);
   }
+
+  Future<void> _syncTicksPerMToIot(MonitorSettings monitor) async {
+    final id = monitor.monitorId.trim();
+    if (id.isEmpty || id == 'none') {
+      MyGlobalMessage.show(
+        'Monitor Not Found',
+        'No monitor ID found. Please press Pair first.',
+        MyMessageType.info,
+      );
+      return;
+    }
+
+    final settingService = context.read<SettingsService>();
+    if (!settingService.isBaseStationConnected ||
+        !MqttService().isBrokerConnected) {
+      _syncRequest = true;
+      final base = _currentBase(context.read<BaseStationService>());
+      if (base == null) {
+        _syncRequest = false;
+        return;
+      }
+      final ok = await _mqttConnectBase(base);
+      if (!ok) {
+        _syncRequest = false;
+      }
+      // CONNECT_BASE ack will call _syncTicksPerMToIot again via _syncRequest.
+      return;
+    }
+
+    final payload = <String, dynamic>{
+      mqttJsonIotType: monitor.monitorType,
+      mqttJsonTicksPerM: monitor.ticksPerM,
+    };
+
+    _mqttStartListener();
+    _pendingMonitorCmd = mqttCmdSyncSettings;
+    _startTimeout(10);
+    final sent = MqttService().tx(
+      id,
+      mqttCmdSyncSettings,
+      payload,
+      mqttTopicFromAndroid,
+    );
+    if (!sent) {
+      _timeout?.cancel();
+      _pendingMonitorCmd = null;
+      MyGlobalMessage.show(
+        'Sync',
+        MqttService().lastError ??
+            'Could not sync ticks/m to the wheel.',
+        MyMessageType.warning,
+      );
+      return;
+    }
+    MyGlobalSnackBar.show('Syncing ticks/m to wheel…');
+  }
   Future<bool> _connectIot(MonitorSettings monitor)async{
     final settingService = context.read<SettingsService>();
     if(settingService.isBaseStationConnected == false){
@@ -751,13 +873,36 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     _mqttStartListener();
     _pendingMonitorCmd = mqttCmdConnectMonitor;
     _startTimeout(8);
-    MqttService().tx(
+    final sent = MqttService().tx(
       monitor.monitorId,
       mqttCmdConnectMonitor,
       payload,
       mqttTopicFromAndroid,
     );
-    return true;
+    if (sent) {
+      // Optimistic UI — Firestore snapshots were wiping this flag before.
+      context.read<MonitorSettingsService>().setConnectingToIot(
+            monitor.monitorId,
+            false,
+          );
+      context.read<MonitorSettingsService>().setConnectedToIot(
+            monitor.monitorId,
+            true,
+          );
+      final base = _currentBase(context.read<BaseStationService>());
+      if (base != null) {
+        final monitors = context
+            .read<MonitorSettingsService>()
+            .getMonitorsForBase(base.docId);
+        _updateLiveConnected(
+          base.docId,
+          monitors,
+          connected: true,
+          monitorDeviceId: monitor.monitorId,
+        );
+      }
+    }
+    return sent;
   }
   Future<bool> _disconnectIot(MonitorSettings monitor)async{
     final settingService = context.read<SettingsService>();
@@ -770,7 +915,31 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       _mqttStartListener();
       _pendingMonitorCmd = mqttCmdDisconnectMonitor;
       _startTimeout(8);
-      MqttService().tx(monitor.monitorId, mqttCmdDisconnectMonitor, '' ,mqttTopicFromAndroid);
+      final sent = MqttService().tx(
+        monitor.monitorId,
+        mqttCmdDisconnectMonitor,
+        '',
+        mqttTopicFromAndroid,
+      );
+      if (sent) {
+        context.read<MonitorSettingsService>().setConnectedToIot(
+              monitor.monitorId,
+              false,
+            );
+        final base = _currentBase(context.read<BaseStationService>());
+        if (base != null) {
+          final monitors = context
+              .read<MonitorSettingsService>()
+              .getMonitorsForBase(base.docId);
+          _updateLiveConnected(
+            base.docId,
+            monitors,
+            connected: false,
+            monitorDeviceId: monitor.monitorId,
+          );
+        }
+      }
+      return sent;
     }
     return true;
   }
@@ -1050,10 +1219,36 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
     final monitor = monitors[index];
     if (distance != null) monitor.wheelDistance = distance;
-    if (ticks != null) monitor.ticks = ticks;
+    if (ticks != null) monitor.wheelTicks = ticks;
 
     final state = ui.tabKeys[index].currentState;
     if (distance != null) state?.updateDistance(distance);
+    if (ticks != null) state?.updateTicks(ticks);
+  }
+
+  void _updateLiveConnected(
+    String baseDocId,
+    List<MonitorSettings> monitors, {
+    required bool connected,
+    String? monitorDeviceId,
+  }) {
+    final ui = _uiForBase(baseDocId);
+    var index = ui.tabController?.index ?? 0;
+    if (monitorDeviceId != null && monitorDeviceId.isNotEmpty) {
+      final match = monitors.indexWhere((m) => m.monitorId == monitorDeviceId);
+      if (match >= 0) index = match;
+    }
+
+    if (index < 0 ||
+        index >= ui.tabKeys.length ||
+        index >= monitors.length) {
+      return;
+    }
+
+    final monitor = monitors[index];
+    monitor.isConnectedToIot = connected;
+    monitor.isConnectingToIot = false;
+    ui.tabKeys[index].currentState?.updateLiveConnected(connected);
   }
 
   Widget _buildBody(
@@ -1128,8 +1323,16 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
             // Ticks per Meter
             onChangedTicksPerM: (value) async {
+              final newTicksPerM = double.tryParse(value.trim());
+              if (newTicksPerM == null) {
+                MyGlobalMessage.show(
+                  'Ticks per Meter',
+                  'Enter a valid number.',
+                  MyMessageType.warning,
+                );
+                return;
+              }
               final double oldTicksPerM = monitor.ticksPerM;
-              final double newTicksPerM = double.parse(value);
               if (oldTicksPerM == newTicksPerM) return;
 
               setState(() {
@@ -1158,6 +1361,11 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
               await _findIot(monitor);
             },
 
+            // Sync ticks/m to wheel
+            onTapSyncTicksPerM: () async {
+              await _syncTicksPerMToIot(monitor);
+            },
+
             // Calibrate Monitor
             onTapCalibrate: () async {
               if (!context.read<SettingsService>().isBaseStationConnected ||
@@ -1174,7 +1382,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
             // Connect Monitor
             onTapConnect: () async {
-              if (monitor.monitorId.isEmpty) {
+              if (monitor.monitorId.isEmpty || monitor.monitorId == 'none') {
                 MyGlobalMessage.show(
                   "Monitor Not Found",
                   "No monitor ID found. Please press 'Pair' button",
@@ -1184,15 +1392,14 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
               }
 
               final ui = _uiForBase(base.docId);
+              final monitorService = context.read<MonitorSettingsService>();
               if (context.read<SettingsService>().isBaseStationConnected) {
                 if (monitor.isConnectedToIot) {
-                  monitor.isConnectedToIot = false;
-                  _disconnectIot(monitor);
+                  await _disconnectIot(monitor);
                 } else {
-                  monitor.isConnectedToIot = false;
-                  monitor.isConnectingToIot = true;
+                  monitorService.setConnectingToIot(monitor.monitorId, true);
                   ui.hasScrolled = false;
-                  _connectIot(monitor);
+                  await _connectIot(monitor);
                 }
               } else {
                 _connectRequest = true;
@@ -1222,6 +1429,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       _connectRequest = false;
       _findRequest = false;
       _wifiRequest = false;
+      _syncRequest = false;
       _pendingMonitorCmd = null;
       _timeout?.cancel();
     });
