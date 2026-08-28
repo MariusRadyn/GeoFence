@@ -399,17 +399,26 @@ class _ShopPageState extends State<ShopPage> {
   int _shopGridCrossAxisCount(BuildContext context) {
     if (!kIsWeb) return 2;
     final width = MediaQuery.sizeOf(context).width;
-    if (width >= 900) return 4;
-    if (width >= 600) return 3;
+    if (width >= 1400) return 8;
+    if (width >= 1200) return 6;
+    if (width >= 900) return 5;
+    if (width >= 700) return 4;
+    if (width >= 500) return 3;
     return 2;
   }
 
   double _shopGridChildAspectRatio(BuildContext context) {
-    // Lower ratio = taller tiles (text half needs room for button + details).
+    // Lower ratio = taller tiles (square image + text/button below).
     if (!kIsWeb) return 0.55;
     switch (_shopGridCrossAxisCount(context)) {
+      case 8:
+        return 0.58;
+      case 6:
+        return 0.62;
+      case 5:
+        return 0.64;
       case 4:
-        return 0.70;
+        return 0.66;
       case 3:
         return 0.66;
       default:
@@ -565,6 +574,7 @@ class _ShopPageState extends State<ShopPage> {
                                           child: ShopProductImage(
                                             imageUrl:
                                                 item.product.primaryImageUrl,
+                                            side: 72,
                                           ),
                                         ),
                                       ),
@@ -1193,19 +1203,21 @@ class _ProductCard extends StatelessWidget {
             children: [
               AspectRatio(
                 aspectRatio: 1,
-                child: ClipRect(
+                child: ClipRRect(
+                  // Keep image area strictly square; crop overflow.
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
+                      ColoredBox(
+                        color: (product.primaryImageUrl != null &&
+                                product.primaryImageUrl!.trim().isNotEmpty)
+                            ? Colors.white.withValues(alpha: 0.94)
+                            : colorAppBar,
+                        child: const SizedBox.expand(),
+                      ),
                       Positioned.fill(
-                        child: ColoredBox(
-                          color: (product.primaryImageUrl != null &&
-                                  product.primaryImageUrl!.trim().isNotEmpty)
-                              ? Colors.white.withValues(alpha: 0.94)
-                              : colorAppBar,
-                          child: ShopProductImage(
-                            imageUrl: product.primaryImageUrl,
-                          ),
+                        child: ShopProductImage(
+                          imageUrl: product.primaryImageUrl,
                         ),
                       ),
                       if (!product.isReady)

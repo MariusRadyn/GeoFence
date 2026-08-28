@@ -185,77 +185,115 @@ class _ShopProductDetailPageState extends State<ShopProductDetailPage> {
     });
   }
 
-  Widget _buildMainImage(String? url) {
+  Widget _buildMainImage(String? url, {double? side}) {
+    final image = ColoredBox(
+      color: (url != null && url.isNotEmpty)
+          ? Colors.white.withValues(alpha: 0.95)
+          : colorAppBar,
+      child: ShopProductImage(
+        imageUrl: url,
+        side: side,
+      ),
+    );
+
+    if (side != null) {
+      return SizedBox(
+        width: side,
+        height: side,
+        child: ClipRect(child: image),
+      );
+    }
+
     return AspectRatio(
       aspectRatio: 1,
-      child: ColoredBox(
-        color: (url != null && url.isNotEmpty)
-            ? Colors.white.withValues(alpha: 0.95)
-            : colorAppBar,
-        child: ShopProductImage(imageUrl: url),
-      ),
+      child: ClipRect(child: image),
     );
   }
 
   Widget _buildGallery() {
     final images = _images;
-    if (images.isEmpty) {
-      return _buildMainImage(null);
-    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final mainSide = math.min(constraints.maxWidth - 80, 420.0);
+        final hasThumbs = images.length > 1;
+        final thumbCol = hasThumbs ? 80.0 : 0.0;
+        final available = constraints.maxWidth - thumbCol;
+        // Keep main photo square and capped — never stretch to full screen width.
+        final mainSide = math
+            .min(available, math.min(constraints.maxWidth, 420.0))
+            .clamp(120.0, 420.0);
+
+        if (images.isEmpty) {
+          return Align(
+            alignment: Alignment.center,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: _buildMainImage(null, side: mainSide),
+            ),
+          );
+        }
+
         return SizedBox(
           height: mainSide,
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 72,
-                child: ListView.separated(
-                  padding: const EdgeInsets.only(right: 8),
-                  itemCount: images.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) {
-                    final selected = i == _selectedImage;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() => _selectedImage = i);
-                        _pageController.animateToPage(
-                          i,
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOut,
-                        );
-                      },
-                      child: Container(
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.95),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: selected ? colorOrange : Colors.white24,
-                            width: selected ? 2 : 1,
+              if (hasThumbs)
+                SizedBox(
+                  width: 72,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.only(right: 8),
+                    itemCount: images.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) {
+                      final selected = i == _selectedImage;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() => _selectedImage = i);
+                          _pageController.animateToPage(
+                            i,
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOut,
+                          );
+                        },
+                        child: Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.95),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: selected ? colorOrange : Colors.white24,
+                              width: selected ? 2 : 1,
+                            ),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: ShopProductImage(
+                            imageUrl: images[i],
+                            side: 64,
                           ),
                         ),
-                        clipBehavior: Clip.antiAlias,
-                        child: ShopProductImage(
-                          imageUrl: images[i],
-                          side: 64,
-                        ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
               Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: PageView.builder(
-                    controller: _pageController,
-                    itemCount: images.length,
-                    onPageChanged: (i) => setState(() => _selectedImage = i),
-                    itemBuilder: (_, i) => _buildMainImage(images[i]),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: mainSide,
+                    height: mainSide,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: images.length,
+                        onPageChanged: (i) =>
+                            setState(() => _selectedImage = i),
+                        itemBuilder: (_, i) =>
+                            _buildMainImage(images[i], side: mainSide),
+                      ),
+                    ),
                   ),
                 ),
               ),
