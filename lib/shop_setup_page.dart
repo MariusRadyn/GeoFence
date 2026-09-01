@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,6 +13,15 @@ import 'package:geofence/shop_spell_check.dart';
 import 'package:geofence/utils.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+
+class _PendingImage {
+  _PendingImage({this.bytes});
+
+  Uint8List? bytes;
+  double progress = 0;
+  bool failed = false;
+  Future<void>? uploadFuture;
+}
 
 /// Developer-only catalog admin for Firestore `shop_products`.
 class ShopSetupPage extends StatelessWidget {
@@ -220,9 +230,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
 
   late String _docId;
   final List<String> _imageUrls = [];
-  final List<Uint8List> _pendingBytes = [];
-  /// 0.0–1.0 while uploading; empty when idle.
-  List<double> _uploadProgress = [];
+  final List<_PendingImage> _pending = [];
   bool _active = true;
   bool _freeDelivery = true;
   bool _isReady = false;
@@ -289,13 +297,32 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
       final files = await _picker.pickMultiImage(
         imageQuality: 92,
       );
-      if (files.isEmpty) return;
-      for (final file in files) {
-        final bytes = await file.readAsBytes();
-        final normalized = normalizeShopImageBytesCenterCrop(bytes);
-        if (normalized != null) _pendingBytes.add(normalized);
+      if (files.isEmpty || !mounted) return;
+
+      // Show one loading tile per selected file immediately.
+      final placeholders = List.generate(files.length, (_) => _PendingImage());
+      setState(() => _pending.addAll(placeholders));
+
+      for (var i = 0; i < files.length; i++) {
+        final item = placeholders[i];
+        try {
+          final bytes = await files[i].readAsBytes();
+          final normalized = normalizeShopImageBytesCenterCrop(bytes);
+          if (!mounted) return;
+          if (normalized == null) {
+            setState(() => _pending.remove(item));
+            continue;
+          }
+          setState(() => item.bytes = normalized);
+          unawaited(_uploadPendingItem(item));
+        } catch (e) {
+          if (!mounted) return;
+          setState(() {
+            item.failed = true;
+          });
+          MyGlobalSnackBar.show('Image error: $e');
+        }
       }
-      if (mounted) setState(() {});
     } catch (e) {
       MyGlobalSnackBar.show('Gallery error: $e');
     }
@@ -320,52 +347,67 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
           builder: (_) => ShopImageCropPage(imageBytes: bytes),
         ),
       );
-      if (cropped == null) return;
-      setState(() => _pendingBytes.add(cropped));
+      if (cropped == null || !mounted) return;
+      final item = _PendingImage(bytes: cropped);
+      setState(() => _pending.add(item));
+      unawaited(_uploadPendingItem(item));
     } catch (e) {
       MyGlobalSnackBar.show('Camera error: $e');
     }
   }
 
-  Future<List<String>> _uploadPendingImages() async {
-    if (_pendingBytes.isEmpty) return const [];
-
-    // Show a frame + progress ring for every pending photo immediately.
-    _uploadProgress = List<double>.filled(_pendingBytes.length, 0.0);
-    if (mounted) setState(() {});
-
-    final stamp = DateTime.now().millisecondsSinceEpoch;
-    final results = List<String?>.filled(_pendingBytes.length, null);
-
-    await Future.wait(List.generate(_pendingBytes.length, (i) async {
-      final bytes = _pendingBytes[i];
-      final name = 'Image_${stamp}_$i.jpg';
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child(collectionShopProducts)
-          .child(_docId)
-          .child(name);
-      final task = ref.putData(
-        bytes,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      task.snapshotEvents.listen((snap) {
-        if (!mounted || i >= _uploadProgress.length) return;
-        final total = snap.totalBytes;
-        final progress =
-            total > 0 ? snap.bytesTransferred / total : 0.0;
-        setState(() {
-          _uploadProgress[i] = progress.clamp(0.0, 1.0);
+  Future<void> _uploadPendingItem(_PendingImage item) {
+    final future = () async {
+      try {
+        if (item.bytes == null) return;
+        final stamp = DateTime.now().millisecondsSinceEpoch;
+        final name =
+            'Image_${stamp}_${identityHashCode(item)}.jpg';
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child(collectionShopProducts)
+            .child(_docId)
+            .child(name);
+        final task = ref.putData(
+          item.bytes!,
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+        task.snapshotEvents.listen((snap) {
+          if (!mounted || !_pending.contains(item)) return;
+          final total = snap.totalBytes;
+          final progress =
+              total > 0 ? snap.bytesTransferred / total : 0.0;
+          setState(() {
+            item.progress = progress.clamp(0.0, 1.0);
+          });
         });
-      });
-      await task;
-      results[i] = await ref.getDownloadURL();
-      if (mounted && i < _uploadProgress.length) {
-        setState(() => _uploadProgress[i] = 1.0);
+        await task;
+        final url = await ref.getDownloadURL();
+        if (!mounted) return;
+        setState(() {
+          _pending.remove(item);
+          _imageUrls.add(url);
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          item.failed = true;
+          item.progress = 0;
+        });
+        MyGlobalSnackBar.show('Upload failed: $e');
       }
-    }));
+    }();
+    item.uploadFuture = future;
+    return future;
+  }
 
-    return results.whereType<String>().toList();
+  Future<void> _waitForPendingUploads() async {
+    final futures = _pending
+        .map((p) => p.uploadFuture)
+        .whereType<Future<void>>()
+        .toList();
+    if (futures.isEmpty) return;
+    await Future.wait(futures);
   }
 
   Future<void> _save() async {
@@ -396,15 +438,19 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
     );
     if (!proceed) return;
 
-    setState(() {
-      _saving = true;
-      if (_pendingBytes.isNotEmpty) {
-        _uploadProgress = List<double>.filled(_pendingBytes.length, 0.0);
-      }
-    });
+    setState(() => _saving = true);
     try {
-      final newUrls = await _uploadPendingImages();
-      final allUrls = [..._imageUrls, ...newUrls];
+      // Finish any in-flight gallery/camera uploads before saving.
+      await _waitForPendingUploads();
+      if (!mounted) return;
+
+      final failed = _pending.where((p) => p.failed).toList();
+      if (failed.isNotEmpty) {
+        MyGlobalSnackBar.show(
+          '${failed.length} photo${failed.length == 1 ? '' : 's'} failed to upload. Remove or retry before saving.',
+        );
+        return;
+      }
 
       // Keep catalog [price] intact in Firestore. Discount is separate;
       // sale price is computed in the app when discount > 0.
@@ -414,8 +460,8 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
         description: description,
         price: price,
         discount: discount,
-        imageUrl: allUrls.isNotEmpty ? allUrls.first : null,
-        imageUrls: allUrls,
+        imageUrl: _imageUrls.isNotEmpty ? _imageUrls.first : null,
+        imageUrls: List<String>.from(_imageUrls),
         category: category,
         freeDelivery: _freeDelivery,
         active: _active,
@@ -442,12 +488,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
     } catch (e) {
       MyGlobalSnackBar.show('Save failed: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _uploadProgress = [];
-        });
-      }
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -493,7 +534,9 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
 
   @override
   Widget build(BuildContext context) {
-    final totalImages = _imageUrls.length + _pendingBytes.length;
+    final totalImages = _imageUrls.length + _pending.length;
+    final uploadingCount =
+        _pending.where((p) => !p.failed && p.uploadFuture != null).length;
 
     return Scaffold(
       backgroundColor: colorAppBackground,
@@ -536,18 +579,15 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                                 : () => setState(() => _imageUrls.removeAt(i)),
                           );
                         }),
-                        ...List.generate(_pendingBytes.length, (i) {
-                          final progress = i < _uploadProgress.length
-                              ? _uploadProgress[i]
-                              : null;
+                        ...List.generate(_pending.length, (i) {
+                          final item = _pending[i];
                           return _ImageThumb(
-                            bytes: _pendingBytes[i],
-                            uploadProgress: progress,
+                            bytes: item.bytes,
+                            uploadProgress: item.failed ? null : item.progress,
+                            failed: item.failed,
                             onRemove: _saving
                                 ? null
-                                : () => setState(
-                                      () => _pendingBytes.removeAt(i),
-                                    ),
+                                : () => setState(() => _pending.removeAt(i)),
                           );
                         }),
                         if (!_saving) ...[
@@ -570,13 +610,13 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                   Padding(
                     padding: const EdgeInsets.only(top: 4, bottom: 14),
                     child: Text(
-                      _saving && _pendingBytes.isNotEmpty
-                          ? 'Uploading ${_pendingBytes.length} photo${_pendingBytes.length == 1 ? '' : 's'}…'
+                      uploadingCount > 0
+                          ? 'Uploading $uploadingCount photo${uploadingCount == 1 ? '' : 's'}…'
                           : totalImages == 0
                               ? 'Add one or more photos'
                               : '$totalImages photo${totalImages == 1 ? '' : 's'}',
                       style: TextStyle(
-                        color: _saving ? colorOrange : Colors.white38,
+                        color: uploadingCount > 0 ? colorOrange : Colors.white38,
                         fontSize: 12,
                       ),
                     ),
@@ -730,13 +770,16 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: colorOrange,
                         foregroundColor: Colors.white,
+                        disabledBackgroundColor:
+                            colorOrange.withValues(alpha: 0.65),
+                        disabledForegroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
                       onPressed: _saving ? null : _save,
                       child: Text(
-                        _saving ? 'Uploading…' : 'Save',
+                        _saving ? 'Saving…' : 'Save',
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
@@ -756,14 +799,16 @@ class _ImageThumb extends StatelessWidget {
   final String? url;
   final Uint8List? bytes;
   final VoidCallback? onRemove;
-  /// null = not uploading; 0–1 = upload progress.
+  /// null = idle preview; 0–1 = upload progress (0 shows indeterminate).
   final double? uploadProgress;
+  final bool failed;
 
   const _ImageThumb({
     this.url,
     this.bytes,
     this.onRemove,
     this.uploadProgress,
+    this.failed = false,
   });
 
   @override
@@ -776,39 +821,74 @@ class _ImageThumb extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: ColoredBox(
-              color: Colors.white,
+              color: colorAppBar,
               child: SizedBox(
                 width: 88,
                 height: 88,
                 child: bytes != null
                     ? Image.memory(bytes!, fit: BoxFit.cover)
-                    : NetworkAvatar(
-                        imageUrl: url,
-                        size: 88,
-                        fit: BoxFit.cover,
-                        fallbackAsset: iconShopNoImage,
-                      ),
+                    : url != null
+                        ? NetworkAvatar(
+                            imageUrl: url,
+                            size: 88,
+                            fit: BoxFit.cover,
+                            fallbackAsset: iconShopNoImage,
+                          )
+                        : const SizedBox.shrink(),
               ),
             ),
           ),
-          if (uploading)
+          if (uploading || (bytes == null && url == null && !failed))
             Positioned.fill(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: ColoredBox(
                   color: Colors.black.withValues(alpha: 0.55),
                   child: Center(
-                    child: SizedBox(
-                      width: 36,
-                      height: 36,
-                      child: CircularProgressIndicator(
-                        value: uploadProgress! <= 0
-                            ? null
-                            : uploadProgress!.clamp(0.0, 1.0),
-                        strokeWidth: 3,
-                        color: colorOrange,
-                        backgroundColor: Colors.white24,
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 36,
+                          height: 36,
+                          child: CircularProgressIndicator(
+                            value: uploadProgress == null ||
+                                    uploadProgress! <= 0
+                                ? null
+                                : uploadProgress!.clamp(0.0, 1.0),
+                            strokeWidth: 3,
+                            color: colorOrange,
+                            backgroundColor: Colors.white24,
+                          ),
+                        ),
+                        if (uploadProgress != null && uploadProgress! > 0) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            '${(uploadProgress! * 100).round()}%',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (failed)
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  child: const Center(
+                    child: Icon(
+                      Icons.error_outline,
+                      color: Colors.redAccent,
+                      size: 28,
                     ),
                   ),
                 ),

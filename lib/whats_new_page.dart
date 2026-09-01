@@ -688,7 +688,7 @@ class _ChangesTab extends StatelessWidget {
         'Re-pair waits for fresh Bluetooth WiFi credentials when base WiFi changes',
         'WiFi reconnects properly after SSID or password update during pairing',
         'Live and calibration tick counts stay aligned (forward-only; sensor state reset on start)',
-        'Live MQTT keeps the latest tick count even if publish briefly falls behind',
+        'Live communication keeps the latest tick count even if publish briefly falls behind',
         'Live entry no longer reboots after pairing; settings save safely on the main loop',
         'Live screen shows distance and tick count while rolling',
       ],

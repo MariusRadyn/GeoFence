@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const int _maxChars = 1000;
 const String _draftPrefsKey = 'contact_us_draft';
@@ -20,9 +23,9 @@ const double _boxBottom = 0.095;
 /// Policy copy sits under "YOUR IMAGINATION" and above the message frame.
 const double _policyTop = 0.135;
 const double _policyBottom = 0.48;
-const double _policySide = 0.16;
+const double _policySide = 0.22;
 
-const String _policyText =
+const String _policyTextBeforeWeb =
     'Have an idea? Need an IoT solution?\n'
     'We’re here to help.\n'
     '\n'
@@ -32,12 +35,20 @@ const String _policyText =
     'We cover all development costs,\n'
     'including final hardware and software.\n'
     '\n'
-    'Terms and conditions apply.\n'
-    '\n'
     'Drop us a message about anything —\n'
     'a business idea, a question,\n'
     'feedback, or just to say hello.\n'
-    'We’d love to hear from you.';
+    'We’d love to hear from you.\n'
+    '\n'
+    'Web: ';
+
+const String _webUrlLabel = 'www.TrinityGlobal.co.za';
+const String _webUrl = 'https://www.TrinityGlobal.co.za';
+
+const String _policyTextAfterWeb =
+    '\n'
+    'Email: info@trinityglobal.co.za\n'
+    'Phone: +27 84 7000 972';
 
 Size _containSize(Size source, Size max) {
   if (source.width <= 0 || source.height <= 0) return max;
@@ -59,6 +70,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
   final _messageController = TextEditingController();
   final _focusNode = FocusNode();
   final _scrollController = ScrollController();
+  late final TapGestureRecognizer _webLinkRecognizer;
   Timer? _draftTimer;
   bool _submitting = false;
   Size? _imageSize;
@@ -68,10 +80,25 @@ class _ContactUsPageState extends State<ContactUsPage> {
   @override
   void initState() {
     super.initState();
+    _webLinkRecognizer = TapGestureRecognizer()..onTap = _openWebsite;
     WidgetsBinding.instance.addPostFrameCallback((_) => _resolveImageSize());
     _focusNode.addListener(_onFocusChange);
     _messageController.addListener(_onMessageChanged);
     unawaited(_restoreDraft());
+  }
+
+  Future<void> _openWebsite() async {
+    final opened = await launchUrl(
+      Uri.parse(_webUrl),
+      mode: kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      MyGlobalMessage.show(
+        'Website',
+        'Could not open $_webUrlLabel',
+        MyMessageType.warning,
+      );
+    }
   }
 
   void _onMessageChanged() {
@@ -152,6 +179,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
   @override
   void dispose() {
     _draftTimer?.cancel();
+    _webLinkRecognizer.dispose();
     _focusNode.removeListener(_onFocusChange);
     _messageController.removeListener(_onMessageChanged);
     if (_imageStream != null && _imageListener != null) {
@@ -346,25 +374,59 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             right: fitted.width * _policySide,
                             top: fitted.height * _policyTop,
                             bottom: fitted.height * (1 - _policyBottom),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
+                            child: Align(
                               alignment: Alignment.topCenter,
-                              child: Text(
-                                _policyText,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.92),
-                                  fontSize: 13,
-                                  height: 1.35,
-                                  fontWeight: FontWeight.w500,
-                                  shadows: [
-                                    Shadow(
-                                      color:
-                                          Colors.black.withValues(alpha: 0.55),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 1),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF020B18)
+                                      .withValues(alpha: 0.40),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.topCenter,
+                                    child: Text.rich(
+                                      TextSpan(
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          height: 1.35,
+                                          fontWeight: FontWeight.w600,
+                                          shadows: [
+                                            Shadow(
+                                              color: Colors.black
+                                                  .withValues(alpha: 0.75),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 1),
+                                            ),
+                                          ],
+                                        ),
+                                        children: [
+                                          const TextSpan(
+                                              text: _policyTextBeforeWeb),
+                                          TextSpan(
+                                            text: _webUrlLabel,
+                                            style: const TextStyle(
+                                              color: Colors.lightBlueAccent,
+                                              decoration:
+                                                  TextDecoration.underline,
+                                              decorationColor:
+                                                  Colors.lightBlueAccent,
+                                            ),
+                                            recognizer: _webLinkRecognizer,
+                                          ),
+                                          const TextSpan(
+                                              text: _policyTextAfterWeb),
+                                        ],
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),

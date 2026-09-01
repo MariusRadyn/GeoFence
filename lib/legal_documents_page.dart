@@ -66,6 +66,13 @@ class LegalDocumentsPage extends StatelessWidget {
               'Warranty and Returns',
             ),
           ),
+          const SizedBox(height: 10),
+          _LegalTile(
+            icon: Icons.local_shipping_outlined,
+            title: 'Shipping Policy',
+            subtitle: 'Delivery areas, costs, times, and warranty returns',
+            onTap: () => _open(context, shippingPolicyUrl, 'Shipping Policy'),
+          ),
         ],
       ),
     );
