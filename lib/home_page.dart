@@ -87,14 +87,6 @@ class HomePageState extends State<HomePage>
     super.didChangeDependencies();
   }
 
-  Future<void> _loadVersionLabel() async {
-    final info = await PackageInfo.fromPlatform();
-    if (!mounted) return;
-    setState(() {
-      _versionLabel = '${info.version}+${info.buildNumber}';
-    });
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -107,6 +99,24 @@ class HomePageState extends State<HomePage>
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    final user = context.read<UserDataService>();
+    if (user.isLoggingOut || FirebaseAuth.instance.currentUser == null) {
+      return;
+    }
+    user.load();
+    context.read<SettingsService>().load();
+  }
+
+  Future<void> _loadVersionLabel() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() {
+      _versionLabel = '${info.version}+${info.buildNumber}';
+    });
+  }
   void toggleDrawer() {
     if (_controllerDraw.isCompleted) {
       _controllerDraw.reverse();
@@ -199,7 +209,7 @@ class HomePageState extends State<HomePage>
         const MyCustomTileWithPic(
           imagePath: iconShop,
           header: 'Online Shop',
-          description: 'Browse Limitless IoT products, Bob Pay and Bob Go',
+          description: 'Browse Limitless IoT products',
           widget: ShopPage(),
         ),
       );
@@ -207,7 +217,6 @@ class HomePageState extends State<HomePage>
 
     return tiles;
   }
-
   void _openDrawerPage(Widget page) {
     // Close the drawer first, then push — avoids jank from animating both at once.
     if (_controllerDraw.isCompleted || _controllerDraw.value > 0) {
@@ -221,7 +230,6 @@ class HomePageState extends State<HomePage>
       );
     });
   }
-
   List<Widget> _buildDrawerItems(UserDataService user) {
     final items = <Widget>[];
 
@@ -382,7 +390,6 @@ class HomePageState extends State<HomePage>
     items.add(const SizedBox(height: 5));
     return items;
   }
-
   Future<void> _openProfileOnLaunch() async {
     final userService = context.read<UserDataService>();
     await userService.load();
@@ -403,7 +410,6 @@ class HomePageState extends State<HomePage>
       MaterialPageRoute(builder: (_) => LoginPage()),
     );
   }
-
   Future<void> _login({
     required UserDataService user,
   }) async {
@@ -444,504 +450,6 @@ class HomePageState extends State<HomePage>
     if (!mounted) return;
     await user.load();
   }
-
-  // void _signUpScreen (){
-  //   double width = MediaQuery.of(context).size.width * 0.8;
-  //   double height = MediaQuery.of(context).size.height * 0.6;
-  //
-  //   _emailController.text = "";
-  //   _pwController.text = "";
-  //   _pwController2.text = "";
-  //   _userController.text = "";
-  //
-  //   showDialog<void>(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return Dialog(
-  //           backgroundColor: Colors.transparent,
-  //           //shape: RoundedRectangleBorder(
-  //           //  borderRadius: BorderRadius.circular(15),
-  //           //),
-  //           child: SizedBox(
-  //             width: width > 500 ? 500 : width, // Custom width
-  //             height: height > 600 ? 600 : height, // Custom height
-  //
-  //             child: Container(
-  //               decoration: BoxDecoration(
-  //                   gradient: MyTileGradient(),
-  //                   borderRadius: BorderRadius.circular(10),
-  //                   border: Border.all(
-  //                       color: Colors.blue,
-  //                       width: 2
-  //                   )
-  //               ),
-  //               child: Column(
-  //                   mainAxisAlignment: MainAxisAlignment.center,
-  //                   mainAxisSize: MainAxisSize.min,
-  //                   children: [
-  //
-  //                     // Heading
-  //                     const MyText(
-  //                       text: "Sign Up",
-  //                       fontsize: 20,
-  //                     ),
-  //
-  //                     SizedBox(height: 10),
-  //
-  //                     // Username
-  //                     Padding(
-  //                       padding: const EdgeInsets.only(left: 20, right: 20),
-  //                       child: MyTextFormField(
-  //                         controller: _userController,
-  //                         hintText: "Enter Username",
-  //                         backgroundColor: colorAppBackground,
-  //                         foregroundColor: Colors.white,
-  //                       ),
-  //                     ),
-  //
-  //                     SizedBox(height: 20),
-  //
-  //                     // Email
-  //                     Padding(
-  //                       padding: EdgeInsets.only(left: 20, right: 20),
-  //                       child: MyTextFormField(
-  //                         controller: _emailController,
-  //                         hintText: "Enter Email Address",
-  //                         backgroundColor: colorAppBackground,
-  //                         foregroundColor: Colors.white,
-  //                       ),
-  //                     ),
-  //
-  //                     SizedBox(height: 20),
-  //
-  //                     // Password 1
-  //                     Padding(
-  //                       padding: EdgeInsets.only(left: 20, right: 20),
-  //                       child: MyTextFormField(
-  //                         controller: _pwController,
-  //                         hintText: "Password",
-  //                         backgroundColor: colorAppBackground,
-  //                         foregroundColor: Colors.white,
-  //                         isPasswordField: true,
-  //                       ),
-  //                     ),
-  //
-  //                     SizedBox(height: 20),
-  //
-  //                     // Password 2
-  //                     Padding(
-  //                       padding: EdgeInsets.only(left: 20, right: 20),
-  //                       child: MyTextFormField(
-  //                         controller: _pwController2,
-  //                         hintText: "Confirm Password",
-  //                         backgroundColor: colorAppBackground,
-  //                         foregroundColor: Colors.white,
-  //                         isPasswordField: true,
-  //                       ),
-  //                     ),
-  //
-  //                     SizedBox(height: 30),
-  //
-  //                     // Buttons Cancel / OK
-  //                     Row(
-  //                       mainAxisAlignment: MainAxisAlignment.center,
-  //                       children: [
-  //
-  //                         // Cancel Button
-  //                         MyTextButton(
-  //                           text: 'Cancel',
-  //                           onPressed: () {
-  //                             Navigator.of(context).pop();
-  //                           },
-  //                         ),
-  //
-  //                         SizedBox(width: 10),
-  //
-  //                         // OK Button
-  //                         MyTextButton(
-  //                           text:'OK',
-  //                           onPressed: () async {
-  //                             final user = await _signUp();
-  //
-  //                             if (user != null) {
-  //                               if(mounted){
-  //                                 Navigator.of(context).pop(); // close current dialog FIRST
-  //                                 await _sendValidateEmail();
-  //                                 _showEmailVerificationDialog(context);
-  //                               }
-  //                             }
-  //                           },
-  //                         ),
-  //                       ],
-  //                     ),
-  //                   ]),
-  //             ),
-  //           ));
-  //     },
-  //   );
-  // }
-  // Future<User?> _signUp() async {
-  //   UserDataService userService = context.read<UserDataService>();
-  //   AuthResult result = AuthResult();
-  //
-  //   if (_emailController.text.isEmpty || _pwController.text.isEmpty) {
-  //     MyGlobalMessage.show("Info", 'Please enter email and password.', MyMessageType.info);
-  //     return null;
-  //   }
-  //   if (!_emailController.text.contains('@')) {
-  //     MyGlobalMessage.show("Info", 'Please enter valid email address.', MyMessageType.info);
-  //     return null;
-  //   }
-  //   if (_userController.text.isEmpty) {
-  //     MyGlobalMessage.show("Info", 'Please enter username.', MyMessageType.info);
-  //     return null;
-  //   }
-  //   if (_pwController.text != _pwController2.text) {
-  //     MyGlobalMessage.show("Info", 'Passwords dont match.', MyMessageType.info);
-  //     return null;
-  //   }
-  //
-  //   try {
-  //     result = await firebaseAuthService.fireAuthCreateUserWithEmail(
-  //         context,
-  //         _emailController.text,
-  //         _pwController.text
-  //     );
-  //
-  //     if (result.isSuccess && result.user != null) {
-  //       final doc = await FirebaseFirestore.instance
-  //           .collection(collectionUsers)
-  //           .doc(result.user!.uid)
-  //           .get();
-  //
-  //       // Create user ONLY if it does not exist
-  //       if (!doc.exists) {
-  //         userService.create(
-  //             UserData(
-  //               displayName: _userController.text ?? "",
-  //               email: _emailController.text ?? "",
-  //               emailValidated: result.user!.emailVerified ?? false,
-  //             ),
-  //             uid: result.user!.uid
-  //         );
-  //
-  //         print('User Created');
-  //       }
-  //
-  //       return result.user;
-  //
-  //     } else {
-  //       if(result.code != null){
-  //         MyGlobalMessage.show("Login", result.code!, MyMessageType.warning);
-  //       } else {
-  //         MyGlobalMessage.show("Login", result.exception.toString(), MyMessageType.warning);
-  //       }
-  //
-  //       userService.logout();
-  //     }
-  //   } catch (e) {
-  //     MyGlobalMessage.show("Error", result.exception.toString(), MyMessageType.error);
-  //   }
-  //   return null;
-  // }
-  // Future<bool> _resetPasswordWithEmail() async {
-  //   UserDataService userService = context.read<UserDataService>();
-  //
-  //   if (_emailController.text.isEmpty) {
-  //     MyGlobalMessage.show("Info", 'Please enter email address.', MyMessageType.info);
-  //     return false;
-  //   }
-  //   if (!_emailController.text.contains('@')) {
-  //     MyGlobalMessage.show("Info", 'Please enter a valid email address.', MyMessageType.info);
-  //     return false;
-  //   }
-  //
-  //   try {
-  //     if(await firebaseAuthService.fireAuthResetPassword(context, _emailController.text)) {
-  //       if(userService.userdata != null){
-  //         userService.isUserLoggedIn = false;
-  //       }
-  //       printMsg('Password Reset');
-  //       return true;
-  //     }
-  //     else {
-  //       MyGlobalMessage.show("Error", 'Failed to reset password', MyMessageType.error);
-  //       return false;
-  //     }
-  //
-  //   } catch (e) {
-  //     MyGlobalMessage.show("Error", '$e', MyMessageType.error);
-  //     return false;
-  //   }
-  // }
-  // Future<void> _loginScreen () async{
-  //   await showDialog<void>(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return
-  //         Dialog(
-  //           backgroundColor: Colors.transparent,
-  //           child: Padding(
-  //             padding: const EdgeInsets.all(8.0),
-  //             child: Container(
-  //               decoration: BoxDecoration(
-  //                   gradient: MyTileGradient(),
-  //                   borderRadius: BorderRadius.circular(10),
-  //                   border: Border.all(
-  //                       color: Colors.blue,
-  //                       width: 2
-  //                   )
-  //               ),
-  //
-  //               margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
-  //               width: MediaQuery.of(context).size.width * 0.8,
-  //               child: SafeArea(
-  //                 child: SingleChildScrollView(
-  //                   child: Column(
-  //                     mainAxisAlignment: MainAxisAlignment.center,
-  //                     mainAxisSize: MainAxisSize.min,
-  //                     children: [
-  //                       SizedBox(height: 20),
-  //
-  //                       // Heading
-  //                       const MyText(
-  //                         text:  "Login",
-  //                         fontsize: 20,
-  //                       ),
-  //
-  //                       const SizedBox(height: 10),
-  //
-  //                       // Email
-  //                       Padding(
-  //                         padding: const EdgeInsets.symmetric(horizontal: 20),
-  //                         child: MyTextFormField(
-  //                           inputType: TextInputType.emailAddress,
-  //                           backgroundColor: colorAppBackground,
-  //                           foregroundColor: Colors.white,
-  //                           controller: _emailController,
-  //                           //hintText: "Enter Email Address",
-  //                           labelText: "Email",
-  //                           valueFontSize: 12,
-  //
-  //                         ),
-  //                       ),
-  //                       const SizedBox(height: 20),
-  //
-  //                       // Password
-  //                       Padding(
-  //                         padding: const EdgeInsets.symmetric(horizontal: 20),
-  //                         child: MyTextFormField(
-  //                           foregroundColor: Colors.white,
-  //                           backgroundColor: colorAppBackground,
-  //                           controller: _pwController,
-  //                           //hintText: "Enter Password",
-  //                           labelText: "Password",
-  //                           isPasswordField: true,
-  //                           valueFontSize: 12,
-  //                         ),
-  //                       ),
-  //                       const SizedBox(height: 20),
-  //
-  //                       // Reset Password
-  //                       Row(
-  //                         mainAxisAlignment: MainAxisAlignment.center,
-  //                         children: [
-  //                           const MyText(
-  //                             text: "Forgot Password?",
-  //                             color: Colors.grey,
-  //                             fontsize: 14,
-  //                           ),
-  //
-  //                           const SizedBox(width: 10),
-  //
-  //                           GestureDetector(
-  //                             onTap: () async {
-  //                               if(await _resetPasswordWithEmail()){
-  //                                 MyGlobalMessage.show("Check email", "Please check your email and follow the instructions", MyMessageType.info);
-  //                               }
-  //                               //Navigator.of(context).pop();
-  //                             },
-  //                             child: const Text(
-  //                               "Reset",
-  //                               style: TextStyle(color: colorOrange),
-  //                             ),
-  //                           ),
-  //                         ],
-  //                       ),
-  //
-  //                       const SizedBox(height: 10),
-  //
-  //                       // Sign up
-  //                       Row(
-  //                         mainAxisAlignment: MainAxisAlignment.center,
-  //                         children: [
-  //                           const MyText(
-  //                             text: "Don't have an account?",
-  //                             color: Colors.grey,
-  //                             fontsize: 14,
-  //                           ),
-  //
-  //                           const SizedBox(width: 10),
-  //
-  //                           GestureDetector(
-  //                             onTap: () {
-  //                               _signUpScreen();
-  //                             },
-  //                             child: const Text(
-  //                               "Sign up",
-  //                               style: TextStyle(color: colorOrange),
-  //                             ),
-  //                           ),
-  //                         ],
-  //                       ),
-  //
-  //                       const SizedBox(height: 20),
-  //
-  //                       // Google / Facebook
-  //                       Row(
-  //                         mainAxisAlignment: MainAxisAlignment.center,
-  //                         children: [
-  //
-  //                           // Sign In with Google
-  //                           _buildSocialLoginButton(
-  //                             context: context,
-  //                             onPressed: () async {
-  //                               Navigator.of(context).pop();
-  //                               await _loginWithGoogle(context);
-  //                             },
-  //                             iconPath: iconGoogle,
-  //                           ),
-  //
-  //                           const SizedBox(width: 20),
-  //
-  //                           // Sign In with facebook
-  //                           _buildSocialLoginButton(
-  //                             context: context,
-  //                             onPressed: () {
-  //                               // loginWithFacebook implementation would go here
-  //                               Navigator.of(context).pop();
-  //                             },
-  //                             iconPath: iconFacebook,
-  //                           ),
-  //                         ],
-  //                       ),
-  //
-  //                       SizedBox(height: 20),
-  //
-  //                       // Buttons Cancel / OK
-  //                       Row(
-  //                         mainAxisAlignment: MainAxisAlignment.center,
-  //                         children: [
-  //
-  //                           // Cancel Button
-  //                           MyTextButton(
-  //                             text: 'Cancel',
-  //                             onPressed: () {
-  //                               Navigator.of(context).pop();
-  //                             },
-  //                           ),
-  //
-  //                           const SizedBox(width: 10),
-  //
-  //                           // OK Button
-  //                           MyTextButton(
-  //                             text: 'OK',
-  //                             onPressed: () async {
-  //                               bool loggedIn = await _loginWithEmail();
-  //                               if(!mounted) return;
-  //
-  //                               if(loggedIn){
-  //                                 Navigator.of(context).pop();
-  //                               }
-  //                             },
-  //                           )
-  //                         ],
-  //                       ),
-  //                       const SizedBox(height: 20),
-  //
-  //                     ],
-  //                   ),
-  //                 ),
-  //               ),
-  //             ),
-  //           ),
-  //         );
-  //     },
-  //   );
-  // }
-  // void _showEmailVerificationDialog(BuildContext context) {
-  //   Timer? timer;
-  //
-  //   showDialog(
-  //     context: context,
-  //     barrierDismissible: false,
-  //
-  //     builder: (context) {
-  //       timer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-  //         final user = FirebaseAuth.instance.currentUser;
-  //
-  //         if (user == null) {
-  //           timer.cancel();
-  //           Navigator.of(context).pop();
-  //           return;
-  //         }
-  //
-  //         await user.reload(); // 🔥 Force server refresh
-  //
-  //         if (user.emailVerified) {
-  //           timer.cancel();
-  //           Navigator.of(context).pop(); // Close dialog
-  //         }
-  //       });
-  //
-  //       return AlertDialog(
-  //         title: const Text("Email Verification"),
-  //         content: const Text(
-  //           "Please click the verification link sent to your email.\n\n"
-  //               "This window will close automatically once verified.",
-  //         ),
-  //         shape: RoundedRectangleBorder(
-  //           borderRadius: BorderRadius.circular(10),
-  //           side: const BorderSide(
-  //             color: Colors.blue, // Border color
-  //             width: 2, // Border width
-  //           ),
-  //         ),
-  //         backgroundColor: colorAppTitle,
-  //         shadowColor: Colors.black,
-  //         actions: [
-  //           MyTextButton(
-  //             text: "Resend Email",
-  //             onPressed: () async {
-  //               await _sendValidateEmail();
-  //             },
-  //           ),
-  //           MyTextButton(
-  //             text: "Cancel",
-  //             onPressed: () async {
-  //               timer?.cancel();
-  //               await FirebaseAuth.instance.signOut();
-  //               if(mounted){
-  //                 Navigator.of(context).pop();
-  //               }
-  //             },
-  //           )
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
-  // Future<void> _sendValidateEmail() async {
-  //   final user = FirebaseAuth.instance.currentUser;
-  //
-  //   if (user == null) return;
-  //
-  //   try {
-  //     await user.sendEmailVerification();   // 🔥 Forces server check
-  //   } catch (e) {
-  //     MyGlobalMessage.show("Error", e.toString(), MyMessageType.error);
-  //   }
-  // }
   Future<void> _validateUser() async {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -955,18 +463,6 @@ class HomePageState extends State<HomePage>
       }
     }
   }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed || !mounted) return;
-    final user = context.read<UserDataService>();
-    if (user.isLoggingOut || FirebaseAuth.instance.currentUser == null) {
-      return;
-    }
-    user.load();
-    context.read<SettingsService>().load();
-  }
-
   void _startTimeout(int sec) {
     // Already armed — don't restart on every rebuild.
     if (_loadingTimer != null) return;

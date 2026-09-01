@@ -542,7 +542,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                           '3. Allow wheel to connect to Base\n'
                           '4. Wait until LCD says \'Click PAIR in App\'\n'
                           '5. Click \'PAIR\'\n'
-                          'WiFi: force base to push WiFi/MQTT over Bluetooth\n',
+                          'WiFi: force base to push WiFi settings over Bluetooth\n',
                       ),
                      ),
                   ),

@@ -139,6 +139,7 @@ const termsAndConditionsUrl = '$_accountPagesHost/terms.html';
 /// Must match Version in account-pages/terms.html
 const termsAndConditionsVersion = '1.1';
 const warrantyAndReturnsUrl = '$_accountPagesHost/warranty.html';
+const shippingPolicyUrl = '$_accountPagesHost/shipping.html';
 const profileLaunchPath = '/profile';
 bool _launchOpensProfile = false;
 
@@ -2021,7 +2022,7 @@ class ClientIdManager {
       // Generate a short unique ID (MQTT-safe)
       id = "android_${const Uuid().v4().substring(0, 8)}";
       await prefs.setString(_key, id);
-      MyGlobalSnackBar.show("MQTT DeviceID Generated: $id");
+      MyGlobalSnackBar.show("Device ID Generated: $id");
     }
 
     return id;
@@ -2320,13 +2321,16 @@ class MyDialogWidget extends StatelessWidget {
   }
 }
 class MyGlobalMessage {
+  static bool _dialogOpen = false;
 
   static void show(String header, String message, MyMessageType msgType) {
     if(msgType == MyMessageType.debug && disableDebugMsg ) return;
+    if (_dialogOpen) return;
 
     final context = navigatorKey.currentState?.overlay?.context;
     if (context == null) return;
 
+    _dialogOpen = true;
     showDialog(
       context: context,
       useRootNavigator: true,
@@ -2358,7 +2362,9 @@ class MyGlobalMessage {
           ),
         ],
       ),
-    );
+    ).whenComplete(() {
+      _dialogOpen = false;
+    });
   }
 }
 class MyGlobalSnackBar {

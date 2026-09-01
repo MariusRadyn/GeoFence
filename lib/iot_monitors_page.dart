@@ -129,16 +129,16 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         'Timeout',
         pending == mqttCmdFind
             ? 'Find was sent, but the monitor did not reply.\n'
-                'Check Monitor ID and that the IoT is online on Wi‑Fi/MQTT.'
+                'Check Monitor ID and that the IoT is online and communicating.'
             : pending == mqttCmdSendWifi
                 ? 'No reply from base for WiFi push.\n'
-                    'Check MQTT connection; IoT must be in BLE range of the Pi.'
+                    'Check communication with the base; IoT must be in Bluetooth range of the Pi.'
                 : pending == mqttCmdCalibrate
                     ? 'No reply from wheel for calibration.\n'
-                        'Check Monitor ID, Wi‑Fi/MQTT, and that calibration mode was completed on the wheel.'
+                        'Check Monitor ID, Wi‑Fi communication, and that calibration mode was completed on the wheel.'
                     : pending == mqttCmdSyncSettings
                         ? 'No reply from wheel for Sync.\n'
-                            'Check Monitor ID and that the IoT is online on Wi‑Fi/MQTT.'
+                            'Check Monitor ID and that the IoT is online and communicating.'
                         : 'No Reply From Base Station',
         MyMessageType.warning,
       );
@@ -347,6 +347,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
       // Sync settings ack from wheel (#SYNC_SETTINGS)
       if (cmd == mqttCmdSyncSettings) {
+        if (_pendingMonitorCmd != mqttCmdSyncSettings) return;
         _timeout?.cancel();
         _pendingMonitorCmd = null;
         final payload = jsonData[mqttJsonPayload];
@@ -641,7 +642,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       MyGlobalMessage.show(
         'Connection',
         MqttService().lastError ??
-            'MQTT is not connected. Connect to the base station and try again.',
+            'Communication is not connected. Connect to the base station and try again.',
         MyMessageType.warning,
       );
       return false;
@@ -864,7 +865,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       MyGlobalMessage.show(
         'Connection',
         MqttService().lastError ??
-            'MQTT is not connected. Connect to the base station and try again.',
+            'Communication is not connected. Connect to the base station and try again.',
         MyMessageType.warning,
       );
       return false;
@@ -995,7 +996,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       MyGlobalMessage.show(
         'Find',
         MqttService().lastError ??
-            'Could not publish Find. Reconnect to the base and try again.',
+            'Could not send Find. Reconnect to the base and try again.',
         MyMessageType.warning,
       );
       return false;

@@ -136,7 +136,7 @@ class MqttService {
       bool ok = true;
       ok = await _init(trimmedIp);
       if (!ok) {
-        lastError ??= 'MQTT init failed';
+        lastError ??= 'Communication setup failed';
         return false;
       }
       ok = await _connect();
@@ -150,18 +150,22 @@ class MqttService {
             : mqttTcpPort;
         if (kIsWeb && Uri.base.scheme == 'https') {
           lastError ??=
-              'Cannot open secure MQTT (wss://$trimmedIp:$portHint).\n'
+              'Cannot open secure communication (wss://$trimmedIp:$portHint).\n'
               '1) On phone Chrome open https://$trimmedIp:$portHint\n'
               '2) Tap Advanced → Proceed (trust the base certificate once)\n'
               '3) Come back here and connect again.\n'
-              'Also check Pi Mosquitto is listening on 9002 and UFW allows it.';
-          MyGlobalMessage.show('Web MQTT', lastError!, MyMessageType.warning);
+              'Also check the base station service is running on port 9002 and the firewall allows it.';
+          MyGlobalMessage.show(
+            'Web communication',
+            lastError!,
+            MyMessageType.warning,
+          );
         } else {
           lastError ??= !reachable
               ? 'Cannot reach base at $trimmedIp:$portHint.\n'
                   'Phone must be on the same Wi‑Fi as the base.\n'
-                  'Check the IP (cloud button) and that Mosquitto is running.'
-              : 'MQTT broker refused the connection (check MQTT user/password).';
+                  'Check the IP (cloud button) and that the base station is running.'
+              : 'Communication refused by the base (check connection credentials).';
         }
       }
       return ok;
@@ -287,7 +291,7 @@ class MqttService {
       );
       await client!.connect().timeout(
         Duration(milliseconds: client!.connectTimeoutPeriod),
-        onTimeout: () => throw TimeoutException('MQTT connect timed out'),
+        onTimeout: () => throw TimeoutException('Base communication timed out'),
       );
 
       if (client!.connectionStatus != null &&
@@ -299,8 +303,8 @@ class MqttService {
         final returnCode = client!.connectionStatus?.returnCode;
         printDebugMsg('Connection failed (return code: $returnCode)');
         lastError =
-            'MQTT connect failed (code: $returnCode). '
-            'Check broker credentials for this base.';
+            'Communication failed (code: $returnCode). '
+            'Check connection credentials for this base.';
       }
     } on TimeoutException {
       printDebugMsg('MQTT connect timed out');
@@ -501,7 +505,7 @@ class MqttService {
   /// Publish to the broker. Returns false if not connected or publish failed.
   bool tx(String toDeviceId, String cmd, dynamic jsonMsg, String topic) {
     if (!isBrokerConnected) {
-      lastError = 'MQTT is not connected';
+      lastError = 'Communication is not connected';
       printDebugMsg('MQTT TX skipped (not connected): $cmd → $toDeviceId');
       return false;
     }
@@ -519,7 +523,7 @@ class MqttService {
       builder.addString(payload);
       final bytes = builder.payload;
       if (bytes == null || bytes.isEmpty) {
-        lastError = 'MQTT payload encode failed';
+        lastError = 'Communication message encode failed';
         return false;
       }
 
@@ -530,7 +534,7 @@ class MqttService {
       lastError = null;
       return true;
     } catch (e) {
-      lastError = 'MQTT publish failed: $e';
+      lastError = 'Communication send failed: $e';
       printDebugMsg('MQTT TX error: $e');
       return false;
     }
