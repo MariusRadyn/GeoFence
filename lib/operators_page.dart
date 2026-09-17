@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:geofence/network_avatar.dart';
 import 'package:geofence/operator_edit_page.dart';
 import 'package:geofence/utils.dart';
-//import 'package:http/http.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -14,12 +13,15 @@ class OperatorsPage extends StatefulWidget {
   State<OperatorsPage> createState() => OperatorsPageState();
 }
 
-class OperatorsPageState extends State<OperatorsPage> {
+class OperatorsPageState extends State<OperatorsPage>
+    with SingleTickerProviderStateMixin {
   OperatorData? selectedOperator;
+  late final TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -28,15 +30,10 @@ class OperatorsPageState extends State<OperatorsPage> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-  }
-
-  @override
   void dispose() {
+    _tabController.dispose();
     super.dispose();
   }
-
 
   Widget getAvatar(String photoUrl, {double size = 48}) {
     if (photoUrl.isEmpty) {
@@ -51,7 +48,6 @@ class OperatorsPageState extends State<OperatorsPage> {
       );
     }
 
-    // Web vs Android switch
     if (kIsWeb) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
@@ -80,19 +76,24 @@ class OperatorsPageState extends State<OperatorsPage> {
       ),
     );
   }
+
   String buildPhotoUrlWithVersion(String photoUrl, int? version) {
     if (photoUrl.isEmpty) return photoUrl;
     if (version == null) return photoUrl;
     final separator = photoUrl.contains('?') ? '&' : '?';
     return '$photoUrl${separator}v=$version';
   }
+
   Future<OperatorData?> _addNew() async {
     if (!mounted) return null;
 
-    OperatorService operatorService = context.read<OperatorService>();
-    final newOperator = await operatorService.addNew();
-    return newOperator;
+    final accessLevel = _tabController.index == 1
+        ? operatorTypeSupervisor
+        : operatorTypeEmployee;
+    final operatorService = context.read<OperatorService>();
+    return operatorService.addNew(accessLevel: accessLevel);
   }
+
   void _deleteOperatorDialog(OperatorData operator) async {
     final operatorService = context.read<OperatorService>();
     final hasWageLinks = await operatorService.hasLinkedWageRecords(operator.docId);
@@ -101,7 +102,7 @@ class OperatorsPageState extends State<OperatorsPage> {
 
     final message = hasWageLinks
         ? '${operator.name} ${operator.surname} has wage records linked.\n\n'
-            'They will be hidden from the operator list, but past records '
+            'They will be hidden from the tags list, but past records '
             'will still show their name.\n\nContinue?'
         : '${operator.name} ${operator.surname}\nAre you sure?';
 
@@ -112,8 +113,8 @@ class OperatorsPageState extends State<OperatorsPage> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
               side: const BorderSide(
-                color: Colors.blue, // Border color
-                width: 2, // Border width
+                color: Colors.blue,
+                width: 2,
               ),
             ),
             backgroundColor: colorAppTitle,
@@ -152,6 +153,7 @@ class OperatorsPageState extends State<OperatorsPage> {
         }
     );
   }
+
   Future<void> _delete(
     OperatorData operator, {
     required bool hasWageLinks,
@@ -171,85 +173,105 @@ class OperatorsPageState extends State<OperatorsPage> {
     }
   }
 
+  List<OperatorData> _employees(List<OperatorData> all) =>
+      all.where((o) => isEmployeeAccessLevel(o.accessLevel)).toList();
+
+  List<OperatorData> _supervisors(List<OperatorData> all) =>
+      all.where((o) => isSupervisorAccessLevel(o.accessLevel)).toList();
+
+  Widget _buildTagList(List<OperatorData> operators, String emptyMessage) {
+    if (operators.isEmpty) {
+      return myCenterMsg(emptyMessage);
+    }
+
+    return ListView.builder(
+      itemCount: operators.length,
+      itemBuilder: (context, index) {
+        final operator = operators[index];
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          child: MyOperatorTile(
+            key: ValueKey(
+              '${operator.docId}_${operator.imageFilename}_${operator.imageURL}',
+            ),
+            operator: operator,
+            onTapTile: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => OperatorEditPage(
+                    operatorData: operator,
+                  ),
+                ),
+              );
+              if (mounted) {
+                context.read<OperatorService>().notifyListChanged();
+              }
+            },
+            onTapDelete: () {
+              _deleteOperatorDialog(operator);
+            },
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<OperatorService>(
       builder: (_, operatorService, __) {
+        final employees = _employees(operatorService.lstOperators);
+        final supervisors = _supervisors(operatorService.lstOperators);
+
         return Scaffold(
           appBar: AppBar(
             backgroundColor: colorAppBar,
             foregroundColor: Colors.white,
-            title: myAppbarTitle('Operators'),
+            title: myAppbarTitle('Tags'),
+            bottom: TabBar(
+              controller: _tabController,
+              indicatorColor: colorOrange,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
+              tabs: const [
+                Tab(text: 'Employee'),
+                Tab(text: 'Supervisor'),
+              ],
+            ),
           ),
           backgroundColor: colorAppBackground,
           floatingActionButton: FloatingActionButton(
             backgroundColor: colorOrange,
             foregroundColor: Colors.white,
-            onPressed: () async{
-              OperatorData? newOperator =  await _addNew();
-              if(newOperator == null) return;
-              if(!mounted) return;
+            onPressed: () async {
+              OperatorData? newOperator = await _addNew();
+              if (newOperator == null) return;
+              if (!mounted) return;
 
               Navigator.push(
                 // ignore: use_build_context_synchronously
                 context,
                 MaterialPageRoute(
                   builder: (context) => OperatorEditPage(
-                      operatorData: newOperator,
+                    operatorData: newOperator,
                   ),
                 ),
               );
             },
-            child: Icon(Icons.add),
+            child: const Icon(Icons.add),
           ),
-          body: (operatorService.isLoading) ? myProgressCircle():
-            (operatorService.lstOperators.isEmpty) ? myCenterMsg('No Operators')
-            : Column(
-            children: [
-              SizedBox(height: 10),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: operatorService.lstOperators.length,
-                    itemBuilder: (context, index){
-                      final operator = operatorService.lstOperators[index];
-                      return Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                            child: MyOperatorTile(
-                              key: ValueKey(
-                                '${operator.docId}_${operator.imageFilename}_${operator.imageURL}',
-                              ),
-                              operator: operator,
-                              onTapTile: () async{
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (context) => OperatorEditPage(
-                                          operatorData: operator
-                                      ),
-                                  ),
-                                );
-                                // Ensure list tiles remount after photo edits.
-                                if (mounted) {
-                                  context.read<OperatorService>().notifyListChanged();
-                                }
-                              },
-                              onTapDelete: (){
-                                _deleteOperatorDialog(operator);
-                              },
-                            ),
-                          )
-                        ],
-                      );
-                    }
-                )
-              )
-            ],
-          ),
+          body: operatorService.isLoading
+              ? myProgressCircle()
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildTagList(employees, 'No Employees'),
+                    _buildTagList(supervisors, 'No Supervisors'),
+                  ],
+                ),
         );
       },
     );
   }
 }
-

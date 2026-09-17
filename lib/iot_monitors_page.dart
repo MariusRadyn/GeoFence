@@ -10,6 +10,9 @@ import 'package:geofence/app_flavor.dart';
 import 'package:geofence/iot_list_page.dart';
 import 'package:geofence/iot_monitors_types.dart';
 import 'package:geofence/network_avatar.dart';
+import 'package:geofence/operators_page.dart';
+import 'package:geofence/shop_page.dart';
+import 'package:geofence/third_party_iot_page.dart';
 //import 'package:google_maps_flutter/google_maps_flutter.dart';
 //import 'package:http/http.dart' as http;
 //import 'dart:io';
@@ -58,16 +61,32 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
   Timer? _timeout;
+  final Map<String, bool> _subscriptionActiveCache = {};
+  DateTime? _subscriptionCacheAt;
+  DateTime? _lastSubWarningAt;
+
+  bool get _showSonoff => AppConfig.showThirdPartyIot;
+  int get _sonoffOffset => _showSonoff ? 1 : 0;
+
+  bool get _onSonoffTab {
+    if (!_showSonoff || _baseTabController == null) return false;
+    return _baseTabController!.index == _baseTabController!.length - 1;
+  }
+
+  void _selectSonoffTab() {
+    if (!_showSonoff || _baseTabController == null) return;
+    _baseTabController!.animateTo(_baseTabController!.length - 1);
+  }
 
   _BaseMonitorUiState _uiForBase(String baseDocId) {
     return _baseUi.putIfAbsent(baseDocId, () => _BaseMonitorUiState());
   }
 
   BaseStationData? _currentBase(BaseStationService baseService) {
-    if (_baseTabController == null ||
-        baseService.lstBaseStations.isEmpty) {
+    if (_baseTabController == null || baseService.lstBaseStations.isEmpty) {
       return null;
     }
+    if (_onSonoffTab) return null;
     final idx = _baseTabController!.index.clamp(
       0,
       baseService.lstBaseStations.length - 1,
@@ -145,6 +164,99 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     });
   }
 
+  void _showSubscriptionRequired(MonitorSettings monitor) {
+    final now = DateTime.now();
+    if (_lastSubWarningAt != null &&
+        now.difference(_lastSubWarningAt!) < const Duration(seconds: 8)) {
+      return;
+    }
+    _lastSubWarningAt = now;
+    final name = monitor.monitorName.trim().isNotEmpty
+        ? monitor.monitorName
+        : 'This distance wheel';
+    MyGlobalMessage.show(
+      'Subscription required',
+      '$name needs an active subscription before it can be used.\n'
+          'Link one under Monitor Info, or renew it on the Subscriptions screen.',
+      MyMessageType.warning,
+    );
+  }
+
+  Future<bool> _isSubscriptionOrderActive(String orderId) async {
+    final id = orderId.trim();
+    if (id.isEmpty) return false;
+    final now = DateTime.now();
+    if (_subscriptionCacheAt != null &&
+        now.difference(_subscriptionCacheAt!) < const Duration(seconds: 30) &&
+        _subscriptionActiveCache.containsKey(id)) {
+      return _subscriptionActiveCache[id]!;
+    }
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return false;
+      final snap = await FirebaseFirestore.instance
+          .collection(collectionUsers)
+          .doc(uid)
+          .collection(collectionShopOrders)
+          .doc(id)
+          .get();
+      if (!snap.exists) {
+        _subscriptionActiveCache[id] = false;
+        _subscriptionCacheAt = now;
+        return false;
+      }
+      final data = snap.data() ?? {};
+      final status =
+          (data['subscriptionStatus'] ?? '').toString().toLowerCase();
+      final cancelled = status == 'cancelled' || status == 'canceled';
+      final token = (data['subscriptionToken'] ?? data['payfastToken'] ?? '')
+          .toString()
+          .trim();
+      final active = !cancelled &&
+          (token.isNotEmpty || data['hasSubscription'] == true);
+      _subscriptionActiveCache[id] = active;
+      _subscriptionCacheAt = now;
+      return active;
+    } catch (_) {
+      // Fail closed for wheels if we cannot verify.
+      return false;
+    }
+  }
+
+  Future<bool> _ensureActiveWheelSubscription(
+    MonitorSettings monitor, {
+    bool disconnectIfInvalid = true,
+    bool showMessage = true,
+  }) async {
+    if (monitor.monitorType != monitorTypeWheel) return true;
+
+    final orderId = monitor.subscriptionOrderId.trim();
+    if (orderId.isEmpty) {
+      if (showMessage) _showSubscriptionRequired(monitor);
+      if (disconnectIfInvalid && monitor.isConnectedToIot) {
+        await _disconnectIot(monitor);
+      }
+      return false;
+    }
+
+    final active = await _isSubscriptionOrderActive(orderId);
+    if (active) return true;
+
+    _subscriptionActiveCache[orderId] = false;
+    monitor.subscriptionOrderId = '';
+    monitor.subscriptionToken = '';
+    await context.read<MonitorSettingsService>().save(
+          monitor,
+          showSavedMessage: false,
+        );
+    if (showMessage) _showSubscriptionRequired(monitor);
+    if (disconnectIfInvalid &&
+        (monitor.isConnectedToIot || monitor.isConnectingToIot)) {
+      await _disconnectIot(monitor);
+    }
+    return false;
+  }
+
   // MQTT
   void _mqttStartListener() {
     if (_mqttSubscription != null) return;
@@ -189,6 +301,11 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         }
         if (baseMonitors.isNotEmpty) return baseMonitors.first;
         return MonitorSettings(baseStationDocId: currentBase.docId);
+      }
+
+      Future<bool> gateWheel(MonitorSettings monitor) async {
+        if (monitor.monitorType != monitorTypeWheel) return true;
+        return _ensureActiveWheelSubscription(monitor);
       }
 
       // Pair - Set Device ID
@@ -264,9 +381,10 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       // Connecting to IOT Monitor
       if(cmd == mqttCmdConnectMonitor ||
           (cmd == mqttCmdAck && _pendingMonitorCmd == mqttCmdConnectMonitor)){
+        final monitor = currentMonitor();
+        if (!await gateWheel(monitor)) return;
         _timeout?.cancel();
         _pendingMonitorCmd = null;
-        final monitor = currentMonitor();
         monitor.wheelDistance = 0;
         monitor.wheelTicks = 0;
         monitorService.setConnectingToIot(monitor.monitorId, false);
@@ -377,6 +495,10 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         final ticks = _parseLiveInt(map[mqttJsonWheelTicks]);
 
         final liveMonitor = currentMonitor();
+        if (liveMonitor.monitorType == monitorTypeWheel &&
+            !await gateWheel(liveMonitor)) {
+          return;
+        }
         if (!liveMonitor.isConnectedToIot) {
           monitorService.setConnectingToIot(liveMonitor.monitorId, false);
           monitorService.setConnectedToIot(liveMonitor.monitorId, true);
@@ -401,6 +523,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
       // Connect Base (from Base)
       if (cmd == mqttCmdConnectBase) {
+        if(!mounted) return;
         _timeout?.cancel();
         context.read<SettingsService>().setIsBaseConnected(true);
         final base = currentBase;
@@ -604,6 +727,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   }
 
   Future<bool> _calibrateIot(MonitorSettings monitor) async {
+    if (!await _ensureActiveWheelSubscription(monitor)) return false;
     final settingService = context.read<SettingsService>();
     if (settingService.isBaseStationConnected == false) {
       MyGlobalMessage.show(
@@ -626,7 +750,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     if (monitor.monitorId.isEmpty || monitor.monitorId == 'none') {
       MyGlobalMessage.show(
         'Monitor Not Found',
-        "No monitor ID found. Please press 'Pair' first.",
+        "No monitor ID found. Please PAIR first.",
         MyMessageType.info,
       );
       return false;
@@ -795,11 +919,12 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   }
 
   Future<void> _syncTicksPerMToIot(MonitorSettings monitor) async {
+    if (!await _ensureActiveWheelSubscription(monitor)) return;
     final id = monitor.monitorId.trim();
     if (id.isEmpty || id == 'none') {
       MyGlobalMessage.show(
         'Monitor Not Found',
-        'No monitor ID found. Please press Pair first.',
+        'No monitor ID found. Please PAIR first.',
         MyMessageType.info,
       );
       return;
@@ -850,6 +975,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     MyGlobalSnackBar.show('Syncing ticks/m to wheel…');
   }
   Future<bool> _connectIot(MonitorSettings monitor)async{
+    if (!await _ensureActiveWheelSubscription(monitor)) return false;
     final settingService = context.read<SettingsService>();
     if(settingService.isBaseStationConnected == false){
       MyGlobalMessage.show("Connection", "Please connect to a Base Station first", MyMessageType.info);
@@ -951,7 +1077,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     if (id.isEmpty || id == 'none') {
       MyGlobalMessage.show(
         'Monitor Not Found',
-        'No monitor ID found. Please press Pair first.',
+        'No monitor ID found. Please PAIR first.',
         MyMessageType.info,
       );
       return false;
@@ -1030,6 +1156,14 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         },
       );
     }
+
+    // Tags
+    if (index == 2) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const OperatorsPage()),
+      );
+    }
   }
   Future<void> _getBluetoothDevices() async {
     if (!AppConfig.enableBluetooth) {
@@ -1045,15 +1179,42 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   void _addMonitor(String baseStationDocId) async {
     if (!mounted) return;
 
-    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    final selectedType = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const IotListPage()),
+    );
+    if (!mounted || selectedType == null || selectedType.isEmpty) return;
+
+    // SONOFF is managed on its own tab — don't create a monitor document.
+    if (selectedType == monitorTypeSonoff) {
+      _selectSonoffTab();
+      return;
+    }
+
+    const implementedTypes = {
+      monitorTypeVehicle,
+      monitorTypeWheel,
+    };
+    if (!implementedTypes.contains(selectedType)) {
+      MyGlobalMessage.show(
+        'IoT Type',
+        'Not implemented yet',
+        MyMessageType.info,
+      );
+      return;
+    }
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
     final monitor = MonitorSettings(
-      monitorName: 'New Monitor',
+      monitorName: 'New $selectedType',
+      monitorType: selectedType,
       baseStationDocId: baseStationDocId,
     );
 
-    final doc = await userBaseMonitorsRef(uid, baseStationDocId).add(monitor.toMap());
+    final doc =
+        await userBaseMonitorsRef(uid, baseStationDocId).add(monitor.toMap());
 
     if (!mounted) return;
     final ui = _uiForBase(baseStationDocId);
@@ -1118,8 +1279,10 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       }
     }
   }
-  void _updateBaseTabs(int length) {
+  void _updateBaseTabs(int baseCount) {
+    final length = baseCount + _sonoffOffset;
     if (length == 0) {
+      _baseTabController?.removeListener(_onBaseTabChanged);
       _baseTabController?.dispose();
       _baseTabController = null;
       return;
@@ -1386,7 +1549,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
               if (monitor.monitorId.isEmpty || monitor.monitorId == 'none') {
                 MyGlobalMessage.show(
                   "Monitor Not Found",
-                  "No monitor ID found. Please press 'Pair' button",
+                  "No monitor ID found. Please PAIR first",
                   MyMessageType.info,
                 );
                 return;
@@ -1407,6 +1570,15 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
                 await _mqttConnectBase(base);
               }
             },
+          );
+
+        case monitorTypeSonoff:
+          return const Padding(
+            padding: EdgeInsets.all(8),
+            child: SizedBox(
+              height: 520,
+              child: SonoffIotPanel(embedded: true, active: true),
+            ),
           );
 
         default:
@@ -1456,7 +1628,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     }
 
     if (baseMonitors.isEmpty) {
-      return myCenterMsg('No iOT Monitors');
+      return myCenterMsg('No iOT Devices');
     }
 
     return Column(
@@ -1599,9 +1771,13 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
                         final selectedType = await Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => IotListPage(),
+                            builder: (context) => const IotListPage(),
                           ),
                         );
+                        if (selectedType == monitorTypeSonoff) {
+                          _selectSonoffTab();
+                          return;
+                        }
                         if (selectedType != null && selectedType is String) {
                           setState(() {
                             monitor.monitorType = selectedType;
@@ -1648,6 +1824,8 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
         final currentBaseMonitors = currentBase == null
             ? <MonitorSettings>[]
             : _monitorsForBase(monitors, currentBase.docId);
+        final onSonoff = _onSonoffTab;
+        final hasAnyTabs = _baseTabController != null;
 
         return Scaffold(
           appBar: AppBar(
@@ -1656,27 +1834,40 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                myAppbarTitle("iOT Monitors"),
+                myAppbarTitle("iOT Devices"),
                 myConnectionStatus(settings: settings),
               ],
             ),
-            bottom: baseService.lstBaseStations.isNotEmpty
+            bottom: hasAnyTabs
                 ? TabBar(
                     controller: _baseTabController,
                     isScrollable: true,
                     indicatorColor: Colors.blueAccent,
                     labelColor: Colors.white,
                     unselectedLabelColor: Colors.grey,
-                    tabs: baseService.lstBaseStations
-                        .map((b) => Tab(text: b.baseName))
-                        .toList(),
+                    tabs: [
+                      ...baseService.lstBaseStations
+                          .map((b) => Tab(text: b.baseName)),
+                      if (_showSonoff)
+                        const Tab(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.electrical_services, size: 18),
+                              SizedBox(width: 6),
+                              Text('SONOFF'),
+                            ],
+                          ),
+                        ),
+                    ],
                   )
                 : null,
           ),
-          bottomNavigationBar: currentBase == null
+          bottomNavigationBar: (currentBase == null || onSonoff)
               ? null
               : BottomNavigationBar(
                   currentIndex: _selectedIndex,
+                  type: BottomNavigationBarType.fixed,
                   backgroundColor: colorAppBar,
                   unselectedItemColor: Colors.white,
                   selectedItemColor: Colors.white,
@@ -1697,22 +1888,31 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
                       ),
                       label: 'Delete',
                     ),
+                    const BottomNavigationBarItem(
+                      icon: Icon(Icons.person, color: Colors.white),
+                      label: 'Tags',
+                    ),
                   ],
                 ),
-          body: baseService.lstBaseStations.isEmpty
+          body: !hasAnyTabs
               ? myCenterMsg(
                   'No Base Stations. Add one on the Base Stations page.',
                 )
               : TabBarView(
                   controller: _baseTabController,
-                  children: baseService.lstBaseStations
-                      .map(
-                        (baseStation) => _buildBaseMonitorsPanel(
-                          baseStation,
-                          monitors,
-                        ),
-                      )
-                      .toList(),
+                  children: [
+                    ...baseService.lstBaseStations.map(
+                      (baseStation) => _buildBaseMonitorsPanel(
+                        baseStation,
+                        monitors,
+                      ),
+                    ),
+                    if (_showSonoff)
+                      SonoffIotPanel(
+                        embedded: true,
+                        active: onSonoff,
+                      ),
+                  ],
                 ),
         );
       },

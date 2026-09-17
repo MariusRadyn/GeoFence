@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geofence/iot_monitors_page.dart';
 import 'package:geofence/utils.dart';
 
 const _cyanGlow = Color(0xFF00E5FF);
@@ -94,14 +95,19 @@ class _FreeTab extends StatelessWidget {
       children: [
         const _FreeServicesHeader(),
         const SizedBox(height: 16),
-        const _ServiceTile(
-          image: _AssetHero(iconThirdPartyIot, size: 100),
-          title: 'Third Party IOT Devices',
+        _ServiceTile(
+          image: const _AssetHero(iconThirdPartyIot, size: 100),
+          title: 'SONOFF (eWeLink)',
           description:
-              'Use the app free of charge for all third-party IOT smart home devices. We support Shelly, Tasmota, and SONOFF protocols. '
-              'At Limitless IOT we focus on control. If you need to be in full control, you are in the right place. '
-              'We offer you more control over your devices and more features than most IOT networking apps. '
-              'Feel free to contact us to request features. We put all customers first, even the ones enjoying a free ride.',
+              'Control SONOFF smart switches free of charge via your linked eWeLink account. '
+              'Open iOT Devices → SONOFF to link eWeLink and toggle devices. '
+              'Shelly and Tasmota support can be requested.',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const IotMonitorsPage()),
+            );
+          },
         ),
         const SizedBox(height: 14),
         const _ServiceTile(
@@ -195,16 +201,18 @@ class _ServiceTile extends StatelessWidget {
   final Widget image;
   final String title;
   final String description;
+  final VoidCallback? onTap;
 
   const _ServiceTile({
     required this.image,
     required this.title,
     required this.description,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final tile = Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
@@ -288,6 +296,8 @@ class _ServiceTile extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (onTap != null)
+                        const Icon(Icons.chevron_right, color: Colors.white54),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -305,6 +315,16 @@ class _ServiceTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+
+    if (onTap == null) return tile;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: tile,
       ),
     );
   }
@@ -718,7 +738,7 @@ class _ChangesTab extends StatelessWidget {
       bullets: [
         'Browse Limitless IoT products in-app',
         'Product detail pages with discount ribbons',
-        'Bob Pay checkout and Bob Go delivery rates',
+        'PayFast checkout with flat R150 delivery',
       ],
     ),
     _WhatsNewItem(

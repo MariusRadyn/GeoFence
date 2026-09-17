@@ -354,7 +354,7 @@ class IotDataPageState extends State<IotDataPage> with TickerProviderStateMixin 
     if (lstMonitorSettings.isEmpty) {
       return const Center(
         child: MyText(
-          text: "No iOT Monitors for this base",
+          text: "No iOT Devices for this base",
           color: Colors.grey,
         ),
       );

@@ -182,6 +182,7 @@ class _ProductList extends StatelessWidget {
                         Text(
                           '${money.format(product.salePrice)}'
                           '${product.discount > 0 ? ' · ${product.discount.round()}% off' : ''}'
+                          '${product.subscriptionMonthly > 0 ? ' · sub ${money.format(product.subscriptionMonthly)}/mo' : ''}'
                           '${product.active ? '' : ' · inactive'}'
                           '${product.isReady ? '' : ' · coming soon'}'
                           '${product.stockCount > 0 ? ' · stock ${product.stockCount}' : ' · no stock'}',
@@ -221,6 +222,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
   late final ShopSpellCheckerController _categoryController;
   final _priceController = TextEditingController();
   final _discountController = TextEditingController();
+  final _subscriptionController = TextEditingController();
   final _stockCountController = TextEditingController();
   final _weightController = TextEditingController();
   final _lengthController = TextEditingController();
@@ -258,6 +260,9 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
       _priceController.text = p.price > 0 ? p.price.toStringAsFixed(2) : '';
       _discountController.text =
           p.discount > 0 ? p.discount.toStringAsFixed(0) : '';
+      _subscriptionController.text = p.subscriptionMonthly > 0
+          ? p.subscriptionMonthly.toStringAsFixed(2)
+          : '';
       _stockCountController.text =
           p.stockCount > 0 ? p.stockCount.toString() : '';
       _weightController.text = p.weightKg.toString();
@@ -283,6 +288,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
     _descriptionController.dispose();
     _priceController.dispose();
     _discountController.dispose();
+    _subscriptionController.dispose();
     _categoryController.dispose();
     _stockCountController.dispose();
     _weightController.dispose();
@@ -417,9 +423,15 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
     final description = _descriptionController.text.trim();
     final price = double.tryParse(_priceController.text.trim()) ?? 0;
     final discount = double.tryParse(_discountController.text.trim()) ?? 0;
+    final subscriptionMonthly =
+        double.tryParse(_subscriptionController.text.trim()) ?? 0;
     final stockCount = int.tryParse(_stockCountController.text.trim()) ?? 0;
     if (discount < 0 || discount >= 100) {
       MyGlobalSnackBar.show('Discount must be between 0 and 99');
+      return;
+    }
+    if (subscriptionMonthly < 0) {
+      MyGlobalSnackBar.show('Subscription must be 0 or more');
       return;
     }
 
@@ -467,6 +479,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
         active: _active,
         stockCount: stockCount < 0 ? 0 : stockCount,
         isReady: _isReady,
+        subscriptionMonthly: subscriptionMonthly,
         weightKg: double.tryParse(_weightController.text.trim()) ?? 1,
         lengthCm: double.tryParse(_lengthController.text.trim()) ?? 20,
         widthCm: double.tryParse(_widthController.text.trim()) ?? 15,
@@ -673,6 +686,22 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                       if (n == null || n < 0 || n >= 100) {
                         return 'Use 0–99';
                       }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  MyTextFormField(
+                    controller: _subscriptionController,
+                    labelText: 'Subscription (ZAR / month)',
+                    hintText: 'Monthly amount — leave blank if none',
+                    inputType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    backgroundColor: colorAppBar,
+                    foregroundColor: Colors.white,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return null;
+                      final n = double.tryParse(v.trim());
+                      if (n == null || n < 0) return 'Enter 0 or more';
                       return null;
                     },
                   ),

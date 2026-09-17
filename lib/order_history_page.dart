@@ -1003,7 +1003,7 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
 
   Future<void> _exportAllShopSalesCsv() async {
     try {
-      final callable = FirebaseFunctions.instanceFor(region: 'us-central1')
+      final callable = FirebaseFunctions.instanceFor(region: cloudFunctionsRegion)
           .httpsCallable('listPaidShopOrders');
       final result = await callable.call();
       final data = result.data;

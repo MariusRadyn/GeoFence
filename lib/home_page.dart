@@ -19,6 +19,7 @@ import 'package:geofence/settings_page.dart';
 import 'package:geofence/order_history_page.dart';
 import 'package:geofence/shop_page.dart';
 import 'package:geofence/shop_setup_page.dart';
+import 'package:geofence/subscriptions_page.dart';
 import 'package:geofence/tracking_history_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/wages_summary_page.dart';
@@ -29,8 +30,13 @@ import 'iot_monitors_page.dart';
 
 class HomePage extends StatefulWidget {
   final bool openProfileOnLaunch;
+  final bool openShopOnLaunch;
 
-  const HomePage({super.key, this.openProfileOnLaunch = false});
+  const HomePage({
+    super.key,
+    this.openProfileOnLaunch = false,
+    this.openShopOnLaunch = false,
+  });
 
   @override
   State<HomePage> createState() => HomePageState();
@@ -44,6 +50,7 @@ class HomePageState extends State<HomePage>
   Timer? _loadingTimer;
   bool busyLoggingIn = false;
   bool _profileLaunchHandled = false;
+  bool _shopLaunchHandled = false;
   String? _profileLoadRequestedForUid;
   String _versionLabel = '';
 
@@ -175,8 +182,9 @@ class HomePageState extends State<HomePage>
       addTile(
         const MyCustomTileWithPic(
           imagePath: iconIot,
-          header: 'iOT Monitors',
-          description: 'Add multiple iOT monitors for various use cases',
+          header: 'iOT Devices',
+          description:
+              'Add Limitless IOT or third party IOT devices',
           widget: IotMonitorsPage(),
         ),
       );
@@ -264,8 +272,66 @@ class HomePageState extends State<HomePage>
     final showTrackingSection = AppConfig.showLiveTracking ||
         AppConfig.showGeoFenceSetup ||
         AppConfig.showTrackingHistory;
+    final showIotSection = AppConfig.showBaseStations ||
+        AppConfig.showIotMonitors ||
+        AppConfig.showIotDataReport;
+    final showShopSection = AppConfig.showShop;
+    final showGeneralSection = true;
+    final userIsDeveloper = user.userdata?.isDeveloper == true;
+    final showSetupShop = enableSetupShop || userIsDeveloper;
+    final showSetupSection = AppConfig.showSettings ||
+        AppConfig.showOperators ||
+        showSetupShop;
+
+    if (showIotSection) {
+      items.add(heading('iOT', first: true));
+      if (AppConfig.showBaseStations) {
+        items.add(drawerTile(
+          icon: Icons.cell_tower,
+          title: 'Base Station',
+          onTap: () => open(BaseStationPage()),
+        ));
+      }
+      if (AppConfig.showIotMonitors) {
+        items.add(drawerTile(
+          icon: Icons.monitor,
+          title: 'iOT Devices',
+          onTap: () => open(const IotMonitorsPage()),
+        ));
+      }
+      if (AppConfig.showIotDataReport) {
+        items.add(drawerTile(
+          icon: Icons.dataset,
+          title: 'iOT Data',
+          onTap: () => open(const IotDataPage()),
+        ));
+      }
+    }
+
+    if (showShopSection) {
+      items.add(heading('Shop', first: !showIotSection));
+      items.add(drawerTile(
+        icon: Icons.storefront_outlined,
+        title: 'Online Shop',
+        onTap: () => open(const ShopPage()),
+      ));
+      items.add(drawerTile(
+        icon: Icons.receipt_long_outlined,
+        title: 'Order History',
+        onTap: () => open(const OrderHistoryPage()),
+      ));
+      items.add(drawerTile(
+        icon: Icons.subscriptions_outlined,
+        title: 'Subscriptions',
+        onTap: () => open(const SubscriptionsPage()),
+      ));
+    }
+
     if (showTrackingSection) {
-      items.add(heading('Tracking', first: true));
+      items.add(heading(
+        'Tracking',
+        first: !showIotSection && !showShopSection,
+      ));
       if (AppConfig.showLiveTracking) {
         items.add(drawerTile(
           icon: Icons.gps_fixed,
@@ -289,51 +355,11 @@ class HomePageState extends State<HomePage>
       }
     }
 
-    final showIotSection = AppConfig.showBaseStations ||
-        AppConfig.showIotMonitors ||
-        AppConfig.showIotDataReport;
-    if (showIotSection) {
-      items.add(heading('iOT', first: !showTrackingSection));
-      if (AppConfig.showBaseStations) {
-        items.add(drawerTile(
-          icon: Icons.cell_tower,
-          title: 'Base Station',
-          onTap: () => open(BaseStationPage()),
-        ));
-      }
-      if (AppConfig.showIotMonitors) {
-        items.add(drawerTile(
-          icon: Icons.monitor,
-          title: 'iOT Monitors',
-          onTap: () => open(const IotMonitorsPage()),
-        ));
-      }
-      if (AppConfig.showIotDataReport) {
-        items.add(drawerTile(
-          icon: Icons.dataset,
-          title: 'iOT Data',
-          onTap: () => open(const IotDataPage()),
-        ));
-      }
-    }
-
-    final showGeneralSection = AppConfig.showOperators ||
-        AppConfig.showWages ||
-        AppConfig.showShop;
-    final userIsDeveloper = user.userdata?.isDeveloper == true;
-    final showSetupShop = enableSetupShop || userIsDeveloper;
-    // Setup always shown so Legal Documents remains reachable.
-    const showSetupSection = true;
-
     if (showGeneralSection) {
-      items.add(heading('General', first: !showTrackingSection && !showIotSection));
-      if (AppConfig.showOperators) {
-        items.add(drawerTile(
-          icon: Icons.person,
-          title: 'Operators',
-          onTap: () => open(const OperatorsPage()),
-        ));
-      }
+      items.add(heading(
+        'General',
+        first: !showIotSection && !showShopSection && !showTrackingSection,
+      ));
       if (AppConfig.showWages) {
         items.add(drawerTile(
           icon: Icons.attach_money_sharp,
@@ -341,30 +367,33 @@ class HomePageState extends State<HomePage>
           onTap: () => open(const WagesPage()),
         ));
       }
-      if (AppConfig.showShop) {
-        items.add(drawerTile(
-          icon: Icons.storefront_outlined,
-          title: 'Online Shop',
-          onTap: () => open(const ShopPage()),
-        ));
-        items.add(drawerTile(
-          icon: Icons.receipt_long_outlined,
-          title: 'Order History',
-          onTap: () => open(const OrderHistoryPage()),
-        ));
-      }
+      items.add(drawerTile(
+        icon: Icons.gavel_outlined,
+        title: 'Legal Documents',
+        onTap: () => open(const LegalDocumentsPage()),
+      ));
     }
 
     if (showSetupSection) {
       items.add(heading(
         'Setup',
-        first: !showTrackingSection && !showIotSection && !showGeneralSection,
+        first: !showIotSection &&
+            !showShopSection &&
+            !showTrackingSection &&
+            !showGeneralSection,
       ));
       if (AppConfig.showSettings) {
         items.add(drawerTile(
           icon: Icons.settings,
           title: 'Settings',
           onTap: () => open(SettingsPage(userId: user.userdata!.userID)),
+        ));
+      }
+      if (AppConfig.showOperators) {
+        items.add(drawerTile(
+          icon: Icons.person,
+          title: 'Tags',
+          onTap: () => open(const OperatorsPage()),
         ));
       }
       if (showSetupShop) {
@@ -374,11 +403,6 @@ class HomePageState extends State<HomePage>
           onTap: () => open(const ShopSetupPage()),
         ));
       }
-      items.add(drawerTile(
-        icon: Icons.gavel_outlined,
-        title: 'Legal Documents',
-        onTap: () => open(const LegalDocumentsPage()),
-      ));
     }
 
     items.add(drawerTile(
@@ -390,6 +414,15 @@ class HomePageState extends State<HomePage>
     items.add(const SizedBox(height: 5));
     return items;
   }
+  Future<void> _openShopOnLaunch() async {
+    if (!AppConfig.addShop) return;
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ShopPage()),
+    );
+  }
+
   Future<void> _openProfileOnLaunch() async {
     final userService = context.read<UserDataService>();
     await userService.load();
@@ -550,6 +583,14 @@ class HomePageState extends State<HomePage>
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (!mounted) return;
                     _openProfileOnLaunch();
+                  });
+                }
+
+                if (widget.openShopOnLaunch && !_shopLaunchHandled) {
+                  _shopLaunchHandled = true;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    _openShopOnLaunch();
                   });
                 }
 

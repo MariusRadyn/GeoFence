@@ -65,7 +65,7 @@ const String iconNoImage = 'assets/noImage.jpg';
 const String iconProfile = 'assets/profile.png';
 const String iconShopNoImage = 'assets/shop_no_image.png';
 const String iconGeofenceNoBackground = 'assets/geofence_no_background.png';
-const String iconThirdPartyIot = 'assets/third_party_iot.png';
+const String iconThirdPartyIot = 'assets/third_party_iot4.png';
 const String iconFleet = 'assets/fleet_track_icon.png';
 const String iconFleetNoBackground = 'assets/fleet_track_no_background.png';
 const String iconTrailer = 'assets/trailer_icon.png';
@@ -112,6 +112,9 @@ const colorProgressCircle = Colors.lightBlueAccent ;
 final colorTile = ui.Color.fromARGB(100, 21, 39, 63).withValues(alpha: 0.70);
 const colorTileLight = ui.Color.fromARGB(255, 7, 73, 105);
 
+/// Must match `functions/region.js` (Belgium — closest 1st-gen region for SA).
+const String cloudFunctionsRegion = 'europe-west1';
+
 final FirebaseAuthService firebaseAuthService = FirebaseAuthService();
 final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
@@ -142,6 +145,7 @@ const warrantyAndReturnsUrl = '$_accountPagesHost/warranty.html';
 const shippingPolicyUrl = '$_accountPagesHost/shipping.html';
 const profileLaunchPath = '/profile';
 bool _launchOpensProfile = false;
+bool _launchOpensShop = false;
 
 /// Call once at web startup before Flutter rewrites the browser URL.
 void cacheLaunchRoute() {
@@ -151,10 +155,16 @@ void cacheLaunchRoute() {
   _launchOpensProfile = path == profileLaunchPath ||
       path == '$profileLaunchPath/' ||
       uri.queryParameters['page'] == 'profile';
+  _launchOpensShop = path == '/shop' ||
+      path == '/shop/' ||
+      uri.queryParameters['page'] == 'shop';
 }
 
 /// True when the web app was opened for Profile (e.g. from delete-data pages).
 bool get launchOpensProfile => _launchOpensProfile;
+
+/// True when the web app was opened to return to Online Shop (e.g. after payment).
+bool get launchOpensShop => _launchOpensShop;
 const collectionGeoFences = 'geoFences';
 const collectionTrackingSessions = 'trackingSessions';
 const collectionLocations = 'locations';
@@ -213,9 +223,11 @@ const double settingMonDefaultTicksPerM = 20; // Default value when new Monitor 
 const String profileTypeOperator = "operator";
 const String profileTypeUser = "user";
 
-// Operator Types
-const String operatorTypeOperator = "Operator";
+// Operator / Tag Types
+const String operatorTypeEmployee = "Employee";
 const String operatorTypeSupervisor = "Supervisor";
+/// Legacy value still present on older Firestore docs.
+const String operatorTypeOperatorLegacy = "Operator";
 const String operatorDocId = "docId";
 const String operatorTagId = "tagId";
 const String operatorName = "name";
@@ -223,9 +235,25 @@ const String operatorSurname = "surname";
 const String operatorVersion = "operatorsVer";
 const fireOperatorMarkedToDelete = 'markedToDelete';
 const List<String> settingOperatorTypeList = [
-  operatorTypeOperator,
+  operatorTypeEmployee,
   operatorTypeSupervisor
 ];
+
+bool isEmployeeAccessLevel(String? accessLevel) {
+  final level = (accessLevel ?? '').trim();
+  return level.isEmpty ||
+      level == operatorTypeEmployee ||
+      level == operatorTypeOperatorLegacy;
+}
+
+bool isSupervisorAccessLevel(String? accessLevel) {
+  return (accessLevel ?? '').trim() == operatorTypeSupervisor;
+}
+
+String normalizeAccessLevel(String? accessLevel) {
+  if (isSupervisorAccessLevel(accessLevel)) return operatorTypeSupervisor;
+  return operatorTypeEmployee;
+}
 
 // Monitor Types
 const String monitorTypeVehicle = "Vehicle Track";
@@ -233,6 +261,7 @@ const String monitorTypeFleet = "Fleet Track";
 const String monitorTypeMachine = "Machine";
 const String monitorTypeWheel = "Distance Wheel";
 const String monitorTypeTrailer = "Trailer Wiring";
+const String monitorTypeSonoff = "SONOFF";
 // const List<String> settingMonitorTypeList = [
 //   monitorTypeVehicle,
 //   monitorTypeMobileMachine,
@@ -280,6 +309,8 @@ const fireMonitorCalibrationDistance = 'calibrationDistance';
 const fireMonitorTimestamp = 'timestamp';
 const fireMonitorLastLogTimestamp = 'lastLogTimestamp';
 const fireMonitorMarkedToDelete = 'markedToDelete';
+const fireMonitorSubscriptionOrderId = 'subscriptionOrderId';
+const fireMonitorSubscriptionToken = 'subscriptionToken';
 
 /// Append a cache-buster so browsers / CachedNetworkImage pick up replaced photos.
 String resolvedNetworkImageUrl(String? url, {String? version}) {
@@ -631,6 +662,9 @@ ImageProvider<Object> getMonitorImage(MonitorSettings monitor) {
       case monitorTypeTrailer:
         return AssetImage(iconTrailer);
 
+      case monitorTypeSonoff:
+        return AssetImage(iconThirdPartyIot);
+
       default:
         return AssetImage(iconNoImage);
     }
@@ -791,12 +825,16 @@ class MyTextFormFieldState extends State<MyTextFormField> {
 
     return SizedBox(
       width: widget.width,
-      height: compact ? 34 : (isMultiline ? null : 55),
-      child: TextFormField(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: compact ? 34 : (isMultiline ? 0 : 64),
+        ),
+        child: TextFormField(
         style: TextStyle(
           fontSize: widget.valueFontSize,
           color: widget.foregroundColor,
           fontFamily: 'Poppins',
+          height: 1.3,
         ),
 
         autocorrect: allowSpellAssist,
@@ -840,7 +878,14 @@ class MyTextFormFieldState extends State<MyTextFormField> {
           alignLabelWithHint: isMultiline,
           contentPadding: isMultiline
               ? const EdgeInsets.fromLTRB(12, 20, 12, 12)
-              : (compact ? const EdgeInsets.only(top: 2, bottom: 6) : null),
+              : (compact
+                  ? const EdgeInsets.only(top: 2, bottom: 6)
+                  : const EdgeInsets.fromLTRB(0, 20, 0, 10)),
+          errorMaxLines: 2,
+          errorStyle: const TextStyle(
+            height: 1.25,
+            fontSize: 12,
+          ),
           enabledBorder: widget.showLine
               ? const UnderlineInputBorder(
                   borderSide: BorderSide(color: Colors.grey),
@@ -893,6 +938,7 @@ class MyTextFormFieldState extends State<MyTextFormField> {
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -903,6 +949,8 @@ class MyCustomTileWithPic extends StatelessWidget {
   final String description;
   final Widget widget;
   final VoidCallback? onTap;
+  final String? headerSuffix;
+  final Color? headerSuffixColor;
 
   const MyCustomTileWithPic({
     this.imagePath,
@@ -911,6 +959,8 @@ class MyCustomTileWithPic extends StatelessWidget {
     this.description = "",
     required this.widget,
     this.onTap,
+    this.headerSuffix,
+    this.headerSuffixColor,
     super.key,
   }) : assert(
           imagePath != null || leading != null,
@@ -1004,13 +1054,30 @@ class MyCustomTileWithPic extends StatelessWidget {
                         children: [
                           //const SizedBox(height: 5),
 
-                          Text(
-                            header,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Poppins'
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: header,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Poppins',
+                                  ),
+                                ),
+                                if (headerSuffix != null &&
+                                    headerSuffix!.trim().isNotEmpty)
+                                  TextSpan(
+                                    text: ' $headerSuffix',
+                                    style: TextStyle(
+                                      color: headerSuffixColor ?? colorOrange,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      fontFamily: 'Poppins',
+                                    ),
+                                  ),
+                              ],
                             ),
                             softWrap: true,
                           ),
@@ -3050,6 +3117,8 @@ class MonitorSettings {
   double ticksPerM;
   int ticks;
   bool markedToDelete;
+  String subscriptionOrderId;
+  String subscriptionToken;
 
   // Local-only (NOT saved)
   bool isLoading;
@@ -3079,6 +3148,8 @@ class MonitorSettings {
     this.ticks = 0,
     this.calibrationDistance = 0,
     this.markedToDelete = false,
+    this.subscriptionOrderId = '',
+    this.subscriptionToken = '',
 
     // Local
     this.isLoading = false,
@@ -3115,6 +3186,8 @@ class MonitorSettings {
       imageURL: asString(map[fireMonitorImageUrl]),
       imageFilename: asString(map[fireMonitorImageFilename]),
       markedToDelete: map[fireMonitorMarkedToDelete] == true,
+      subscriptionOrderId: asString(map[fireMonitorSubscriptionOrderId]),
+      subscriptionToken: asString(map[fireMonitorSubscriptionToken]),
     );
   }
 
@@ -3135,6 +3208,8 @@ class MonitorSettings {
       fireMonitorImageFilename: imageFilename,
       fireMonitorCalibrationDistance: calibrationDistance,
       fireMonitorMarkedToDelete: markedToDelete,
+      fireMonitorSubscriptionOrderId: subscriptionOrderId,
+      fireMonitorSubscriptionToken: subscriptionToken,
     };
   }
 }
@@ -3377,6 +3452,27 @@ class MonitorSettingsService extends ChangeNotifier {
     } catch (e) {
       MyGlobalSnackBar.show('Cloud Error: $e');
     }
+  }
+
+  /// Clears subscription fields on any monitors linked to [orderId].
+  Future<int> clearSubscriptionFromOrder(String orderId) async {
+    final id = orderId.trim();
+    if (id.isEmpty) return 0;
+    final linked = _monitors
+        .where((m) => m.subscriptionOrderId.trim() == id)
+        .toList();
+    for (final m in linked) {
+      m.subscriptionOrderId = '';
+      m.subscriptionToken = '';
+      await save(m, showSavedMessage: false);
+    }
+    if (linked.isNotEmpty) notifyListeners();
+    return linked.length;
+  }
+
+  bool monitorHasLinkedSubscription(MonitorSettings monitor) {
+    return monitor.monitorType == monitorTypeWheel &&
+        monitor.subscriptionOrderId.trim().isNotEmpty;
   }
 
   void setMonitors(List<MonitorSettings> list) {
@@ -3812,7 +3908,7 @@ class OperatorData{
       docId: docId,
       name: asString(map['name']),
       surname: asString(map['surname']),
-      accessLevel: asString(map['accessLevel']),
+      accessLevel: normalizeAccessLevel(asString(map['accessLevel'])),
       tagId: asString(map['tagId']),
       imageURL: asString(map['photoURL']),
       imageFilename: asString(map['photoFilename']),
@@ -3871,9 +3967,9 @@ class OperatorService extends ChangeNotifier {
   final newOperator = OperatorData(
       docId: '',
       name: 'New',
-      surname: 'Operator',
+      surname: 'Employee',
       tagId: 'none',
-      accessLevel: operatorTypeOperator
+      accessLevel: operatorTypeEmployee
   );
 
   OperatorService() {
@@ -3972,7 +4068,7 @@ class OperatorService extends ChangeNotifier {
     super.dispose();
   }
 
-  Future<OperatorData?> addNew() async {
+  Future<OperatorData?> addNew({String accessLevel = operatorTypeEmployee}) async {
     try{
       String? uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return null;
@@ -3986,7 +4082,10 @@ class OperatorService extends ChangeNotifier {
           .collection(collectionOperators);
 
       final docRef = ref.doc();
-      final newOp = newOperator.copyWith(docID: docRef.id);
+      final newOp = newOperator.copyWith(
+        docID: docRef.id,
+        accessLevel: normalizeAccessLevel(accessLevel),
+      );
       await docRef.set(newOp.toMap());
 
       setNewOperatorVersion();
@@ -4117,7 +4216,7 @@ class OperatorService extends ChangeNotifier {
       operator.markedToDelete = true;
       _safeNotify();
       setNewOperatorVersion();
-      MyGlobalSnackBar.show('Operator hidden (wage records kept)');
+      MyGlobalSnackBar.show('Employee hidden (wage records kept)');
     } catch (e) {
       MyGlobalSnackBar.show('Delete Failed: $e');
     }

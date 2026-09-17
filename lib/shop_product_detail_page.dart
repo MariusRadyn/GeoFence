@@ -449,12 +449,67 @@ class _ShopProductDetailPageState extends State<ShopProductDetailPage> {
                 style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ),
+          if (p.subscriptionMonthly > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: colorIceBlue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: colorIceBlue.withValues(alpha: 0.55)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.autorenew,
+                      color: colorIceBlue,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            height: 1.3,
+                          ),
+                          children: [
+                            const TextSpan(
+                              text: 'Monthly subscription  ',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            TextSpan(
+                              text: '${_money.format(p.subscriptionMonthly)}/mo',
+                              style: const TextStyle(
+                                color: colorIceBlue,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               _InfoChip(label: p.category, icon: Icons.category_outlined),
+              if (p.subscriptionMonthly > 0)
+                _InfoChip(
+                  label: 'Subscription ${_money.format(p.subscriptionMonthly)}/mo',
+                  icon: Icons.autorenew,
+                  color: colorOrange,
+                ),
               if (p.freeDelivery)
                 const _InfoChip(
                   label: 'FREE DELIVERY',

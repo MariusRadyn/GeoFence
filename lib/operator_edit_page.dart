@@ -357,7 +357,7 @@ return Consumer<BaseStationService>(
         appBar: AppBar(
           backgroundColor: colorAppBar,
           foregroundColor: Colors.white,
-          title: myAppbarTitle('Operator'),
+          title: myAppbarTitle('Tag'),
         ),
         body: SafeArea(
           child: // Avatar
@@ -439,11 +439,14 @@ return Consumer<BaseStationService>(
                         const EdgeInsets.fromLTRB(10, 10, 10, 10),
                         child: MyDropdown(
                           label: 'Access Level',
-                          value: widget.operatorData!.accessLevel,
+                          value: normalizeAccessLevel(
+                            widget.operatorData!.accessLevel,
+                          ),
                           lstDropdownValues: settingOperatorTypeList,
                           onChange: (value) {
                             setState(() {
-                              widget.operatorData!.accessLevel = value ?? '';
+                              widget.operatorData!.accessLevel =
+                                  normalizeAccessLevel(value);
                             });
                             context.read<OperatorService>().save(widget.operatorData!);
                           },

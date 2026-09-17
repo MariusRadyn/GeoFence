@@ -47,7 +47,7 @@ One project, two product modes via `--dart-define=APP_FLAVOR=...`:
 
 | Flavor | Define | Typical target | Features |
 |--------|--------|----------------|----------|
-| **Full** | `APP_FLAVOR=full` | Android / iOS | Track, GeoFence, Base Stations, IoT Monitors + reports |
+| **Full** | `APP_FLAVOR=full` | Android / iOS | Track, GeoFence, Base Stations, IoT Devices + reports |
 | **Reporting** | `APP_FLAVOR=reporting` | **Web**, Windows | IoT Data, Wages, Tracking History, Operators, Settings |
 
 If `APP_FLAVOR` is omitted: **web defaults to reporting**, mobile/desktop default to **full**.

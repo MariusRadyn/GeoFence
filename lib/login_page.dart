@@ -432,8 +432,10 @@ class LoginPageState extends State<LoginPage> {
         } else {
           await userService.load();
         }
+        if(!mounted) return null;
 
         await context.read<SettingsService>().load();
+        if(!mounted) return null;
 
         return result.user;
 
@@ -737,11 +739,14 @@ class LoginPageState extends State<LoginPage> {
     if (!mounted) return;
     // Monitors first — may migrate legacy docs and create a default base station.
     await context.read<MonitorSettingsService>().load();
+    if(!mounted) return;
+
     await Future.wait([
       context.read<SettingsService>().load(),
       context.read<BaseStationService>().load(),
       context.read<OperatorService>().load(),
     ]);
+    if(!mounted) return;
   }
 
   Future<bool> _loginWithGoogle(BuildContext context) async {
@@ -1051,7 +1056,10 @@ class LoginPageState extends State<LoginPage> {
                         final needsVerify = !(FirebaseAuth
                                 .instance.currentUser?.emailVerified ??
                             false);
-                        Navigator.of(context).pop();
+                        
+                        if(mounted){
+                          Navigator.of(context).pop();
+                        }
 
                         if (needsVerify) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {

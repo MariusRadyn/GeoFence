@@ -7,5 +7,6 @@
     "ANDROID_HOME": "${env:LOCALAPPDATA}\\Android\\Sdk",
     "PATH": "${env:PATH};${env:LOCALAPPDATA}\\Android\\Sdk\\platform-tools"
   },
-  "cmake.configureOnOpen": false
+  "cmake.configureOnOpen": false,
+  "cmake.sourceDirectory": "D:/git/GeoFenceApp/windows"
 }

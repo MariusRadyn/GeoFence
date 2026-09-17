@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/address_suggestions.dart';
 import 'package:geofence/shop_page.dart';
+import 'package:geofence/shop_subscribe_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -13,13 +14,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ShopCheckoutPage extends StatefulWidget {
-  const ShopCheckoutPage({super.key});
+  final ShopSubscribeDetails? subscribeDetails;
+
+  const ShopCheckoutPage({super.key, this.subscribeDetails});
 
   @override
   State<ShopCheckoutPage> createState() => _ShopCheckoutPageState();
 }
 
 class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
+  static const double _flatShipping = 150;
+
   final _money = NumberFormat.currency(locale: 'en_ZA', symbol: 'R');
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
@@ -32,25 +37,32 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
   final _streetFocus = FocusNode();
   final _suggest = AddressSuggestionService();
 
-  bool _loadingRates = false;
   bool _paying = false;
   bool _applyingSuggestion = false;
   bool _loadingSuggestions = false;
   List<AddressSuggestion> _suggestions = [];
-  List<Map<String, dynamic>> _rates = [];
-  Map<String, dynamic>? _selectedRate;
   Timer? _suggestTimer;
+  Timer? _hideSuggestionsTimer;
 
   FirebaseFunctions get _functions =>
-      FirebaseFunctions.instanceFor(region: 'us-central1');
+      FirebaseFunctions.instanceFor(region: cloudFunctionsRegion);
 
   @override
   void initState() {
     super.initState();
     final user = FirebaseAuth.instance.currentUser;
-    _email.text = user?.email ?? '';
-    _name.text = user?.displayName ?? '';
+    final sub = widget.subscribeDetails;
+    _email.text = sub?.email.isNotEmpty == true
+        ? sub!.email
+        : (user?.email ?? '');
+    _name.text = sub?.fullName.isNotEmpty == true
+        ? sub!.fullName
+        : (user?.displayName ?? '');
+    if (sub != null && sub.phone.isNotEmpty) {
+      _phone.text = sub.phone;
+    }
     _street.addListener(_onStreetChanged);
+    _streetFocus.addListener(_onStreetFocusChanged);
     _loadSavedAddress();
     _suggest.ensureLocation();
   }
@@ -58,7 +70,9 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
   @override
   void dispose() {
     _suggestTimer?.cancel();
+    _hideSuggestionsTimer?.cancel();
     _street.removeListener(_onStreetChanged);
+    _streetFocus.removeListener(_onStreetFocusChanged);
     _streetFocus.dispose();
     _name.dispose();
     _phone.dispose();
@@ -70,37 +84,89 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
     super.dispose();
   }
 
+  String _shipKey(String base) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    return uid.isEmpty ? base : '${base}_$uid';
+  }
+
   Future<void> _loadSavedAddress() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
+    final user = FirebaseAuth.instance.currentUser;
+    final sub = widget.subscribeDetails;
+    _applyingSuggestion = true;
     setState(() {
-      _name.text = prefs.getString('shop_ship_name') ?? _name.text;
-      _phone.text = prefs.getString('shop_ship_phone') ?? '';
-      _street.text = prefs.getString('shop_ship_street') ?? '';
-      _suburb.text = prefs.getString('shop_ship_suburb') ?? '';
-      _city.text = prefs.getString('shop_ship_city') ?? '';
-      _postal.text = prefs.getString('shop_ship_code') ?? '';
+      // Prefer subscribe form / signed-in user over any stale saved email.
+      if (sub != null && sub.email.isNotEmpty) {
+        _email.text = sub.email;
+      } else {
+        _email.text = user?.email?.trim() ?? _email.text;
+      }
+      if (sub == null || sub.fullName.isEmpty) {
+        _name.text =
+            prefs.getString(_shipKey('shop_ship_name')) ?? _name.text;
+      }
+      if (sub == null || sub.phone.isEmpty) {
+        _phone.text =
+            prefs.getString(_shipKey('shop_ship_phone')) ?? _phone.text;
+      }
+      _street.text = prefs.getString(_shipKey('shop_ship_street')) ?? '';
+      _suburb.text = prefs.getString(_shipKey('shop_ship_suburb')) ?? '';
+      _city.text = prefs.getString(_shipKey('shop_ship_city')) ?? '';
+      _postal.text = prefs.getString(_shipKey('shop_ship_code')) ?? '';
+      _suggestions = [];
+      _loadingSuggestions = false;
     });
+    _applyingSuggestion = false;
   }
 
   Future<void> _saveAddress() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('shop_ship_name', _name.text.trim());
-    await prefs.setString('shop_ship_phone', _phone.text.trim());
-    await prefs.setString('shop_ship_street', _street.text.trim());
-    await prefs.setString('shop_ship_suburb', _suburb.text.trim());
-    await prefs.setString('shop_ship_city', _city.text.trim());
-    await prefs.setString('shop_ship_code', _postal.text.trim());
+    await prefs.setString(_shipKey('shop_ship_name'), _name.text.trim());
+    await prefs.setString(_shipKey('shop_ship_phone'), _phone.text.trim());
+    await prefs.setString(_shipKey('shop_ship_street'), _street.text.trim());
+    await prefs.setString(_shipKey('shop_ship_suburb'), _suburb.text.trim());
+    await prefs.setString(_shipKey('shop_ship_city'), _city.text.trim());
+    await prefs.setString(_shipKey('shop_ship_code'), _postal.text.trim());
+  }
+
+  void _clearSuggestions() {
+    if (_suggestions.isEmpty && !_loadingSuggestions) return;
+    setState(() {
+      _suggestions = [];
+      _loadingSuggestions = false;
+    });
+  }
+
+  void _onStreetFocusChanged() {
+    if (_streetFocus.hasFocus) {
+      _hideSuggestionsTimer?.cancel();
+      final query = _street.text.trim();
+      if (query.length >= 3) {
+        _suggestTimer?.cancel();
+        _suggestTimer = Timer(const Duration(milliseconds: 200), () {
+          _fetchSuggestions(query);
+        });
+      }
+      return;
+    }
+    // Delay hide so a tap on a suggestion can register before the list disappears.
+    _suggestTimer?.cancel();
+    _hideSuggestionsTimer?.cancel();
+    _hideSuggestionsTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted || _applyingSuggestion || _streetFocus.hasFocus) return;
+      _clearSuggestions();
+    });
   }
 
   void _onStreetChanged() {
     if (_applyingSuggestion) return;
+    if (!_streetFocus.hasFocus) return;
+    _hideSuggestionsTimer?.cancel();
     _suggestTimer?.cancel();
     final query = _street.text.trim();
     if (query.length < 3) {
-      if (_suggestions.isNotEmpty) {
-        setState(() => _suggestions = []);
-      }
+      _clearSuggestions();
       return;
     }
     _suggestTimer = Timer(const Duration(milliseconds: 280), () {
@@ -109,36 +175,87 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
   }
 
   Future<void> _fetchSuggestions(String query) async {
+    if (!_streetFocus.hasFocus) return;
     if (mounted) setState(() => _loadingSuggestions = true);
     try {
       final list = await _suggest.search(query);
-      if (!mounted || _street.text.trim() != query) return;
+      if (!mounted || _street.text.trim() != query || !_streetFocus.hasFocus) {
+        if (mounted) _clearSuggestions();
+        return;
+      }
       setState(() {
         _suggestions = list;
         _loadingSuggestions = false;
       });
     } catch (_) {
       if (!mounted || _street.text.trim() != query) return;
-      setState(() {
-        _suggestions = [];
-        _loadingSuggestions = false;
-      });
+      _clearSuggestions();
     }
   }
 
   Future<void> _applySuggestion(AddressSuggestion suggestion) async {
-    final detailed = await _suggest.details(suggestion);
-    if (!mounted) return;
+    _hideSuggestionsTimer?.cancel();
+    _suggestTimer?.cancel();
     _applyingSuggestion = true;
+    final typedStreet = _street.text.trim();
+
+    // Fill immediately from the tapped suggestion (works offline of details).
     setState(() {
-      if (detailed.street.isNotEmpty) _street.text = detailed.street;
-      if (detailed.suburb.isNotEmpty) _suburb.text = detailed.suburb;
-      if (detailed.city.isNotEmpty) _city.text = detailed.city;
-      if (detailed.postalCode.isNotEmpty) _postal.text = detailed.postalCode;
+      if (suggestion.street.isNotEmpty) {
+        _street.text = _keepHouseNumber(typedStreet, suggestion.street);
+      } else if (suggestion.label.isNotEmpty) {
+        _street.text = _keepHouseNumber(
+          typedStreet,
+          suggestion.label.split(',').first.trim(),
+        );
+      }
+      if (suggestion.suburb.isNotEmpty) _suburb.text = suggestion.suburb;
+      if (suggestion.city.isNotEmpty) _city.text = suggestion.city;
+      if (suggestion.postalCode.isNotEmpty) {
+        _postal.text = suggestion.postalCode;
+      }
       _suggestions = [];
+      _loadingSuggestions = false;
     });
-    _streetFocus.unfocus();
-    _applyingSuggestion = false;
+
+    try {
+      final detailed = await _suggest.details(suggestion);
+      if (!mounted) return;
+      setState(() {
+        if (detailed.street.isNotEmpty) {
+          _street.text = _keepHouseNumber(typedStreet, detailed.street);
+        }
+        if (detailed.suburb.isNotEmpty) _suburb.text = detailed.suburb;
+        if (detailed.city.isNotEmpty) _city.text = detailed.city;
+        if (detailed.postalCode.isNotEmpty) {
+          _postal.text = detailed.postalCode;
+        }
+      });
+    } finally {
+      if (mounted) _streetFocus.unfocus();
+      _applyingSuggestion = false;
+    }
+  }
+
+  /// Suggestions often return the road name only; keep a house number the user typed.
+  String _keepHouseNumber(String typed, String suggested) {
+    final typedTrim = typed.trim();
+    final suggestedTrim = suggested.trim();
+    if (suggestedTrim.isEmpty) return typedTrim;
+    if (typedTrim.isEmpty) return suggestedTrim;
+    // Suggestion already includes a number (e.g. "46 Pope Ellis Dr").
+    if (RegExp(r'^\d').hasMatch(suggestedTrim)) return suggestedTrim;
+
+    final match = RegExp(
+      r'^(\d+[A-Za-z]?(?:\s*[-/]\s*\d+[A-Za-z]?)?)',
+    ).firstMatch(typedTrim);
+    if (match == null) return suggestedTrim;
+
+    final number = match.group(1)!.trim();
+    if (suggestedTrim.toLowerCase().startsWith(number.toLowerCase())) {
+      return suggestedTrim;
+    }
+    return '$number $suggestedTrim';
   }
 
   Map<String, dynamic> _destination() => {
@@ -155,8 +272,15 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
         ..._destination(),
       };
 
-  double get _shippingAmount =>
-      (_selectedRate?['amount'] as num?)?.toDouble() ?? 0;
+  Map<String, dynamic> _shippingRateFor(double amount) => {
+        'id': amount <= 0 ? 'free_delivery' : 'flat_150',
+        'name': amount <= 0 ? 'Free delivery' : 'Standard delivery',
+        'amount': amount,
+        'eta': amount <= 0 ? 'Free delivery' : 'Flat rate',
+      };
+
+  double _shippingForCart(ShopCartService cart) =>
+      cart.needsShipping ? _flatShipping : 0;
 
   String _callableError(Object e) {
     if (e is FirebaseFunctionsException) {
@@ -165,62 +289,54 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
     return '$e';
   }
 
-  Future<void> _loadRates(ShopCartService cart) async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _loadingRates = true;
-      _rates = [];
-      _selectedRate = null;
-    });
-    try {
-      await _saveAddress();
-      final callable = _functions.httpsCallable('getBobGoRates');
-      final result = await callable.call({
-        'destination': _destination(),
-        'fullName': _name.text.trim(),
-        'phone': _phone.text.trim(),
-        'email': _email.text.trim(),
-        'cartTotal': cart.total,
-        'items': cart.items
-            .map(
-              (i) => {
-                'productId': i.product.id,
-                'name': i.product.name,
-                'quantity': i.quantity,
-                'price': i.unitPrice,
-                'weightKg': i.product.weightKg,
-                'lengthCm': i.product.lengthCm,
-                'widthCm': i.product.widthCm,
-                'heightCm': i.product.heightCm,
-              },
-            )
-            .toList(),
-      });
-      final raw = result.data;
-      final list = (raw is Map && raw['rates'] is List)
-          ? List<Map<String, dynamic>>.from(
-              (raw['rates'] as List).map(
-                (e) => Map<String, dynamic>.from(e as Map),
+  bool _payingDialogVisible = false;
+
+  void _showPayingDialog() {
+    if (_payingDialogVisible || !mounted) return;
+    _payingDialogVisible = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (dialogContext) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: Colors.blue, width: 2),
+          ),
+          backgroundColor: colorAppTitle,
+          title: Row(
+            children: [
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: colorOrange,
+                ),
               ),
-            )
-          : <Map<String, dynamic>>[];
-      if (!mounted) return;
-      setState(() {
-        _rates = list;
-        _selectedRate = list.isEmpty ? null : list.first;
-      });
-      if (list.isEmpty) {
-        MyGlobalMessage.show(
-          'Shipping',
-          'No Bob Go rates for this address. Check suburb and postal code.',
-          MyMessageType.warning,
-        );
-      }
-    } catch (e) {
-      MyGlobalMessage.show('Bob Go', _callableError(e), MyMessageType.error);
-    } finally {
-      if (mounted) setState(() => _loadingRates = false);
-    }
+              const SizedBox(width: 12),
+              const Expanded(
+                child: MyText(text: 'Payment', color: Colors.white),
+              ),
+            ],
+          ),
+          content: const MyText(
+            text: 'Preparing checkout…',
+            color: Colors.grey,
+            fontsize: 18,
+          ),
+        ),
+      ),
+    ).whenComplete(() {
+      _payingDialogVisible = false;
+    });
+  }
+
+  void _hidePayingDialog() {
+    if (!_payingDialogVisible || !mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
   }
 
   Future<void> _pay(ShopCartService cart) async {
@@ -235,20 +351,14 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
     }
     if (cart.isEmpty) return;
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedRate == null) {
-      MyGlobalMessage.show(
-        'Shipping',
-        'Get Bob Go rates and select a delivery option first.',
-        MyMessageType.warning,
-      );
-      return;
-    }
 
     setState(() => _paying = true);
+    _showPayingDialog();
     try {
       await _saveAddress();
-      final shipping = _shippingAmount;
+      final shipping = _shippingForCart(cart);
       final subtotal = cart.total;
+      final subscriptionMonthly = cart.subscriptionMonthlyTotal;
       final total = subtotal + shipping;
       final orderRef = FirebaseFirestore.instance
           .collection(collectionUsers)
@@ -274,6 +384,8 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
               'lengthCm': i.product.lengthCm,
               'widthCm': i.product.widthCm,
               'heightCm': i.product.heightCm,
+              'freeDelivery': i.product.freeDelivery,
+              'subscriptionMonthly': i.product.subscriptionMonthly,
             },
           )
           .toList();
@@ -285,50 +397,71 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
         'items': items,
         'subtotal': subtotal,
         'shippingAmount': shipping,
+        'subscriptionMonthly': subscriptionMonthly,
+        if (widget.subscribeDetails != null)
+          'subscription': {
+            ...widget.subscribeDetails!.toMap(),
+            'amount': subscriptionMonthly,
+          },
         'total': total,
         'currency': 'ZAR',
         'status': 'pending_payment',
-        'paymentProvider': 'bob_pay',
-        'shippingProvider': 'bob_go',
+        'paymentProvider': 'payfast',
+        'shippingProvider': shipping <= 0 ? 'free' : 'flat',
         'shipping': _shippingPayload(),
-        'shippingRate': _selectedRate,
+        'shippingRate': _shippingRateFor(shipping),
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      final callable = _functions.httpsCallable('createBobPayCheckout');
+      final callable = _functions.httpsCallable('createPayfastCheckout');
       final result = await callable.call({'orderId': orderRef.id});
       final data = result.data;
       final url = data is Map ? data['checkoutUrl']?.toString() : null;
       if (url == null || url.isEmpty) {
-        throw Exception('No Bob Pay checkout URL returned.');
+        throw Exception('No checkout URL returned.');
       }
 
       cart.clear();
       if (!mounted) return;
       final uri = Uri.parse(url);
-      final opened = await launchUrl(
+      var opened = await launchUrl(
         uri,
-        mode: LaunchMode.externalApplication,
+        mode: LaunchMode.inAppBrowserView,
       );
       if (!opened) {
+        opened = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+      }
+      _hidePayingDialog();
+      if (!opened) {
         MyGlobalMessage.show(
-          'Bob Pay',
+          'Payment',
           'Could not open checkout. Copy this URL:\n$url',
           MyMessageType.warning,
         );
         return;
       }
       if (!mounted) return;
-      Navigator.of(context).pop();
+      // Return to Online Shop in this app instance (don't leave checkout stack open).
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const ShopPage()),
+        (route) => route.isFirst,
+      );
       MyGlobalMessage.show(
-        'Bob Pay',
-        'Complete payment in the browser. Your order will update when Bob Pay confirms it.',
+        'Payment',
+        'Complete payment in the browser. When done you will return to the Online Shop automatically. Your order will update when payment is confirmed.',
         MyMessageType.info,
       );
     } catch (e) {
+      _hidePayingDialog();
       MyGlobalMessage.show('Checkout', _callableError(e), MyMessageType.error);
     } finally {
-      if (mounted) setState(() => _paying = false);
+      if (mounted) {
+        _hidePayingDialog();
+        setState(() => _paying = false);
+      }
     }
   }
 
@@ -336,7 +469,9 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
   Widget build(BuildContext context) {
     return Consumer<ShopCartService>(
       builder: (context, cart, _) {
-        final total = cart.total + _shippingAmount;
+        final shipping = _shippingForCart(cart);
+        final subscriptionMonthly = cart.subscriptionMonthlyTotal;
+        final total = cart.total + shipping;
         return Scaffold(
           backgroundColor: colorAppBackground,
           appBar: AppBar(
@@ -494,67 +629,44 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
                         validator: (v) =>
                             (v == null || v.trim().length < 4) ? 'Required' : null,
                       ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 46,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: colorIceBlue,
-                            side: const BorderSide(color: colorIceBlue),
-                          ),
-                          onPressed:
-                              _loadingRates ? null : () => _loadRates(cart),
-                          child: _loadingRates
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: colorIceBlue,
-                                  ),
-                                )
-                              : const Text('Get Bob Go delivery rates'),
-                        ),
-                      ),
-                      if (_rates.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        const MyText(
-                          text: 'Delivery option',
-                          color: Colors.white,
-                          fontsize: 16,
-                        ),
-                        const SizedBox(height: 8),
-                        ..._rates.map((rate) {
-                          final selected = _selectedRate?['id'] == rate['id'] &&
-                              _selectedRate?['name'] == rate['name'];
-                          return RadioListTile<bool>(
-                            value: true,
-                            groupValue: selected,
-                            onChanged: (_) =>
-                                setState(() => _selectedRate = rate),
-                            activeColor: colorOrange,
-                            title: MyText(
-                              text:
-                                  '${rate['name']} · ${_money.format(asNumber(rate['amount']))}',
-                              color: Colors.white,
-                              fontsize: 14,
-                            ),
-                            subtitle: (rate['eta']?.toString().isNotEmpty ==
-                                    true)
-                                ? MyText(
-                                    text: '${rate['eta']}',
-                                    color: Colors.white54,
-                                    fontsize: 12,
-                                  )
-                                : null,
-                          );
-                        }),
-                      ],
                       const SizedBox(height: 20),
                       _totalsRow('Items', cart.total),
-                      _totalsRow('Delivery', _shippingAmount),
+                      _totalsRow(
+                        shipping <= 0 ? 'Delivery (free)' : 'Delivery',
+                        shipping,
+                      ),
+                      if (subscriptionMonthly > 0)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              const MyText(
+                                text: 'Subscription',
+                                color: Colors.white70,
+                                fontsize: 14,
+                              ),
+                              const Spacer(),
+                              MyText(
+                                text:
+                                    '${_money.format(subscriptionMonthly)}/mo',
+                                color: colorOrange,
+                                fontsize: 14,
+                              ),
+                            ],
+                          ),
+                        ),
                       const Divider(color: Colors.white24),
-                      _totalsRow('To pay', total, bold: true),
+                      _totalsRow('To pay today', total, bold: true),
+                      if (subscriptionMonthly > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: MyText(
+                            text:
+                                'Then ${_money.format(subscriptionMonthly)} every month',
+                            color: Colors.white54,
+                            fontsize: 12,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -571,22 +683,13 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
                           foregroundColor: Colors.white,
                         ),
                         onPressed: _paying ? null : () => _pay(cart),
-                        child: _paying
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Text(
-                                'Pay ${_money.format(total)} with Bob Pay',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
-                                ),
-                              ),
+                        child: Text(
+                          'Pay ${_money.format(total)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -594,11 +697,6 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
         );
       },
     );
-  }
-
-  double asNumber(dynamic v) {
-    if (v is num) return v.toDouble();
-    return double.tryParse('$v') ?? 0;
   }
 
   Widget _totalsRow(String label, double amount, {bool bold = false}) {

@@ -73,9 +73,13 @@ class ProfilePageState extends State<ProfilePage> {
                 if (!dialogContext.mounted) return;
                 Navigator.of(dialogContext).pop();
                 if (!context.mounted) return;
+
                 await context.read<UserDataService>().load();
+                if (!context.mounted) return;
+                
                 await context.read<SettingsService>().load();
                 if (!context.mounted) return;
+                
                 MyGlobalMessage.show(
                   'Data deleted',
                   'Your app data has been removed. Your account is still active.',

@@ -58,6 +58,8 @@ class AppConfig {
   static bool get showGeoFenceSetup => isFull;
   static bool get showBaseStations => true;
   static bool get showIotMonitors => true;
+  /// Shows SONOFF / eWeLink as a tab inside iOT Devices (not a home tile).
+  static bool get showThirdPartyIot => true;
 
   // ---- Always Features ----
   static bool get showIotDataReport => true;

@@ -16,11 +16,25 @@ import java.io.FileOutputStream
 class MainActivity : FlutterActivity() {
     private val downloadsChannel = "limitless.iot.trinity/downloads"
     private val mapsChannel = "limitless.iot.trinity/maps"
+    private val linksChannelName = "limitless.iot.trinity/links"
+    private var linksChannel: MethodChannel? = null
     private val excelMime =
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        linksChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, linksChannelName)
+        linksChannel?.setMethodCallHandler { call, result ->
+            if (call.method == "getInitialLink") {
+                result.success(intent?.data?.toString())
+            } else {
+                result.notImplemented()
+            }
+        }
+        // If cold-started from a deep link, notify after Flutter is ready.
+        intent?.data?.toString()?.let { uri ->
+            linksChannel?.invokeMethod("onLink", uri)
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, mapsChannel)
             .setMethodCallHandler { call, result ->
                 if (call.method != "getMapsApiKey") {
@@ -63,6 +77,13 @@ class MainActivity : FlutterActivity() {
                     result.error("save_failed", e.message, null)
                 }
             }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val uri = intent.data?.toString() ?: return
+        linksChannel?.invokeMethod("onLink", uri)
     }
 
     private data class SavedFile(val displayPath: String, val uri: Uri)

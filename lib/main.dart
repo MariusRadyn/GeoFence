@@ -14,6 +14,7 @@ import 'package:geofence/firebase_options.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geofence/shop_page.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'mqtt_service.dart';
 import 'gps_services.dart';
 import 'mqtt_lifecycle_handler.dart';
@@ -150,6 +151,46 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  static const _links = MethodChannel('limitless.iot.trinity/links');
+
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb) {
+      _links.setMethodCallHandler((call) async {
+        if (call.method == 'onLink') {
+          _handleDeepLink(call.arguments?.toString());
+        }
+        return null;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final initial = await _links.invokeMethod<String>('getInitialLink');
+          _handleDeepLink(initial);
+        } catch (_) {}
+      });
+    }
+  }
+
+  void _handleDeepLink(String? link) {
+    if (link == null || link.isEmpty) return;
+    final uri = Uri.tryParse(link);
+    if (uri == null) return;
+    final isShop = (uri.scheme == 'limitless' && uri.host == 'shop') ||
+        uri.queryParameters['page'] == 'shop' ||
+        uri.path == '/shop' ||
+        uri.path == '/shop/';
+    if (!isShop) return;
+    // Close PayFast Custom Tab / in-app browser so the native shop is visible.
+    try {
+      closeInAppWebView();
+    } catch (_) {}
+    // Wait a beat so navigator/home exist after cold start.
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      ShopPage.openInApp();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -161,7 +202,9 @@ class _MyAppState extends State<MyApp> {
       ),
       home: launchOpensProfile
           ? const HomePage(openProfileOnLaunch: true)
-          : const SplashScreen(),
+          : launchOpensShop
+              ? const HomePage(openShopOnLaunch: true)
+              : const SplashScreen(),
     );
   }
 }

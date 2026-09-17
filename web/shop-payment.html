@@ -26,26 +26,108 @@
     h1 { margin: 0 0 10px; font-size: 1.5rem; }
     p { color: #94a3b8; line-height: 1.5; }
     a { color: #7dd3fc; }
+    .btn {
+      display: inline-block;
+      margin-top: 14px;
+      margin-right: 10px;
+      padding: 12px 18px;
+      background: #ff9800;
+      color: #fff !important;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 700;
+      border: 0;
+      cursor: pointer;
+      font-size: 15px;
+    }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid rgba(125, 211, 252, 0.45);
+      color: #7dd3fc !important;
+    }
   </style>
 </head>
 <body>
   <div class="card">
     <h1 id="title">Payment</h1>
-    <p id="msg">Returning to Limitless IOT…</p>
-    <p><a href="/">Open the app</a> · <a href="/#/">Order history is in the app menu</a></p>
+    <p id="msg">Your payment status is shown below.</p>
+    <p id="hint">Tap the button when you are ready to return.</p>
+    <button type="button" class="btn" id="back">Go back to app</button>
+    <a class="btn btn-secondary" id="webOnly" href="https://limitless-iot-17e8f.web.app/?page=shop" style="display:none">Open web shop</a>
   </div>
   <script>
     var params = new URLSearchParams(location.search);
     var status = (params.get('status') || '').toLowerCase();
+    var orderId = params.get('orderId') || '';
     var title = document.getElementById('title');
     var msg = document.getElementById('msg');
-    if (status === 'cancelled' || status === 'canceled') {
+    var hint = document.getElementById('hint');
+    var back = document.getElementById('back');
+    var webOnly = document.getElementById('webOnly');
+    var cancelled = status === 'cancelled' || status === 'canceled';
+    var ua = navigator.userAgent || '';
+    var isAndroid = /Android/i.test(ua);
+    var isIos = /iPhone|iPad|iPod/i.test(ua);
+    var deepLink = 'limitless://shop' +
+      (orderId ? ('?orderId=' + encodeURIComponent(orderId)) : '') +
+      (cancelled ? ((orderId ? '&' : '?') + 'status=cancelled') : '');
+
+    // Android Intent: open the installed app. Do NOT set browser_fallback_url
+    // or Chrome will bounce to the web app instead of Limitless.
+    var intentUrl =
+      'intent://shop' +
+      (orderId || cancelled
+        ? ('?' +
+            [
+              orderId ? ('orderId=' + encodeURIComponent(orderId)) : '',
+              cancelled ? 'status=cancelled' : '',
+            ].filter(Boolean).join('&'))
+        : '') +
+      '#Intent;scheme=limitless;package=limitless.iot.trinity;' +
+      'action=android.intent.action.VIEW;' +
+      'category=android.intent.category.BROWSABLE;' +
+      'end';
+
+    if (cancelled) {
       title.textContent = 'Payment cancelled';
-      msg.textContent = 'No charge was completed. You can open the app and try checkout again.';
+      msg.textContent = 'No charge was completed. You can return to the shop and try again.';
     } else {
       title.textContent = 'Thanks — payment submitted';
-      msg.textContent = 'Bob Pay will confirm the payment shortly. Delivery is arranged with Bob Go once the order is paid. Check Order History in the app.';
+      msg.textContent = 'Your payment is being confirmed. Once it clears, delivery will be arranged.';
     }
+
+    if (!isAndroid && !isIos) {
+      back.textContent = 'Continue to shop';
+      webOnly.style.display = 'inline-block';
+      webOnly.href = 'https://limitless-iot-17e8f.web.app/?page=shop' +
+        (orderId ? ('&orderId=' + encodeURIComponent(orderId)) : '');
+      hint.textContent = 'Continue in the web shop, or open the Limitless app if you have it installed.';
+    } else {
+      back.textContent = 'Go back to app';
+      hint.textContent = 'When you are ready, tap Go back to app.';
+    }
+
+    function openNativeApp() {
+      if (isAndroid) {
+        location.href = intentUrl;
+        setTimeout(function () {
+          location.href = deepLink;
+        }, 400);
+        return;
+      }
+
+      if (isIos) {
+        location.href = deepLink;
+        return;
+      }
+
+      location.replace(webOnly.href);
+    }
+
+    back.addEventListener('click', function (e) {
+      e.preventDefault();
+      openNativeApp();
+    });
   </script>
 </body>
 </html>

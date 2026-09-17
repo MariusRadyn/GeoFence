@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:geofence/shop_product_image.dart';
 import 'package:geofence/shop_checkout_page.dart';
 import 'package:geofence/shop_product_detail_page.dart';
+import 'package:geofence/shop_subscription_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -38,6 +39,8 @@ class ShopProduct {
   final int stockCount;
   /// When false, product is visible but not yet launched for purchase.
   final bool isReady;
+  /// Optional monthly subscription amount in ZAR (0 = none).
+  final double subscriptionMonthly;
   final double weightKg;
   final double lengthCm;
   final double widthCm;
@@ -60,6 +63,7 @@ class ShopProduct {
     this.active = true,
     this.stockCount = 0,
     this.isReady = true,
+    this.subscriptionMonthly = 0,
     this.weightKg = 1,
     this.lengthCm = 20,
     this.widthCm = 15,
@@ -124,6 +128,7 @@ class ShopProduct {
       active: map['active'] != false,
       stockCount: asInt(map['stockCount']),
       isReady: map['isReady'] != false,
+      subscriptionMonthly: asDouble(map['subscriptionMonthly']),
       weightKg: asDouble(map['weightKg'], 1),
       lengthCm: asDouble(map['lengthCm'], 20),
       widthCm: asDouble(map['widthCm'], 15),
@@ -146,6 +151,7 @@ class ShopProduct {
         'active': active,
         'stockCount': stockCount,
         'isReady': isReady,
+        'subscriptionMonthly': subscriptionMonthly,
         'weightKg': weightKg,
         'lengthCm': lengthCm,
         'widthCm': widthCm,
@@ -168,6 +174,7 @@ class ShopProduct {
     bool? active,
     int? stockCount,
     bool? isReady,
+    double? subscriptionMonthly,
     double? weightKg,
     double? lengthCm,
     double? widthCm,
@@ -190,6 +197,8 @@ class ShopProduct {
       active: active ?? this.active,
       stockCount: stockCount ?? this.stockCount,
       isReady: isReady ?? this.isReady,
+      subscriptionMonthly:
+          subscriptionMonthly ?? this.subscriptionMonthly,
       weightKg: weightKg ?? this.weightKg,
       lengthCm: lengthCm ?? this.lengthCm,
       widthCm: widthCm ?? this.widthCm,
@@ -217,6 +226,19 @@ class ShopCartService extends ChangeNotifier {
   double get total =>
       _items.values.fold(0.0, (sum, item) => sum + item.lineTotal);
   bool get isEmpty => _items.isEmpty;
+
+  /// Flat shipping applies only when at least one item is not free delivery.
+  bool get needsShipping =>
+      _items.values.any((item) => !item.product.freeDelivery);
+
+  bool get hasSubscription =>
+      _items.values.any((item) => item.product.subscriptionMonthly > 0);
+
+  double get subscriptionMonthlyTotal => _items.values.fold(
+        0.0,
+        (sum, item) =>
+            sum + (item.product.subscriptionMonthly * item.quantity),
+      );
 
   void add(ShopProduct product, {int qty = 1}) {
     if (!product.isReady) return;
@@ -382,6 +404,16 @@ class ShopPage extends StatefulWidget {
 
   @override
   State<ShopPage> createState() => _ShopPageState();
+
+  /// Opens Online Shop in this app instance (used after payment return).
+  static void openInApp() {
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+    nav.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const ShopPage()),
+      (route) => route.isFirst,
+    );
+  }
 }
 class _ShopPageState extends State<ShopPage> {
   final _money = NumberFormat.currency(locale: 'en_ZA', symbol: 'R');
@@ -409,7 +441,7 @@ class _ShopPageState extends State<ShopPage> {
 
   double _shopGridChildAspectRatio(BuildContext context) {
     // Lower ratio = taller tiles (square image + text/button below).
-    if (!kIsWeb) return 0.55;
+    if (!kIsWeb) return 0.52;
     switch (_shopGridCrossAxisCount(context)) {
       case 8:
         return 0.58;
@@ -464,7 +496,11 @@ class _ShopPageState extends State<ShopPage> {
     Navigator.of(context).pop();
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ShopCheckoutPage()),
+      MaterialPageRoute(
+        builder: (_) => cart.hasSubscription
+            ? const ShopSubscriptionPage()
+            : const ShopCheckoutPage(),
+      ),
     );
   }
 
@@ -533,7 +569,9 @@ class _ShopPageState extends State<ShopPage> {
                       child: Text(
                         liveCart.isEmpty
                             ? 'Your basket is empty'
-                            : '${liveCart.itemCount} item${liveCart.itemCount == 1 ? '' : 's'} · ${_money.format(liveCart.total)}',
+                            : liveCart.hasSubscription
+                                ? '${liveCart.itemCount} item${liveCart.itemCount == 1 ? '' : 's'} · ${_money.format(liveCart.total)} · ${_money.format(liveCart.subscriptionMonthlyTotal)}/mo'
+                                : '${liveCart.itemCount} item${liveCart.itemCount == 1 ? '' : 's'} · ${_money.format(liveCart.total)}',
                         style: const TextStyle(color: Colors.white70),
                       ),
                     ),
@@ -546,117 +584,22 @@ class _ShopPageState extends State<ShopPage> {
                                 style: TextStyle(color: Colors.white54),
                               ),
                             )
-                          : ListView.separated(
+                          : ListView(
                               controller: controller,
                               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                              itemCount: liveCart.items.length,
-                              separatorBuilder: (_, __) =>
-                                  const Divider(color: Colors.white12),
-                              itemBuilder: (_, i) {
-                                final item = liveCart.items[i];
-                                return Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: SizedBox(
-                                        width: 72,
-                                        height: 72,
-                                        child: ColoredBox(
-                                          color: (item.product.primaryImageUrl !=
-                                                      null &&
-                                                  item.product.primaryImageUrl!
-                                                      .trim()
-                                                      .isNotEmpty)
-                                              ? Colors.white
-                                                  .withValues(alpha: 0.92)
-                                              : colorAppBar,
-                                          child: ShopProductImage(
-                                            imageUrl:
-                                                item.product.primaryImageUrl,
-                                            side: 72,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            item.product.name,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            _money.format(item.unitPrice),
-                                            style: const TextStyle(
-                                              color: colorOrange,
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                          Row(
-                                            children: [
-                                              IconButton(
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                onPressed: () =>
-                                                    liveCart.setQuantity(
-                                                  item.product.id,
-                                                  item.quantity - 1,
-                                                ),
-                                                icon: const Icon(
-                                                  Icons.remove_circle_outline,
-                                                  color: Colors.white70,
-                                                ),
-                                              ),
-                                              Text(
-                                                '${item.quantity}',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                              IconButton(
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                onPressed: () =>
-                                                    liveCart.setQuantity(
-                                                  item.product.id,
-                                                  item.quantity + 1,
-                                                ),
-                                                icon: const Icon(
-                                                  Icons.add_circle_outline,
-                                                  color: Colors.white70,
-                                                ),
-                                              ),
-                                              const Spacer(),
-                                              TextButton(
-                                                onPressed: () => liveCart
-                                                    .remove(item.product.id),
-                                                child: const Text(
-                                                  'Remove',
-                                                  style: TextStyle(
-                                                    color: Colors.redAccent,
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                              children: [
+                                for (final item in liveCart.items) ...[
+                                  _basketProductRow(liveCart, item),
+                                  if (item.product.subscriptionMonthly > 0) ...[
+                                    const SizedBox(height: 8),
+                                    _basketSubscriptionRow(item),
                                   ],
-                                );
-                              },
+                                  const Divider(
+                                    color: Colors.white12,
+                                    height: 20,
+                                  ),
+                                ],
+                              ],
                             ),
                     ),
                     if (!liveCart.isEmpty)
@@ -679,7 +622,7 @@ class _ShopPageState extends State<ShopPage> {
                               Row(
                                 children: [
                                   const Text(
-                                    'To pay',
+                                    'To pay today',
                                     style: TextStyle(
                                       color: Colors.white70,
                                       fontSize: 15,
@@ -696,6 +639,29 @@ class _ShopPageState extends State<ShopPage> {
                                   ),
                                 ],
                               ),
+                              if (liveCart.hasSubscription) ...[
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    const Text(
+                                      'Subscription',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      '${_money.format(liveCart.subscriptionMonthlyTotal)}/mo',
+                                      style: const TextStyle(
+                                        color: colorOrange,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                               const SizedBox(height: 12),
                               SizedBox(
                                 width: double.infinity,
@@ -710,7 +676,7 @@ class _ShopPageState extends State<ShopPage> {
                                   ),
                                   onPressed: () => _checkout(liveCart),
                                   child: const Text(
-                                    'Secure Checkout · Bob Pay',
+                                    'Secure Checkout',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                       fontSize: 15,
@@ -730,6 +696,164 @@ class _ShopPageState extends State<ShopPage> {
           },
         );
       },
+    );
+  }
+
+  Widget _basketProductRow(ShopCartService cart, CartItem item) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            width: 72,
+            height: 72,
+            child: ColoredBox(
+              color: (item.product.primaryImageUrl != null &&
+                      item.product.primaryImageUrl!.trim().isNotEmpty)
+                  ? Colors.white.withValues(alpha: 0.92)
+                  : colorAppBar,
+              child: ShopProductImage(
+                imageUrl: item.product.primaryImageUrl,
+                side: 72,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _money.format(item.unitPrice),
+                style: const TextStyle(
+                  color: colorOrange,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => cart.setQuantity(
+                      item.product.id,
+                      item.quantity - 1,
+                    ),
+                    icon: const Icon(
+                      Icons.remove_circle_outline,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  Text(
+                    '${item.quantity}',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => cart.setQuantity(
+                      item.product.id,
+                      item.quantity + 1,
+                    ),
+                    icon: const Icon(
+                      Icons.add_circle_outline,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => cart.remove(item.product.id),
+                    child: const Text(
+                      'Remove',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _basketSubscriptionRow(CartItem item) {
+    final monthly = item.product.subscriptionMonthly * item.quantity;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: colorOrange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorOrange.withValues(alpha: 0.65)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: colorOrange,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.autorenew,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Subscription',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.quantity > 1
+                      ? '${item.product.name} · ${item.quantity} × ${_money.format(item.product.subscriptionMonthly)}/mo'
+                      : '${item.product.name} · monthly',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '${_money.format(monthly)}/mo',
+            style: const TextStyle(
+              color: colorOrange,
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -900,23 +1024,25 @@ class _ShopPageState extends State<ShopPage> {
                   Positioned(
                     right: 6,
                     top: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: colorOrange,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 18,
-                        minHeight: 18,
-                      ),
-                      child: Text(
-                        '${cart.itemCount}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                    child: IgnorePointer(
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: colorOrange,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
+                        ),
+                        child: Text(
+                          '${cart.itemCount}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -1113,6 +1239,9 @@ class _ShopPageState extends State<ShopPage> {
                       listPriceLabel: product.hasDeal
                           ? _money.format(product.price)
                           : null,
+                      subscriptionLabel: product.subscriptionMonthly > 0
+                          ? _money.format(product.subscriptionMonthly)
+                          : null,
                       onOpen: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -1154,6 +1283,7 @@ class _ProductCard extends StatelessWidget {
   final ShopProduct product;
   final String priceLabel;
   final String? listPriceLabel;
+  final String? subscriptionLabel;
   final VoidCallback onOpen;
   final VoidCallback onAdd;
   final bool compact;
@@ -1162,6 +1292,7 @@ class _ProductCard extends StatelessWidget {
     required this.product,
     required this.priceLabel,
     required this.listPriceLabel,
+    required this.subscriptionLabel,
     required this.onOpen,
     required this.onAdd,
     this.compact = false,
@@ -1220,6 +1351,37 @@ class _ProductCard extends StatelessWidget {
                           imageUrl: product.primaryImageUrl,
                         ),
                       ),
+                      if (subscriptionLabel != null)
+                        Positioned(
+                          right: compact ? 5 : 8,
+                          top: compact ? 5 : 8,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: compact ? 8 : 11,
+                              vertical: compact ? 4 : 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorOrange,
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              'Subscribe',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: compact ? 10 : 13,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ),
                       if (!product.isReady)
                         Positioned(
                           left: compact ? -46 : -38,
@@ -1383,6 +1545,21 @@ class _ProductCard extends StatelessWidget {
                                   decoration: TextDecoration.lineThrough,
                                   decorationColor: Colors.white38,
                                   height: 1.1,
+                                ),
+                              ),
+                            if (subscriptionLabel != null)
+                              Padding(
+                                padding: EdgeInsets.only(top: compact ? 1 : 2),
+                                child: Text(
+                                  '+ $subscriptionLabel / month',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: colorIceBlue,
+                                    fontSize: compact ? 8 : 10,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.1,
+                                  ),
                                 ),
                               ),
                             if (product.freeDelivery && !compact)

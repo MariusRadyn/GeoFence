@@ -143,7 +143,10 @@ class SplashScreenState extends State<SplashScreen>
           if (!mounted) return;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (_) => HomePage(openProfileOnLaunch: launchOpensProfile),
+              builder: (_) => HomePage(
+                openProfileOnLaunch: launchOpensProfile,
+                openShopOnLaunch: launchOpensShop,
+              ),
             ),
           );
         });

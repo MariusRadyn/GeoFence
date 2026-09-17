@@ -1,11 +1,16 @@
 //import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:collection/collection.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/app_flavor.dart';
+import 'package:geofence/shop_page.dart';
 import 'package:geofence/utils.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 // Vehicle
@@ -340,6 +345,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   bool _syncButtonPressed = false;
   bool _calibrateButtonPressed = false;
   bool _connectButtonPressed = false;
+  bool _cancellingSubscription = false;
   
   Color colorSetupTile = colorAppBackground;
   Color colorCalibrateTile = colorAppBackground;
@@ -485,6 +491,346 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
     _controllerCalDistance.text = value.toStringAsFixed(2);
   }
 
+  bool _isActiveSubscription(Map<String, dynamic> data) {
+    final status = (data['subscriptionStatus'] ?? '').toString().toLowerCase();
+    if (status == 'cancelled' || status == 'canceled') return false;
+    final token = (data['subscriptionToken'] ?? data['payfastToken'] ?? '')
+        .toString()
+        .trim();
+    if (token.isNotEmpty) return true;
+    if (data['hasSubscription'] == true) {
+      final orderStatus = (data['status'] ?? '').toString();
+      return orderStatus == 'paid' || orderStatus == 'shipped';
+    }
+    final monthly = (data['subscriptionMonthly'] is num)
+        ? (data['subscriptionMonthly'] as num).toDouble()
+        : double.tryParse('${data['subscriptionMonthly']}') ?? 0;
+    return monthly > 0 &&
+        ((data['status'] ?? '').toString() == 'paid' ||
+            (data['status'] ?? '').toString() == 'shipped');
+  }
+
+  String _subscriptionLabel(Map<String, dynamic> data, String orderId) {
+    final money = NumberFormat.currency(locale: 'en_ZA', symbol: 'R');
+    final monthly = (data['subscriptionMonthly'] is num)
+        ? (data['subscriptionMonthly'] as num).toDouble()
+        : double.tryParse('${data['subscriptionMonthly']}') ?? 0;
+    final items = (data['items'] is List) ? (data['items'] as List) : const [];
+    final names = items
+        .map((e) => (e is Map ? e['name'] : null)?.toString())
+        .whereType<String>()
+        .where((n) => n.trim().isNotEmpty)
+        .take(2)
+        .join(', ');
+    final shortId =
+        orderId.length > 8 ? '${orderId.substring(0, 8)}…' : orderId;
+    final amount = monthly > 0 ? '${money.format(monthly)}/mo' : 'Subscription';
+    if (names.isEmpty) return '$amount · $shortId';
+    return '$amount · $names';
+  }
+
+  Set<String> _tiedSubscriptionOrderIds(MonitorSettingsService monitors) {
+    final tied = <String>{};
+    final currentDoc = widget.monitorData.monDocId;
+    for (final m in monitors.lstMonitors) {
+      final orderId = m.subscriptionOrderId.trim();
+      if (orderId.isEmpty) continue;
+      if (m.monDocId == currentDoc) continue;
+      tied.add(orderId);
+    }
+    return tied;
+  }
+
+  Future<void> _assignSubscription({
+    required String orderId,
+    required String token,
+  }) async {
+    setState(() {
+      widget.monitorData.subscriptionOrderId = orderId;
+      widget.monitorData.subscriptionToken = token;
+    });
+    await context.read<MonitorSettingsService>().save(widget.monitorData);
+  }
+
+  Future<void> _removeSubscription() async {
+    setState(() {
+      widget.monitorData.subscriptionOrderId = '';
+      widget.monitorData.subscriptionToken = '';
+    });
+    await context.read<MonitorSettingsService>().save(widget.monitorData);
+  }
+
+  Future<void> _cancelLinkedSubscription() async {
+    final orderId = widget.monitorData.subscriptionOrderId.trim();
+    final token = widget.monitorData.subscriptionToken.trim();
+    if (orderId.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colorAppBar,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: Colors.blue, width: 2),
+        ),
+        title: const Text(
+          'Cancel subscription?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          token.isEmpty
+              ? 'This cancels recurring billing for this wheel.\n\n'
+                  'The subscription will still be active until the last day of the month.\n\n'
+                  'This cannot be undone from the app.'
+              : 'This cancels recurring billing for this subscription.\n\n'
+                  'The subscription will still be active until the last day of the month.\n\n'
+                  'This cannot be undone from the app.',
+          style: const TextStyle(color: Colors.white70, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Cancel subscription'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _cancellingSubscription = true);
+    try {
+      final functions =
+          FirebaseFunctions.instanceFor(region: cloudFunctionsRegion);
+      await functions.httpsCallable('cancelPayfastSubscription').call({
+        'orderId': orderId,
+      });
+      if (!mounted) return;
+      await context
+          .read<MonitorSettingsService>()
+          .clearSubscriptionFromOrder(orderId);
+      if (!mounted) return;
+      setState(() {
+        widget.monitorData.subscriptionOrderId = '';
+        widget.monitorData.subscriptionToken = '';
+      });
+      MyGlobalMessage.show(
+        'Subscription',
+        'Subscription cancelled.',
+        MyMessageType.success,
+      );
+    } catch (e) {
+      final message = e is FirebaseFunctionsException
+          ? (e.message?.trim().isNotEmpty == true ? e.message! : e.code)
+          : e.toString();
+      MyGlobalMessage.show('Cancel failed', message, MyMessageType.error);
+    } finally {
+      if (mounted) setState(() => _cancellingSubscription = false);
+    }
+  }
+
+  Widget _buildSubscriptionPicker(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return const Text(
+        'Sign in to link a subscription',
+        style: TextStyle(color: Colors.white54, fontSize: 13),
+      );
+    }
+
+    final ordersRef = FirebaseFirestore.instance
+        .collection(collectionUsers)
+        .doc(uid)
+        .collection(collectionShopOrders);
+
+    return Consumer<MonitorSettingsService>(
+      builder: (context, monitors, _) {
+        final tied = _tiedSubscriptionOrderIds(monitors);
+        final selectedId = widget.monitorData.subscriptionOrderId.trim();
+
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: ordersRef.orderBy('createdAt', descending: true).snapshots(),
+          builder: (context, snap) {
+            final options = <DropdownMenuItem<String>>[];
+            final labels = <String, String>{};
+            final tokens = <String, String>{};
+
+            if (snap.hasData) {
+              for (final doc in snap.data!.docs) {
+                final data = doc.data();
+                if (!_isActiveSubscription(data)) continue;
+                final orderId = (data['orderId'] ?? doc.id).toString().trim();
+                if (orderId.isEmpty) continue;
+                final token =
+                    (data['subscriptionToken'] ?? data['payfastToken'] ?? '')
+                        .toString()
+                        .trim();
+                // Skip subscriptions already tied to another wheel.
+                if (tied.contains(orderId) && orderId != selectedId) continue;
+                labels[orderId] = _subscriptionLabel(data, orderId);
+                tokens[orderId] = token;
+                options.add(
+                  DropdownMenuItem<String>(
+                    value: orderId,
+                    child: Text(
+                      labels[orderId]!,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ),
+                );
+              }
+            }
+
+            // Keep current selection visible even if order docs failed to load.
+            if (selectedId.isNotEmpty &&
+                !options.any((e) => e.value == selectedId)) {
+              final token = widget.monitorData.subscriptionToken.trim();
+              final short = selectedId.length > 8
+                  ? '${selectedId.substring(0, 8)}…'
+                  : selectedId;
+              labels[selectedId] = 'Linked · $short';
+              tokens[selectedId] = token;
+              options.insert(
+                0,
+                DropdownMenuItem<String>(
+                  value: selectedId,
+                  child: Text(
+                    labels[selectedId]!,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ),
+              );
+            }
+
+            final hasSelection = selectedId.isNotEmpty &&
+                options.any((e) => e.value == selectedId);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Subscription',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: colorSetupTile,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            dropdownColor: colorAppBar,
+                            value: hasSelection ? selectedId : null,
+                            hint: Text(
+                              snap.connectionState == ConnectionState.waiting
+                                  ? 'Loading subscriptions…'
+                                  : options.isEmpty
+                                      ? 'No available subscriptions'
+                                      : 'Select subscription',
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 13,
+                              ),
+                            ),
+                            icon: const Icon(
+                              Icons.arrow_drop_down,
+                              color: Colors.white70,
+                            ),
+                            items: options,
+                            onChanged: options.isEmpty
+                                ? null
+                                : (value) async {
+                                    if (value == null) return;
+                                    await _assignSubscription(
+                                      orderId: value,
+                                      token: tokens[value] ?? '',
+                                    );
+                                  },
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Remove subscription',
+                      onPressed: hasSelection ? _removeSubscription : null,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white10,
+                        foregroundColor: hasSelection
+                            ? Colors.redAccent
+                            : Colors.white24,
+                      ),
+                      icon: const Icon(Icons.link_off),
+                    ),
+                  ],
+                ),
+                if (hasSelection &&
+                    widget.monitorData.subscriptionToken.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Token: ${widget.monitorData.subscriptionToken}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                if (hasSelection) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 40,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        side: const BorderSide(color: Colors.redAccent),
+                      ),
+                      onPressed: _cancellingSubscription
+                          ? null
+                          : _cancelLinkedSubscription,
+                      child: _cancellingSubscription
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.redAccent,
+                              ),
+                            )
+                          : const Text(
+                              'Cancel subscription',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -538,7 +884,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                         color: Colors.grey,
                         text:
                           '1. Only 1 wheel at a time can be in \'PAIR\' mode\n'
-                          '2. On the wheel, press \'STOP\' 6 times\n'
+                          '2. On the wheel, press \'STOP\' 5 times\n'
                           '3. Allow wheel to connect to Base\n'
                           '4. Wait until LCD says \'Click PAIR in App\'\n'
                           '5. Click \'PAIR\'\n'
@@ -551,6 +897,12 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                   Padding(
                     padding: const EdgeInsets.only(top: 10,left: 8, right: 8),
                     child: MyTextHeader(text:"Monitor Info"),
+                  ),
+
+                  // Subscription (active PayFast subscriptions not tied to another wheel)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(15, 8, 15, 4),
+                    child: _buildSubscriptionPicker(context),
                   ),
 
                   // Wheel Name

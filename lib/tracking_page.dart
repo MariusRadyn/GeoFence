@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:geolocator/geolocator.dart';
@@ -50,6 +51,8 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
   int _fencePntr = 0;
   int _distanceFilter = 0;
   bool _isVoicePromptOn = false;
+  /// When true, map uses satellite imagery (same toggle as GeoFence "Street").
+  bool _isStreetView = false;
 
   final CameraPosition _initialPosition = const CameraPosition(
     target: LatLng(-29.0, 24.0), // Default to South Africa
@@ -67,7 +70,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
       if (_vehicles.isEmpty && !_isLoadingVehicles) {
         MyGlobalMessage.show(
           "Vehicle Not Found",
-          "No Vehicles Found.\nPlease set one in 'IOT Monitors'",
+          "No Vehicles Found.\nPlease set one in 'IOT Devices'",
             MyMessageType.warning
         );
       }
@@ -328,22 +331,41 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
     }
 
     try {
-      await LocationService.requestPermissions();
-      final permission = await Geolocator.checkPermission();
-
-      if (permission == LocationPermission.denied) {
-        final requestPermission = await Geolocator.requestPermission();
-        if (requestPermission == LocationPermission.denied ||
-            requestPermission == LocationPermission.deniedForever) {
-          if(mounted){
-            ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location permission denied')),
-          );
-          _isTracking = false;
-          return;
-        }
-        }
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        MyGlobalMessage.show(
+          'Location off',
+          'Turn on GPS / location services, then try again.',
+          MyMessageType.warning,
+        );
+        return;
       }
+
+      await LocationService.requestPermissions();
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        MyGlobalMessage.show(
+          'Location permission',
+          permission == LocationPermission.deniedForever
+              ? 'Location is blocked. Enable it in Android Settings → Apps → Limitless → Permissions.'
+              : 'Location permission is required to track.',
+          MyMessageType.warning,
+        );
+        return;
+      }
+
+      // Refresh distance filter from latest settings.
+      if (mounted && settings.fireSettings != null) {
+        _distanceFilter = settings.fireSettings!.logPointPerMeter;
+        _isVoicePromptOn = settings.fireSettings!.isVoicePromptOn;
+      }
+      // Avoid a zero/negative filter that can behave oddly on some devices.
+      if (_distanceFilter < 0) _distanceFilter = 0;
 
       setState(() {
         _isTracking = true;
@@ -355,6 +377,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
         _wasInsideAny = false;
         _pendingInsideKm = 0;
         _pendingOutsideKm = 0;
+        _statusMessage = 'Starting…';
       });
 
       if (!mounted) return;
@@ -372,30 +395,84 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
       });
       _trackingSessionId = sessionRef.id;
 
+      // Seed immediately so the path/camera update without waiting for movement.
+      try {
+        final first = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
+        );
+        _onPositionUpdate(first);
+      } catch (e) {
+        printDebugMsg('Initial GPS fix failed: $e');
+      }
+
       _startPositionTracking();
 
       if (_isVoicePromptOn) {
         _flutterTts.speak('Tracking started. Watching for geofence crossings');
       }
 
+      if (!mounted) return;
       setState(() {
-        _statusMessage = "Tracking";
+        _statusMessage = 'Tracking';
       });
 
       MyGlobalSnackBar.show('Tracking started');
-
     } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isTracking = false;
+          _trackingSessionId = null;
+          _statusMessage = 'Not tracking';
+        });
+      }
       MyGlobalSnackBar.show('Error Starting Tracking: $e');
-
     }
   }
-  void _startPositionTracking() {
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: LocationSettings(
+
+  LocationSettings _trackingLocationSettings() {
+    final filter = _distanceFilter < 0 ? 0 : _distanceFilter;
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: _distanceFilter,
-      ),
-    ).listen(_onPositionUpdate);
+        distanceFilter: filter,
+        intervalDuration: const Duration(seconds: 3),
+        forceLocationManager: false,
+      );
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.high,
+        activityType: ActivityType.automotiveNavigation,
+        distanceFilter: filter,
+        pauseLocationUpdatesAutomatically: true,
+        showBackgroundLocationIndicator: false,
+      );
+    }
+    return LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: filter,
+    );
+  }
+
+  void _startPositionTracking() {
+    _positionStream?.cancel();
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: _trackingLocationSettings(),
+    ).listen(
+      _onPositionUpdate,
+      onError: (Object e) {
+        printDebugMsg('Position stream error: $e');
+        if (!mounted) return;
+        setState(() {
+          _statusMessage = 'GPS error';
+        });
+        MyGlobalSnackBar.show('GPS error: $e');
+      },
+    );
   }
 
   Future<void> _flushPendingDistance() async {
@@ -712,6 +789,10 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
             ),
     );
   }
+  void _toggleStreetView() {
+    setState(() => _isStreetView = !_isStreetView);
+  }
+
   void _nextFence() {
     if (_markers.isEmpty) return;
 
@@ -739,16 +820,24 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
     });
   }
   void _onBotBarTap(int index) {
-    if(index == 0){
+    if (index == 0) {
+      _toggleStreetView();
+      return;
+    }
+    if (index == 1) {
       _nextFence();
+      return;
     }
-    if(index == 1){
-
+    if (index == 2) {
+      // Refresh geofences + location
+      _loadGeoFences();
+      _getLocation();
+      return;
     }
-    if(index == 2) {
+    if (index == 3) {
       _isTracking ? _stopTracking() : _startTracking();
     }
-}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -770,12 +859,17 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
       appBar: _buildTrackingAppBar(),
       bottomNavigationBar: BottomNavigationBar(
           onTap: _onBotBarTap,
+          type: BottomNavigationBarType.fixed,
           backgroundColor: colorAppBar,
           unselectedItemColor: Colors.grey,
           selectedItemColor: Colors.grey,
           items: [
-            MyBottomNavItem(icon: Icons.navigate_next,label: "GeoFence"),
-            MyBottomNavItem(icon: Icons.refresh,label: "Refresh" ),
+            MyBottomNavItem(
+              icon: _isStreetView ? Icons.map : Icons.streetview,
+              label: 'Street',
+            ),
+            MyBottomNavItem(icon: Icons.navigate_next, label: 'GeoFence'),
+            MyBottomNavItem(icon: Icons.refresh, label: 'Refresh'),
             BottomNavigationBarItem(
                 icon: _isTracking
                 ? Icon(Icons.location_off, size: 35, color: Colors.red)
@@ -790,7 +884,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
               initialCameraPosition: _initialPosition,
               myLocationEnabled: true,
               myLocationButtonEnabled: true,
-              mapType: MapType.normal,
+              mapType: _isStreetView ? MapType.satellite : MapType.normal,
               markers: _markers,
               polygons: _polygons,
               polylines: _pathPolyline,

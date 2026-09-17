@@ -7,7 +7,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geofence/app_flavor.dart';
+import 'package:geofence/iot_monitors_page.dart';
 import 'package:geofence/mqtt_service.dart';
+import 'package:geofence/operators_page.dart';
 import 'package:geofence/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -484,6 +486,54 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
         ];
       }
   }
+  Future<void> _requestIpAddress(BaseStationData base) async {
+    final bluetoothName = base.bluetoothName.trim();
+    if (bluetoothName.isEmpty) {
+      MyGlobalMessage.show(
+        'Warning',
+        'No Identification Selected',
+        MyMessageType.warning,
+      );
+      return;
+    }
+
+    final clientData = await ClientCloudService.load(bluetoothName);
+    if (!mounted) return;
+
+    if (clientData.ip == null || clientData.ip!.isEmpty) {
+      MyGlobalSnackBar.show('No IP Address Found for: $bluetoothName');
+      return;
+    }
+
+    if (clientData.mqttUser != null &&
+        clientData.mqttUser!.isNotEmpty &&
+        clientData.mqttPw != null &&
+        clientData.mqttPw!.isNotEmpty) {
+      await MqttCredentialsPreferences.save(
+        baseId: bluetoothName,
+        user: clientData.mqttUser!,
+        password: clientData.mqttPw!,
+      );
+    }
+
+    printDebugMsg('IP Address: ${clientData.ip}');
+    MyGlobalSnackBar.show('IP Address: ${clientData.ip}');
+
+    if (!mounted) return;
+    final settings = context.read<SettingsService>();
+    setState(() {
+      base.ipAddress = clientData.ip!;
+      _getControllerIpAdr(base).text = clientData.ip!;
+      _saveBase(base);
+
+      settings.updateFireSettingsFields({
+        settingConnectedDevice: base.baseName,
+        settingConnectedDeviceIp: clientData.ip!,
+        settingConnectedDeviceId: base.bluetoothName,
+      });
+    });
+  }
+
   void _showBluetoothDevicesPopup(BaseStationData base) {
     if (!AppConfig.enableBluetooth) {
       MyGlobalMessage.show(
@@ -564,7 +614,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                           });
 
                           await baseService.save(base);
-
+                          await _requestIpAddress(base);
                         } else {
                           // DUPLICATE FOUND
                           // Roll back
@@ -672,31 +722,57 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
             backgroundColor: colorAppBackground,
             bottomNavigationBar: BottomNavigationBar(
                 currentIndex: _selectedIndex,
+                type: BottomNavigationBarType.fixed,
                 backgroundColor: colorAppBar,
-                unselectedItemColor: Colors.grey,
-                selectedItemColor: Colors.grey,
+                unselectedItemColor: Colors.white,
+                selectedItemColor: Colors.white,
                 onTap: (index) {
                   if (index == 1 && baseService.lstBaseStations.isEmpty) return;
-                  setState(() => _selectedIndex = index);
-                  if(index == 0) _addBase();
-                  if(index == 1) _deleteBaseDialog();
+                  if (index == 0 || index == 1) {
+                    setState(() => _selectedIndex = index);
+                  }
+                  if (index == 0) _addBase();
+                  if (index == 1) _deleteBaseDialog();
+                  if (index == 2) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const OperatorsPage(),
+                      ),
+                    );
+                  }
+                  if (index == 3) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const IotMonitorsPage(),
+                      ),
+                    );
+                  }
                 },
                 items: [
-                  // Add Button
-                  BottomNavigationBarItem(
-                      icon: Icon(Icons.add),
-                      label: 'Add',
-                      backgroundColor: Colors.grey
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.add, color: Colors.white),
+                    label: 'Add',
                   ),
-
-                  // Delete Button
                   BottomNavigationBarItem(
-                    icon: Icon(Icons.delete_forever),
+                    icon: Icon(
+                      Icons.delete_forever,
+                      color: baseService.lstBaseStations.isEmpty
+                          ? Colors.grey
+                          : Colors.white,
+                    ),
                     label: 'Delete',
-                    backgroundColor: Colors.grey,
                   ),
-
-                ]
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.person, color: Colors.white),
+                    label: 'Tags',
+                  ),
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.monitor, color: Colors.white),
+                    label: 'IOT Device',
+                  ),
+                ],
             ),
 
             body: (baseService.lstBaseStations.isEmpty)
@@ -862,47 +938,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
                                     ),
                                   ),
 
-                                  onTap: () async {
-                                    final bluetoothName = currentBase.bluetoothName;
-
-                                    if(bluetoothName == ""){
-                                      MyGlobalMessage.show("Warning", "No Identification Selected", MyMessageType.warning);
-                                      return;
-                                    }
-
-                                    final clientData =
-                                        await ClientCloudService.load(bluetoothName);
-
-                                    if (clientData.ip == null || clientData.ip!.isEmpty) {
-                                      MyGlobalSnackBar.show('No IP Address Found for: $bluetoothName');
-                                      return;
-                                    }
-
-                                    if (clientData.mqttUser != null &&
-                                        clientData.mqttUser!.isNotEmpty &&
-                                        clientData.mqttPw != null &&
-                                        clientData.mqttPw!.isNotEmpty) {
-                                      await MqttCredentialsPreferences.save(
-                                        baseId: bluetoothName,
-                                        user: clientData.mqttUser!,
-                                        password: clientData.mqttPw!,
-                                      );
-                                    }
-
-                                    printDebugMsg('IP Address: ${clientData.ip}');
-                                    MyGlobalSnackBar.show('IP Address: ${clientData.ip}');
-
-                                    setState(() {
-                                      currentBase.ipAddress = clientData.ip!;
-                                      _saveBase(currentBase);
-
-                                      settings.updateFireSettingsFields({
-                                        settingConnectedDevice : currentBase.baseName,
-                                        settingConnectedDeviceIp : clientData.ip!,
-                                        settingConnectedDeviceId: currentBase.bluetoothName
-                                      });
-                                    });
-                                  },
+                                  onTap: () => _requestIpAddress(currentBase),
                                 ),
                               ),
 

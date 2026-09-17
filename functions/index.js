@@ -14,11 +14,14 @@
 
 const functions = require("firebase-functions/v1");
 const bobShop = require("./bob_shop");
+const ewelinkSonoff = require("./ewelink_sonoff");
 Object.assign(exports, bobShop);
+Object.assign(exports, ewelinkSonoff);
 const { defineSecret, defineString } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { FieldValue } = require("firebase-admin/firestore");
 const nodemailer = require("nodemailer");
+const { FUNCTIONS_REGION } = require("./region");
 
 initializeApp();
 
@@ -81,7 +84,7 @@ async function sendContactEmail({ userName, userEmail, userId, message }) {
 }
 
 exports.onContactMessageCreated = functions
-  .region("us-central1")
+  .region(FUNCTIONS_REGION)
   .runWith({
     secrets: [smtpPass],
     timeoutSeconds: 60,
