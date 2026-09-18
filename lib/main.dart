@@ -124,14 +124,25 @@ Future<void> main() async {
 
     printDebugMsg('Starting flavor: ${AppConfig.flavor.name}');
 
+    final settingsService = SettingsService();
+    final monitorSettingsService = MonitorSettingsService();
+    final baseStationService = BaseStationService();
+    final operatorService = OperatorService();
+
+    orgService.registerFarmReloader(() => settingsService.load());
+    orgService.registerFarmReloader(() => monitorSettingsService.load());
+    orgService.registerFarmReloader(() => baseStationService.load());
+    orgService.registerFarmReloader(() => operatorService.load());
+
     runApp(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (_) => SettingsService()..load()),
+          ChangeNotifierProvider<OrgService>.value(value: orgService),
+          ChangeNotifierProvider.value(value: settingsService),
           ChangeNotifierProvider(create: (_) => UserDataService()..load()),
-          ChangeNotifierProvider(create: (_) => MonitorSettingsService()..load()),
-          ChangeNotifierProvider(create: (_) => BaseStationService()..load()),
-          ChangeNotifierProvider(create: (_) => OperatorService()),
+          ChangeNotifierProvider.value(value: monitorSettingsService),
+          ChangeNotifierProvider.value(value: baseStationService),
+          ChangeNotifierProvider.value(value: operatorService),
           ChangeNotifierProvider(create: (_) => ShopCartService()),
           ChangeNotifierProvider(create: (_) => ShopCatalogService()),
         ],

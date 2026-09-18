@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/bob_go_csv.dart';
 import 'package:geofence/network_avatar.dart';
@@ -20,7 +19,7 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
   final _money = NumberFormat.currency(locale: 'en_ZA', symbol: 'R');
   final _dateFormat = DateFormat('dd MMM yyyy, HH:mm');
 
-  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+  String? get _uid => currentDataOwnerUid();
 
   CollectionReference<Map<String, dynamic>>? get _ordersRef {
     final uid = _uid;

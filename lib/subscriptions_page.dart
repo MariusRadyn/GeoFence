@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geofence/shop_page.dart';
@@ -21,7 +20,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   final _dateFormat = DateFormat('dd MMM yyyy');
   final Set<String> _cancelling = {};
 
-  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+  String? get _uid => currentDataOwnerUid();
 
   CollectionReference<Map<String, dynamic>>? get _ordersRef {
     final uid = _uid;

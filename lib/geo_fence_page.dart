@@ -151,7 +151,7 @@ class GeoFencePageState extends State<GeoFencePage> {
     });
 
     try {
-      final userId = userData.userID;
+      final userId = (currentDataOwnerUid() ?? userData.userID);
       final geoFencesSnapshot = await firestore
           .collection(collectionUsers)
           .doc(userId)
@@ -865,7 +865,7 @@ class GeoFencePageState extends State<GeoFencePage> {
     });
 
     try {
-      final userId = userData.userID;
+      final userId = (currentDataOwnerUid() ?? userData.userID);
       final geoPointsList = _currentPolygonPoints
           .map((p) => GeoPoint(p.latitude, p.longitude))
           .toList();
@@ -1008,7 +1008,7 @@ class GeoFencePageState extends State<GeoFencePage> {
     try {
       await firestore
           .collection(collectionUsers)
-          .doc(userData.userID)
+          .doc((currentDataOwnerUid() ?? userData.userID))
           .collection(collectionGeoFences)
           .doc(firestoreId)
           .delete();

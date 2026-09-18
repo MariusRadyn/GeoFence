@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:collection/collection.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/app_flavor.dart';
@@ -635,7 +634,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   }
 
   Widget _buildSubscriptionPicker(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = currentDataOwnerUid();
     if (uid == null) {
       return const Text(
         'Sign in to link a subscription',

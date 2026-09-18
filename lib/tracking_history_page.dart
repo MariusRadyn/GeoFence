@@ -73,7 +73,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
     printDebugMsg(jsonEncode(_vehicles)); // Pretty-print JSON format
   }
   Future<List<Map<String, dynamic>>> getVehicles() async {
-    final uid = _auth.currentUser!.uid;
+    final uid = (currentDataOwnerUid() ?? _auth.currentUser!.uid);
     final basesSnapshot = await FirebaseFirestore.instance
         .collection(collectionUsers)
         .doc(uid)
@@ -140,8 +140,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
                     ),
                   ),
                   onPressed: () async {
-                    User? user = _auth.currentUser;
-                    _deleteSessionWithLocations(user?.uid, session.id);
+                    _deleteSessionWithLocations(currentDataOwnerUid(), session.id);
                     Navigator.pop(context);
                   }
               ),
@@ -328,7 +327,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
         child: StreamBuilder<QuerySnapshot>(
           stream: _firestore
               .collection(collectionUsers)
-              .doc(_auth.currentUser!.uid)
+              .doc((currentDataOwnerUid() ?? _auth.currentUser!.uid))
               .collection(collectionTrackingSessions)
               .where(fireTrackingStartTime, isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedDateFrom))
               .where(fireTrackingStartTime, isLessThanOrEqualTo: Timestamp.fromDate(_selectedDateTo))
@@ -458,7 +457,7 @@ class TrackingHistoryPageState extends State<TrackingHistoryPage> {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(builder: (context) => TrackingHistoryMap(
-                                        userId: _auth.currentUser?.uid,
+                                        userId: currentDataOwnerUid(),
                                         trackSessionId: session.id,
                                       )),
                                     );

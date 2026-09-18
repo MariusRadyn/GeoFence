@@ -11,6 +11,8 @@ import 'package:geofence/login_page.dart';
 import 'package:geofence/legal_documents_page.dart';
 import 'package:geofence/network_avatar.dart';
 import 'package:geofence/operators_page.dart';
+import 'package:geofence/organisations_page.dart';
+import 'package:geofence/org_setup_page.dart';
 import 'package:geofence/Tracking_page.dart';
 import 'package:geofence/base_station_page.dart';
 import 'package:geofence/geo_fence_page.dart';
@@ -51,6 +53,7 @@ class HomePageState extends State<HomePage>
   bool busyLoggingIn = false;
   bool _profileLaunchHandled = false;
   bool _shopLaunchHandled = false;
+  bool _orgSetupShown = false;
   String? _profileLoadRequestedForUid;
   String _versionLabel = '';
 
@@ -69,6 +72,8 @@ class HomePageState extends State<HomePage>
     WidgetsBinding.instance.addObserver(this);
     _loadVersionLabel();
     _validateUser();
+    orgService.registerRoleChangeHandler(_onRemoteRoleChanged);
+    orgService.registerMembershipRemovedHandler(_onRemoteMembershipRemoved);
     _controllerDraw = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -89,6 +94,48 @@ class HomePageState extends State<HomePage>
     });
   }
 
+  void _onRemoteRoleChanged(String oldRole, String newRole, String orgName) {
+    if (!mounted) return;
+
+    // Close drawer and leave restricted screens so menus rebuild for the new role.
+    if (_controllerDraw.isCompleted || _controllerDraw.value > 0) {
+      _controllerDraw.reverse();
+    }
+    navigatorKey.currentState?.popUntil((route) => route.isFirst);
+
+    final from = orgRoleLabel(oldRole);
+    final to = orgRoleLabel(newRole);
+    MyGlobalMessage.show(
+      'Role changed',
+      'Your role for $orgName changed from $from to $to.\n'
+          'Menus and permissions have been updated.',
+      MyMessageType.info,
+    );
+  }
+
+  void _onRemoteMembershipRemoved(
+    String removedOrgName,
+    String? switchedToOrgName,
+  ) {
+    if (!mounted) return;
+
+    if (_controllerDraw.isCompleted || _controllerDraw.value > 0) {
+      _controllerDraw.reverse();
+    }
+    navigatorKey.currentState?.popUntil((route) => route.isFirst);
+
+    final switched = (switchedToOrgName ?? '').trim();
+    final message = switched.isNotEmpty
+        ? 'You were removed from $removedOrgName.\n'
+            'Switched back to $switched.'
+        : 'You were removed from $removedOrgName.';
+    MyGlobalMessage.show(
+      'Profile removed',
+      message,
+      MyMessageType.info,
+    );
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -96,6 +143,8 @@ class HomePageState extends State<HomePage>
 
   @override
   void dispose() {
+    orgService.unregisterRoleChangeHandler(_onRemoteRoleChanged);
+    orgService.unregisterMembershipRemovedHandler(_onRemoteMembershipRemoved);
     WidgetsBinding.instance.removeObserver(this);
     _userController.dispose();
     _emailController.dispose();
@@ -131,8 +180,26 @@ class HomePageState extends State<HomePage>
       _controllerDraw.forward();
     }
   }
-  List<Widget> _buildHomeTiles() {
+
+  bool _isLinkedProfile(OrgService org) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final m = org.membership;
+    if (uid == null || m == null) return false;
+    // Own profile = orgId/ownerUid is this user; anything else is linked.
+    return m.orgId != uid && m.ownerUid != uid;
+  }
+
+  String _linkedProfileDescription(OrgService org) {
+    final m = org.membership;
+    if (m == null) return 'Linked profile';
+    return '${m.displayName} · ${orgRoleLabel(m.role)}';
+  }
+
+  List<Widget> _buildHomeTiles(OrgService org) {
     final tiles = <Widget>[];
+    final canEditFarm = !org.hasOrg || org.canEditFarm;
+    final canBilling = !org.hasOrg || org.canManageBilling;
+    final isEmployee = org.hasOrg && org.membership?.isEmployee == true;
 
     void addTile(Widget tile) {
       if (tiles.isNotEmpty) tiles.add(const SizedBox(height: 10));
@@ -154,19 +221,7 @@ class HomePageState extends State<HomePage>
       ),
     );
 
-    if (AppConfig.showLiveTracking) {
-      addTile(
-        MyCustomTileWithPic(
-          imagePath: iconFleet,
-          header: 'Track',
-          description:
-              'Track your vehicle as it moves inside and outside of your GeoFences',
-          widget: TrackingPage(),
-        ),
-      );
-    }
-
-    if (AppConfig.showBaseStations) {
+    if (AppConfig.showBaseStations && canEditFarm) {
       addTile(
         MyCustomTileWithPic(
           imagePath: iconBase,
@@ -178,7 +233,7 @@ class HomePageState extends State<HomePage>
       );
     }
 
-    if (AppConfig.showIotMonitors) {
+    if (AppConfig.showIotMonitors && canEditFarm) {
       addTile(
         const MyCustomTileWithPic(
           imagePath: iconIot,
@@ -186,6 +241,17 @@ class HomePageState extends State<HomePage>
           description:
               'Add Limitless IOT or third party IOT devices',
           widget: IotMonitorsPage(),
+        ),
+      );
+    }
+
+    if (AppConfig.showOperators && canEditFarm) {
+      addTile(
+        const MyCustomTileWithPic(
+          imagePath: iconOperators,
+          header: 'Tags',
+          description: 'Manage employee and supervisor tags',
+          widget: OperatorsPage(),
         ),
       );
     }
@@ -201,7 +267,7 @@ class HomePageState extends State<HomePage>
       );
     }
 
-    if (AppConfig.addWages) {
+    if (AppConfig.addWages && !isEmployee) {
       addTile(
         MyCustomTileWithPic(
           imagePath: iconWages,
@@ -212,7 +278,7 @@ class HomePageState extends State<HomePage>
       );
     }
 
-    if (AppConfig.addShop) {
+    if (AppConfig.addShop && canBilling) {
       addTile(
         const MyCustomTileWithPic(
           imagePath: iconShop,
@@ -238,7 +304,7 @@ class HomePageState extends State<HomePage>
       );
     });
   }
-  List<Widget> _buildDrawerItems(UserDataService user) {
+  List<Widget> _buildDrawerItems(UserDataService user, OrgService org) {
     final items = <Widget>[];
 
     void open(Widget page) => _openDrawerPage(page);
@@ -269,30 +335,35 @@ class HomePageState extends State<HomePage>
       );
     }
 
+    final canEditFarm = !org.hasOrg || org.canEditFarm;
+    final canBilling = !org.hasOrg || org.canManageBilling;
+    final isEmployee = org.hasOrg && org.membership?.isEmployee == true;
+
     final showTrackingSection = AppConfig.showLiveTracking ||
         AppConfig.showGeoFenceSetup ||
         AppConfig.showTrackingHistory;
     final showIotSection = AppConfig.showBaseStations ||
         AppConfig.showIotMonitors ||
         AppConfig.showIotDataReport;
-    final showShopSection = AppConfig.showShop;
+    final showShopSection = AppConfig.showShop && canBilling;
     final showGeneralSection = true;
     final userIsDeveloper = user.userdata?.isDeveloper == true;
-    final showSetupShop = enableSetupShop || userIsDeveloper;
-    final showSetupSection = AppConfig.showSettings ||
-        AppConfig.showOperators ||
-        showSetupShop;
+    final showSetupShop = (enableSetupShop || userIsDeveloper) && canBilling;
+    final showSetupSection = (AppConfig.showSettings && canEditFarm) ||
+        (AppConfig.showOperators && canEditFarm) ||
+        showSetupShop ||
+        org.hasOrg;
 
     if (showIotSection) {
       items.add(heading('iOT', first: true));
-      if (AppConfig.showBaseStations) {
+      if (AppConfig.showBaseStations && canEditFarm) {
         items.add(drawerTile(
           icon: Icons.cell_tower,
           title: 'Base Station',
           onTap: () => open(BaseStationPage()),
         ));
       }
-      if (AppConfig.showIotMonitors) {
+      if (AppConfig.showIotMonitors && canEditFarm) {
         items.add(drawerTile(
           icon: Icons.monitor,
           title: 'iOT Devices',
@@ -339,7 +410,7 @@ class HomePageState extends State<HomePage>
           onTap: () => open(TrackingPage()),
         ));
       }
-      if (AppConfig.showGeoFenceSetup) {
+      if (AppConfig.showGeoFenceSetup && canEditFarm) {
         items.add(drawerTile(
           icon: Icons.fence,
           title: 'GeoFence',
@@ -360,7 +431,7 @@ class HomePageState extends State<HomePage>
         'General',
         first: !showIotSection && !showShopSection && !showTrackingSection,
       ));
-      if (AppConfig.showWages) {
+      if (AppConfig.showWages && !isEmployee) {
         items.add(drawerTile(
           icon: Icons.attach_money_sharp,
           title: 'Wages',
@@ -382,18 +453,25 @@ class HomePageState extends State<HomePage>
             !showTrackingSection &&
             !showGeneralSection,
       ));
-      if (AppConfig.showSettings) {
+      if (AppConfig.showSettings && canEditFarm) {
         items.add(drawerTile(
           icon: Icons.settings,
           title: 'Settings',
           onTap: () => open(SettingsPage(userId: user.userdata!.userID)),
         ));
       }
-      if (AppConfig.showOperators) {
+      if (AppConfig.showOperators && canEditFarm) {
         items.add(drawerTile(
           icon: Icons.person,
           title: 'Tags',
           onTap: () => open(const OperatorsPage()),
+        ));
+      }
+      if (org.hasOrg) {
+        items.add(drawerTile(
+          icon: Icons.business_outlined,
+          title: 'Link Profile',
+          onTap: () => open(const OrganisationsPage()),
         ));
       }
       if (showSetupShop) {
@@ -414,6 +492,34 @@ class HomePageState extends State<HomePage>
     items.add(const SizedBox(height: 5));
     return items;
   }
+  Future<void> _ensureOrgSetup({
+    required UserDataService user,
+    required OrgService org,
+  }) async {
+    if (_orgSetupShown) return;
+    if (FirebaseAuth.instance.currentUser == null) return;
+    if (user.userdata == null) return;
+    if (user.userdata?.emailValidated != true) return;
+    if (org.isLoading) return;
+
+    // Profile exists but org membership not resolved yet — refresh once.
+    if (!org.hasOrg && !org.needsSetup) {
+      await org.refreshAfterProfileReady();
+      if (!mounted) return;
+    }
+
+    if (!org.needsSetup || org.hasOrg) return;
+
+    _orgSetupShown = true;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const OrgSetupPage()),
+    );
+    if (!mounted) return;
+    _orgSetupShown = false;
+    await org.load();
+  }
+
   Future<void> _openShopOnLaunch() async {
     if (!AppConfig.addShop) return;
     if (!mounted) return;
@@ -525,8 +631,8 @@ class HomePageState extends State<HomePage>
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
 
-          return Consumer2<SettingsService, UserDataService>(
-              builder: (context, settings, user,__) {
+          return Consumer3<SettingsService, UserDataService, OrgService>(
+              builder: (context, settings, user, org, __) {
                 final authWaiting =
                     snapshot.connectionState == ConnectionState.waiting;
                 final authUser = snapshot.data;
@@ -537,10 +643,13 @@ class HomePageState extends State<HomePage>
                 // to leave the spinner up until the 10s timeout).
                 final profileSyncing =
                     profilePending && (user.isLoading || settings.isLoading);
-                final showLoadingOverlay =
-                    authWaiting || busyLoggingIn || profileSyncing;
                 final userLoggedIn =
                     authUser != null && user.userdata != null;
+                final orgPending = userLoggedIn &&
+                    user.userdata?.emailValidated == true &&
+                    (org.isLoading || (!org.isReady));
+                final showLoadingOverlay =
+                    authWaiting || busyLoggingIn || profileSyncing || orgPending;
 
                 String image = "";
                 if (user.userdata != null) {
@@ -555,6 +664,7 @@ class HomePageState extends State<HomePage>
 
                 if (authUser == null) {
                   _profileLoadRequestedForUid = null;
+                  _orgSetupShown = false;
                   if (busyLoggingIn) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (!mounted) return;
@@ -575,6 +685,17 @@ class HomePageState extends State<HomePage>
                     }
                     user.load();
                     settings.load();
+                    org.refreshAfterProfileReady();
+                  });
+                }
+
+                if (userLoggedIn &&
+                    user.userdata?.emailValidated == true &&
+                    !orgPending &&
+                    !profileSyncing) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    _ensureOrgSetup(user: user, org: org);
                   });
                 }
 
@@ -609,6 +730,7 @@ class HomePageState extends State<HomePage>
                                   backgroundColor: Colors.transparent,
                                   elevation: 0,
                                   scrolledUnderElevation: 0,
+                                  toolbarHeight: _isLinkedProfile(org) ? 72 : kToolbarHeight,
                                   leading: GestureDetector(
                                     onTap: () {
                                       if (userLoggedIn) toggleDrawer();
@@ -617,8 +739,22 @@ class HomePageState extends State<HomePage>
                                   ),
                                   title: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
                                       myAppbarTitle("Limitless iOT"),
+                                      if (_isLinkedProfile(org))
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 1),
+                                          child: Text(
+                                            _linkedProfileDescription(org),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white.withValues(alpha: 0.75),
+                                            ),
+                                          ),
+                                        ),
                                       myConnectionStatus(settings: settings),
                                     ],
                                   ),
@@ -698,7 +834,7 @@ class HomePageState extends State<HomePage>
                                       children: [
                                         const SizedBox(height: 20),
 
-                                        ..._buildHomeTiles(),
+                                        ..._buildHomeTiles(org),
 
                                         const SizedBox(height: 15),
                                       ],
@@ -843,7 +979,7 @@ class HomePageState extends State<HomePage>
                                                       child: ListView(
                                                         padding: EdgeInsets.zero,
                                                         children:
-                                                            _buildDrawerItems(user),
+                                                            _buildDrawerItems(user, org),
                                                       ),
                                                     ),
                                                   ),

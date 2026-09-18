@@ -1,0 +1,7 @@
+flutter build web --release --dart-define=APP_FLAVOR=reporting --dart-define=RECAPTCHA_V3_SITE_KEY=6Lfm42stAAAAAJzriEoZzVWmQZfY75faRwK8fzAu --no-wasm-dry-run
+
+firebase deploy --only hosting
+
+flutter build apk --release --dart-define=APP_FLAVOR=full
+flutter build appbundle
+

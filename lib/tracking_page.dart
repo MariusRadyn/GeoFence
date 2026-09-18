@@ -138,7 +138,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
 
       final geoFencesSnapshot = await firestore
           .collection(collectionUsers)
-          .doc(user.userdata!.userID)
+          .doc(currentDataOwnerUid() ?? user.userdata!.userID)
           .collection(collectionGeoFences)
           .get();
 
@@ -266,7 +266,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
   Future<void> _loadVehicles() async {
     String userId = "";
     try {
-      userId = context.read<UserDataService>().userdata!.userID;
+      userId = (currentDataOwnerUid() ?? '');
 
       setState(() {
         _isLoadingVehicles = true;
@@ -381,7 +381,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
       });
 
       if (!mounted) return;
-      final userId = context.read<UserDataService>().userdata!.userID;
+      final userId = (currentDataOwnerUid() ?? '');
       final sessionRef = await _firestore
           .collection(collectionUsers)
           .doc(userId)
@@ -480,7 +480,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
 
     if (_pendingInsideKm <= 0 && _pendingOutsideKm <= 0) return;
 
-    final userId = context.read<UserDataService>().userdata!.userID;
+    final userId = (currentDataOwnerUid() ?? '');
     final updates = <String, dynamic>{};
     if (_pendingInsideKm > 0) {
       updates[fireTrackingDistanceInside] =
@@ -510,7 +510,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
   }) async {
     if (_trackingSessionId == null || !mounted) return;
 
-    final userId = context.read<UserDataService>().userdata!.userID;
+    final userId = (currentDataOwnerUid() ?? '');
     final payload = <String, dynamic>{
       'latitude': position.latitude,
       'longitude': position.longitude,
@@ -687,7 +687,7 @@ class TrackingPageState extends State<TrackingPage> with WidgetsBindingObserver 
       if(!mounted) return;
       await _flushPendingDistance();
       if(!mounted) return;
-      final userId = context.read<UserDataService>().userdata!.userID;
+      final userId = (currentDataOwnerUid() ?? '');
 
       await _firestore
           .collection(collectionUsers)

@@ -1,6 +1,5 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geofence/utils.dart';
 import 'package:geofence/wages_excel_export.dart';
@@ -30,7 +29,7 @@ class WagesPageState extends State<WagesPage> with SingleTickerProviderStateMixi
       _startOfDay(date).add(const Duration(days: 1));
 
   Query<Map<String, dynamic>> _iotDataQuery(DateTime from, DateTime to) {
-    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    final String? uid = currentDataOwnerUid();
     final DateTime rangeStart = _startOfDay(from);
     final DateTime rangeEndExclusive = _endOfDayExclusive(to);
 
@@ -267,7 +266,7 @@ class WagesPageState extends State<WagesPage> with SingleTickerProviderStateMixi
                         MaterialPageRoute(builder: (context) => WagesLogsPage(
                           monitor: actualMonitor,
                           streamIotData: _iotDataStream(fromDate, toDate),
-                          userDocId: FirebaseAuth.instance.currentUser?.uid ,
+                          userDocId: currentDataOwnerUid() ,
                         )),
                       );
                     },

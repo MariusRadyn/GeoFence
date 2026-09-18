@@ -15,8 +15,10 @@
 const functions = require("firebase-functions/v1");
 const bobShop = require("./bob_shop");
 const ewelinkSonoff = require("./ewelink_sonoff");
+const orgInvites = require("./org_invites");
 Object.assign(exports, bobShop);
 Object.assign(exports, ewelinkSonoff);
+Object.assign(exports, orgInvites);
 const { defineSecret, defineString } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { FieldValue } = require("firebase-admin/firestore");

@@ -13,6 +13,19 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:geofence/firebase.dart';
 import 'package:geofence/network_avatar.dart';
+import 'package:geofence/org_service.dart';
+export 'package:geofence/org_service.dart'
+    show
+        OrgService,
+        orgService,
+        currentDataOwnerUid,
+        orgRoleAdmin,
+        orgRoleSupervisor,
+        orgRoleEmployee,
+        orgInviteRoleList,
+        orgRoleLabel,
+        OrgMembership,
+        OrgMemberRow;
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
@@ -82,7 +95,7 @@ const String iconWages = 'assets/wages_icon.png';
 const String iconShop = 'assets/shop_icon.png';
 const String iconWhatsNew = 'assets/whats_new_icon.png';
 const String iconItsFree = 'assets/its_free.png';
-const String iconOperators = 'assets/operators_icon.png';
+const String iconOperators = 'assets/Tags2.png';
 
 const String iconLimitlessLogo = 'assets/limitless_logo.png';
 const String iconLimitlessWord = 'assets/limitlessIotWord.png';
@@ -203,9 +216,13 @@ String? baseStationDocIdFromMonitorPath(String path) {
 const collectionClients = 'clients';
 const collectionOperators = 'operators';
 const collectionContactMessages = 'contact_messages';
+const collectionOrganizations = 'organizations';
+const collectionOrgMembers = 'members';
+const collectionOrgInvites = 'invites';
 
 const fieldsSettings = 'settings';
 const fieldsUserData = 'userdata';
+const fieldsOrg = 'org';
 const docAppSettings = 'app_settings';
 
 // General Settings
@@ -2738,6 +2755,7 @@ class UserDataService extends ChangeNotifier {
       }, SetOptions(merge: true));
 
       await load();
+      await orgService.refreshAfterProfileReady();
     } catch (e) {
       printDebugMsg("Failed to save user data: $e");
       rethrow;
@@ -2957,13 +2975,16 @@ class SettingsService extends ChangeNotifier {
         isLoading = false;
         notifyListeners();
       } else {
-        load();
+        scheduleMicrotask(() async {
+          await orgService.ensureLoaded();
+          if (FirebaseAuth.instance.currentUser != null) load();
+        });
       }
     });
   }
 
   Future<void> load() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = currentDataOwnerUid();
     if (uid == null) {
       _settings = null;
       isLoading = false;
@@ -3014,7 +3035,7 @@ class SettingsService extends ChangeNotifier {
   }
   Future<void> updateFireSettingsFields(Map<String, dynamic> updates) async {
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final uid = currentDataOwnerUid();
       if (uid == null || _settings == null) return;
 
       final current = _settings!;
@@ -3239,7 +3260,10 @@ class MonitorSettingsService extends ChangeNotifier {
         isLoading = false;
         notifyListeners();
       } else {
-        load();
+        scheduleMicrotask(() async {
+          await orgService.ensureLoaded();
+          if (FirebaseAuth.instance.currentUser != null) load();
+        });
       }
     });
   }
@@ -3305,7 +3329,7 @@ class MonitorSettingsService extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = currentDataOwnerUid();
     if (uid == null) {
       isLoading = false;
       notifyListeners();
@@ -3424,7 +3448,7 @@ class MonitorSettingsService extends ChangeNotifier {
     bool showSavedMessage = true,
   }) async {
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final uid = currentDataOwnerUid();
       if (uid == null) return;
       if (monitor.baseStationDocId.isEmpty) {
         MyGlobalSnackBar.show('Cloud Error: base station not set');
@@ -3724,8 +3748,11 @@ class BaseStationService extends ChangeNotifier {
         isLoading = false;
         notifyListeners();
       } else {
-        // Defer so login can finish before we fetch.
-        scheduleMicrotask(() => load());
+        // Defer so login/org can finish before we fetch.
+        scheduleMicrotask(() async {
+          await orgService.ensureLoaded();
+          if (FirebaseAuth.instance.currentUser != null) load();
+        });
       }
     });
   }
@@ -3740,7 +3767,7 @@ class BaseStationService extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
 
-    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    String? uid = currentDataOwnerUid();
     if (uid == null) {
       _lstBase.clear();
       _selected = null;
@@ -3780,7 +3807,7 @@ class BaseStationService extends ChangeNotifier {
   }
   Future<String> addNew() async {
     try{
-      String? uid = FirebaseAuth.instance.currentUser?.uid;
+      String? uid = currentDataOwnerUid();
       if (uid == null) return "";
 
       final ref = FirebaseFirestore.instance
@@ -3806,7 +3833,7 @@ class BaseStationService extends ChangeNotifier {
   }
   Future<void> save(BaseStationData base) async{
     try{
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final uid = currentDataOwnerUid();
       if (uid == null) return;
 
       final ref = FirebaseFirestore.instance
@@ -3828,12 +3855,12 @@ class BaseStationService extends ChangeNotifier {
   }
   Future<void> delete(BaseStationData base) async{
     try {
-      User? user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      final uid = currentDataOwnerUid();
+      if (uid == null) return;
 
       final baseRef = FirebaseFirestore.instance
           .collection(collectionUsers)
-          .doc(user.uid)
+          .doc(uid)
           .collection(collectionBaseStations)
           .doc(base.docId);
 
@@ -3982,7 +4009,10 @@ class OperatorService extends ChangeNotifier {
         _safeNotify();
       } else {
         // Defer so we never notify while the widget tree is building.
-        scheduleMicrotask(() => load());
+        scheduleMicrotask(() async {
+          await orgService.ensureLoaded();
+          if (FirebaseAuth.instance.currentUser != null) load();
+        });
       }
     });
   }
@@ -4017,7 +4047,7 @@ class OperatorService extends ChangeNotifier {
     isLoading = true;
     _safeNotify();
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = currentDataOwnerUid();
     if (uid == null) {
       isLoading = false;
       _safeNotify();
@@ -4070,7 +4100,7 @@ class OperatorService extends ChangeNotifier {
 
   Future<OperatorData?> addNew({String accessLevel = operatorTypeEmployee}) async {
     try{
-      String? uid = FirebaseAuth.instance.currentUser?.uid;
+      String? uid = currentDataOwnerUid();
       if (uid == null) return null;
 
       isLoading = true;
@@ -4103,7 +4133,7 @@ class OperatorService extends ChangeNotifier {
   }
   Future<void> save(OperatorData operator) async{
     try{
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final uid = currentDataOwnerUid();
       if (uid == null) return;
 
       final ref = FirebaseFirestore.instance
@@ -4152,13 +4182,13 @@ class OperatorService extends ChangeNotifier {
   }
   Future<void> delete(OperatorData operator) async{
     try {
-      User? user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      final uid = currentDataOwnerUid();
+      if (uid == null) return;
 
       // 1️⃣ Delete from Firestore
       await FirebaseFirestore.instance
           .collection(collectionUsers)
-          .doc(user.uid)
+          .doc(uid)
           .collection(collectionOperators)
           .doc(operator.docId)
           .delete();
@@ -4182,7 +4212,7 @@ class OperatorService extends ChangeNotifier {
   Future<bool> hasLinkedWageRecords(String operatorDocId) async {
     if (operatorDocId.isEmpty) return false;
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = currentDataOwnerUid();
     if (uid == null) return false;
 
     try {
@@ -4203,7 +4233,7 @@ class OperatorService extends ChangeNotifier {
   /// Hide operator from lists but keep Firestore doc for historical wage logs.
   Future<void> markForDelete(OperatorData operator) async {
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final uid = currentDataOwnerUid();
       if (uid == null) return;
 
       await FirebaseFirestore.instance
@@ -4222,7 +4252,7 @@ class OperatorService extends ChangeNotifier {
     }
   }
   void setNewOperatorVersion() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = currentDataOwnerUid();
     if (uid == null) return;
 
     // Change Operator Version

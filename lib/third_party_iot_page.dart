@@ -16,12 +16,16 @@ class SonoffIotPanel extends StatefulWidget {
     super.key,
     this.embedded = false,
     this.active = true,
+    this.onRemoved,
   });
 
   final bool embedded;
 
   /// When embedded in a TabBarView, only bootstrap while this tab is selected.
   final bool active;
+
+  /// Called after SONOFF is deleted and eWeLink is unlinked (hide tab, etc.).
+  final VoidCallback? onRemoved;
 
   @override
   State<SonoffIotPanel> createState() => _SonoffIotPanelState();
@@ -71,7 +75,7 @@ class _SonoffIotPanelState extends State<SonoffIotPanel>
   }
 
   String get _uid =>
-      FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+      currentDataOwnerUid() ?? 'guest';
 
   String get _namesPrefsKey => 'ewelink_device_names_$_uid';
   String get _checkedPrefsKey => 'ewelink_link_checked_$_uid';
@@ -583,6 +587,8 @@ class _SonoffIotPanelState extends State<SonoffIotPanel>
     }
   }
 
+  String get _sonoffTabPrefsKey => 'sonoff_tab_enabled_$_uid';
+
   Future<void> _unlinkAccount() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -611,7 +617,79 @@ class _SonoffIotPanelState extends State<SonoffIotPanel>
       ),
     );
     if (ok != true) return;
+    await _performUnlink(showSnackBar: true);
+  }
 
+  Future<void> _deleteSonoff() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colorAppTitle,
+        title: const Text(
+          'Delete SONOFF?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          _linked
+              ? 'This will unlink your eWeLink account and remove the SONOFF tab.'
+              : 'This will remove the SONOFF tab from iOT Devices.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            style: TextButton.styleFrom(foregroundColor: colorBlue),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      if (_linked) {
+        await _call('ewelinkUnlinkAccount');
+      }
+      await _persistLinkStatus(linked: false);
+      try {
+        final prefs = await SharedPreferences.getInstance()
+            .timeout(const Duration(seconds: 2));
+        await prefs
+            .setBool(_sonoffTabPrefsKey, false)
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _linked = false;
+        _linkedEmail = null;
+        _linkedRegion = null;
+        _devices = [];
+      });
+      MyGlobalSnackBar.show('SONOFF removed');
+      widget.onRemoved?.call();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _friendlyError(e));
+      MyGlobalMessage.show(
+        'Delete failed',
+        _friendlyError(e),
+        MyMessageType.error,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _performUnlink({required bool showSnackBar}) async {
     setState(() {
       _busy = true;
       _error = null;
@@ -626,10 +704,13 @@ class _SonoffIotPanelState extends State<SonoffIotPanel>
         _linkedRegion = null;
         _devices = [];
       });
-      MyGlobalSnackBar.show('eWeLink account unlinked');
+      if (showSnackBar) {
+        MyGlobalSnackBar.show('eWeLink account unlinked');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = _friendlyError(e));
+      rethrow;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -949,28 +1030,44 @@ class _SonoffIotPanelState extends State<SonoffIotPanel>
     if (widget.embedded) {
       return ColoredBox(
         color: colorAppBackground,
-        child: Column(
+        child: Stack(
           children: [
-            if (_linked && !_loading)
-              Material(
-                color: colorAppBar,
-                child: Row(
-                  children: [
-                    const Spacer(),
-                    IconButton(
-                      tooltip: 'Pair device',
-                      onPressed: _busy ? null : _showPairDeviceSheet,
-                      icon: const Icon(Icons.add_link, color: Colors.white),
+            Column(
+              children: [
+                if (_linked && !_loading)
+                  Material(
+                    color: colorAppBar,
+                    child: Row(
+                      children: [
+                        const Spacer(),
+                        IconButton(
+                          tooltip: 'Pair device',
+                          onPressed: _busy ? null : _showPairDeviceSheet,
+                          icon: const Icon(Icons.add_link, color: Colors.white),
+                        ),
+                        IconButton(
+                          tooltip: 'Refresh',
+                          onPressed: _busy ? null : () => _refreshDevices(),
+                          icon: const Icon(Icons.refresh, color: Colors.white),
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      tooltip: 'Refresh',
-                      onPressed: _busy ? null : () => _refreshDevices(),
-                      icon: const Icon(Icons.refresh, color: Colors.white),
-                    ),
-                  ],
-                ),
+                  ),
+                Expanded(child: body),
+              ],
+            ),
+            Positioned(
+              right: 16,
+              bottom: 16,
+              child: FloatingActionButton(
+                heroTag: 'sonoffDeleteFab',
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+                tooltip: 'Delete SONOFF',
+                onPressed: _busy || _loading ? null : _deleteSonoff,
+                child: const Icon(Icons.delete_outline),
               ),
-            Expanded(child: body),
+            ),
           ],
         ),
       );
@@ -996,6 +1093,14 @@ class _SonoffIotPanelState extends State<SonoffIotPanel>
             ),
           ],
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'sonoffDeleteFabStandalone',
+        backgroundColor: Colors.redAccent,
+        foregroundColor: Colors.white,
+        tooltip: 'Delete SONOFF',
+        onPressed: _busy || _loading ? null : _deleteSonoff,
+        child: const Icon(Icons.delete_outline),
       ),
       body: body,
     );

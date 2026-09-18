@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geofence/mqtt_service.dart';
@@ -202,7 +201,7 @@ class OperatorEditPageState extends State<OperatorEditPage> {
       MqttService().tx(
         base.bluetoothName,
         mqttCmdConnectBase,
-        {fireUid: FirebaseAuth.instance.currentUser?.uid},
+        {fireUid: currentDataOwnerUid()},
         mqttTopicFromAndroid,
       );
       return true;
@@ -246,7 +245,7 @@ class OperatorEditPageState extends State<OperatorEditPage> {
   }
   Future<void> _processTag(String tagId) async {
     // Check Tag duplication
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = currentDataOwnerUid();
 
     final snapshot = await FirebaseFirestore.instance
         .collection(collectionUsers)

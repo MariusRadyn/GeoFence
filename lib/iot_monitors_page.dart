@@ -24,6 +24,7 @@ import 'package:geofence/utils.dart';
 //import 'package:path_provider/path_provider.dart';
 //import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'mqtt_service.dart';
 import 'edit_profile_pic_page.dart';
@@ -64,8 +65,10 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   final Map<String, bool> _subscriptionActiveCache = {};
   DateTime? _subscriptionCacheAt;
   DateTime? _lastSubWarningAt;
+  bool _sonoffTabEnabled = false;
 
-  bool get _showSonoff => AppConfig.showThirdPartyIot;
+  bool get _showSonoff =>
+      AppConfig.showThirdPartyIot && _sonoffTabEnabled;
   int get _sonoffOffset => _showSonoff ? 1 : 0;
 
   bool get _onSonoffTab {
@@ -73,9 +76,57 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     return _baseTabController!.index == _baseTabController!.length - 1;
   }
 
+  String get _sonoffTabPrefsKey {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    return 'sonoff_tab_enabled_$uid';
+  }
+
+  String get _ewelinkLinkedPrefsKey {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    return 'ewelink_linked_$uid';
+  }
+
   void _selectSonoffTab() {
     if (!_showSonoff || _baseTabController == null) return;
     _baseTabController!.animateTo(_baseTabController!.length - 1);
+  }
+
+  Future<void> _loadSonoffTabVisibility() async {
+    if (!AppConfig.showThirdPartyIot) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final enabled = prefs.getBool(_sonoffTabPrefsKey) == true;
+      final linked = prefs.getBool(_ewelinkLinkedPrefsKey) == true;
+      if (!mounted) return;
+      if (enabled || linked) {
+        setState(() => _sonoffTabEnabled = true);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _enableSonoffTab({bool select = true}) async {
+    if (!AppConfig.showThirdPartyIot) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_sonoffTabPrefsKey, true);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _sonoffTabEnabled = true);
+    if (select) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _selectSonoffTab();
+      });
+    }
+  }
+
+  Future<void> _disableSonoffTab() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_sonoffTabPrefsKey, false);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _sonoffTabEnabled = false);
   }
 
   _BaseMonitorUiState _uiForBase(String baseDocId) {
@@ -107,6 +158,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _loadSonoffTabVisibility();
       if (AppConfig.enableBluetooth) {
         _getBluetoothDevices();
       }
@@ -192,7 +244,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       return _subscriptionActiveCache[id]!;
     }
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final uid = currentDataOwnerUid();
       if (uid == null) return false;
       final snap = await FirebaseFirestore.instance
           .collection(collectionUsers)
@@ -615,7 +667,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       MqttService().tx(
         base.bluetoothName,
         mqttCmdConnectBase,
-        {fireUid: FirebaseAuth.instance.currentUser?.uid},
+        {fireUid: currentDataOwnerUid()},
         mqttTopicFromAndroid,
       );
       return true;
@@ -897,7 +949,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
     if (monitor.monDocId.isNotEmpty) {
       final userId = context.read<UserDataService>().userdata?.userID ??
-          FirebaseAuth.instance.currentUser?.uid;
+          currentDataOwnerUid();
       if (userId == null || userId.isEmpty) return false;
 
       payload[mqttJsonUserDocId] = userId;
@@ -1187,7 +1239,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
 
     // SONOFF is managed on its own tab — don't create a monitor document.
     if (selectedType == monitorTypeSonoff) {
-      _selectSonoffTab();
+      await _enableSonoffTab();
       return;
     }
 
@@ -1204,7 +1256,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       return;
     }
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = currentDataOwnerUid();
     if (uid == null) return;
 
     final monitor = MonitorSettings(
@@ -1775,7 +1827,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
                           ),
                         );
                         if (selectedType == monitorTypeSonoff) {
-                          _selectSonoffTab();
+                          await _enableSonoffTab();
                           return;
                         }
                         if (selectedType != null && selectedType is String) {
@@ -1911,6 +1963,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
                       SonoffIotPanel(
                         embedded: true,
                         active: onSonoff,
+                        onRemoved: _disableSonoffTab,
                       ),
                   ],
                 ),

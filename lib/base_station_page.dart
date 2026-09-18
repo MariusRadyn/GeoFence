@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -239,7 +238,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
       return false;
     }
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = currentDataOwnerUid();
     if (uid == null) {
       MyGlobalMessage.show(
         'Warning',
@@ -334,7 +333,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
     if (_tabController == null) return false;
 
     // CHeck Tag duplication
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = currentDataOwnerUid();
 
     final snapshot = await FirebaseFirestore.instance
         .collection(collectionUsers)

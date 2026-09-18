@@ -1,7 +1,6 @@
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geofence/iot_data_logs_page.dart';
@@ -33,7 +32,7 @@ class IotDataPageState extends State<IotDataPage> with TickerProviderStateMixin 
       _startOfDay(date).add(const Duration(days: 1));
 
   Stream<QuerySnapshot> _iotDataStream(DateTime from, DateTime to) {
-    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    final String? uid = currentDataOwnerUid();
     final DateTime rangeStart = _startOfDay(from);
     final DateTime rangeEndExclusive = _endOfDayExclusive(to);
 
@@ -259,7 +258,7 @@ class IotDataPageState extends State<IotDataPage> with TickerProviderStateMixin 
                               toDate,
                               actualMonitor,
                             ),
-                            userDocId: FirebaseAuth.instance.currentUser?.uid,
+                            userDocId: currentDataOwnerUid(),
                           ),
                         ),
                       );
