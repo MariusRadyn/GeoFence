@@ -20,6 +20,9 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   final _dateFormat = DateFormat('dd MMM yyyy');
   final Set<String> _cancelling = {};
 
+  /// Default: Active only.
+  bool _showActiveOnly = true;
+
   String? get _uid => currentDataOwnerUid();
 
   CollectionReference<Map<String, dynamic>>? get _ordersRef {
@@ -188,6 +191,28 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         backgroundColor: colorAppBar,
         foregroundColor: Colors.white,
         title: myAppbarTitle('Subscriptions'),
+        actions: [
+          PopupMenuButton<bool>(
+            tooltip: 'Filter',
+            icon: const Icon(Icons.filter_list),
+            color: colorAppBar,
+            onSelected: (activeOnly) {
+              setState(() => _showActiveOnly = activeOnly);
+            },
+            itemBuilder: (context) => [
+              CheckedPopupMenuItem<bool>(
+                value: true,
+                checked: _showActiveOnly,
+                child: const Text('Active', style: TextStyle(color: Colors.white)),
+              ),
+              CheckedPopupMenuItem<bool>(
+                value: false,
+                checked: !_showActiveOnly,
+                child: const Text('All', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        ],
       ),
       body: _uid == null
           ? const Center(
@@ -223,11 +248,17 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                     }
                     final docs = snap.data!.docs
                         .where((d) => _isSubscriptionOrder(d.data()))
+                        .where((d) {
+                          if (!_showActiveOnly) return true;
+                          return _statusLabel(d.data()) == 'Active';
+                        })
                         .toList();
                     if (docs.isEmpty) {
-                      return const Center(
+                      return Center(
                         child: MyText(
-                          text: 'No subscriptions yet.',
+                          text: _showActiveOnly
+                              ? 'No active subscriptions.'
+                              : 'No subscriptions yet.',
                           color: Colors.white54,
                         ),
                       );

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geofence/mqtt_platform.dart';
 import 'package:geofence/utils.dart';
@@ -18,6 +17,8 @@ class MqttService {
   late int port;
   late String myDeviceId;
   String? _baseId;
+  /// When set (Cloudflare hostname), web HTTPS uses this instead of LAN IP.
+  String? _wssHost;
 
   bool isConnected = false;
   bool _listenerStarted = false;
@@ -39,6 +40,7 @@ class MqttService {
   final Map<String, List<void Function(String)>> _topicCallbacks = {};
   StreamSubscription? _updatesSubscription;
   final Set<String> _subscribedTopics = {};
+  Completer<void>? _subscribeReady;
 
   final _messageStreamController = StreamController<String>.broadcast();
   Stream<String> get messageStream => _messageStreamController.stream;
@@ -90,34 +92,72 @@ class MqttService {
       timeout: timeout ?? brokerReachabilityTimeout,
     );
     if (!ok) {
-      final portHint = kIsWeb
-          ? (Uri.base.scheme == 'https' ? mqttWssPort : mqttWsPort)
-          : mqttTcpPort;
       printDebugMsg(
-        'MQTT broker not reachable at $ip:$portHint '
+        'MQTT broker not reachable at $ip '
         '(${kIsWeb ? 'WebSocket' : 'TCP'})',
       );
     }
     return ok;
   }
 
-  Future<bool> restartService(String ip, {String? baseId}) async {
+  /// True if [host] is a dotted IPv4 address (LAN base).
+  static bool looksLikeIpv4(String host) {
+    final parts = host.split('.');
+    if (parts.length != 4) return false;
+    for (final p in parts) {
+      final n = int.tryParse(p);
+      if (n == null || n < 0 || n > 255) return false;
+    }
+    return true;
+  }
+
+  /// Host the browser/socket should dial.
+  /// On HTTPS web, prefer Cloudflare [wssHost] when present.
+  static String resolveConnectHost(String lanHost, {String? wssHost}) {
+    final lan = normalizeHost(lanHost);
+    final cloud = normalizeHost(wssHost ?? '');
+    if (kIsWeb && cloud.isNotEmpty && !looksLikeIpv4(cloud)) {
+      return cloud;
+    }
+    return lan;
+  }
+
+  static int resolveConnectPort(String host) {
+    if (!kIsWeb) return mqttTcpPort;
+    if (!looksLikeIpv4(host)) return mqttWssCloudPort;
+    return Uri.base.scheme == 'https' ? mqttWssPort : mqttWsPort;
+  }
+
+  Future<bool> restartService(
+    String ip, {
+    String? baseId,
+    String? wssHost,
+  }) async {
     lastError = null;
     try {
       if (baseId != null) _baseId = baseId;
+      _wssHost = (wssHost != null && wssHost.trim().isNotEmpty)
+          ? normalizeHost(wssHost)
+          : null;
 
       final trimmedIp = normalizeHost(ip);
-      if (trimmedIp.isEmpty) {
+      if (trimmedIp.isEmpty && (_wssHost == null || _wssHost!.isEmpty)) {
+        lastError = 'No IP address';
+        return false;
+      }
+
+      final connectHost = resolveConnectHost(trimmedIp, wssHost: _wssHost);
+      if (connectHost.isEmpty) {
         lastError = 'No IP address';
         return false;
       }
 
       // Probe is advisory only — some networks fail the TCP check while MQTT
       // connect still works (and vice versa). Always attempt a real connect.
-      final reachable = await isBrokerReachable(trimmedIp);
+      final reachable = await isBrokerReachable(connectHost);
       if (!reachable) {
         printDebugMsg(
-          'MQTT reachability probe failed for $trimmedIp — '
+          'MQTT reachability probe failed for $connectHost — '
           'attempting MQTT connect anyway',
         );
       }
@@ -134,7 +174,7 @@ class MqttService {
       _subscribedTopics.clear();
 
       bool ok = true;
-      ok = await _init(trimmedIp);
+      ok = await _init(connectHost);
       if (!ok) {
         lastError ??= 'Communication setup failed';
         return false;
@@ -142,28 +182,38 @@ class MqttService {
       ok = await _connect();
 
       _listenerStarted = false;
+      if (ok) {
+        // Wait until mqtt/to/android/# is subscribed so CONNECT_BASE ACK
+        // is not lost (common race on web / WSS).
+        ok = await _waitForSubscribeReady();
+        if (!ok) {
+          lastError ??=
+              'Connected to base but failed to start listening. Try again.';
+        }
+      }
       _startListener();
 
       if (!ok) {
-        final portHint = kIsWeb
-            ? (Uri.base.scheme == 'https' ? mqttWssPort : mqttWsPort)
-            : mqttTcpPort;
-        if (kIsWeb && Uri.base.scheme == 'https') {
+        final usingCloud = !looksLikeIpv4(connectHost);
+        if (kIsWeb && Uri.base.scheme == 'https' && !usingCloud) {
           lastError ??=
-              'Cannot open secure communication (wss://$trimmedIp:$portHint).\n'
-              '1) On phone Chrome open https://$trimmedIp:$portHint\n'
-              '2) Tap Advanced → Proceed (trust the base certificate once)\n'
-              '3) Come back here and connect again.\n'
-              'Also check the base station service is running on port 9002 and the firewall allows it.';
+              'Cannot open secure communication (wss://$connectHost:$mqttWssPort).\n'
+              'Preferred: set up Cloudflare Tunnel on the base '
+              '(SetupCloudflareTunnel.sh) so the app uses a trusted hostname.\n'
+              'Or once: open https://$connectHost:$mqttWssPort → Advanced → Proceed, then retry.';
           MyGlobalMessage.show(
             'Web communication',
             lastError!,
             MyMessageType.warning,
           );
+        } else if (kIsWeb && usingCloud) {
+          lastError ??=
+              'Cannot reach Cloudflare MQTT host $connectHost.\n'
+              'Check cloudflared is running on the base and DNS is routed.';
         } else {
           lastError ??= !reachable
-              ? 'Cannot reach base at $trimmedIp:$portHint.\n'
-                  'Phone must be on the same Wi‑Fi as the base.\n'
+              ? 'Cannot reach base at $connectHost.\n'
+                  'Device must be on the same Wi‑Fi as the base.\n'
                   'Check the IP (cloud button) and that the base station is running.'
               : 'Communication refused by the base (check connection credentials).';
         }
@@ -180,9 +230,7 @@ class MqttService {
     try {
       ipAdr = ip;
       autoReconnect = true;
-      port = kIsWeb
-          ? (Uri.base.scheme == 'https' ? mqttWssPort : mqttWsPort)
-          : mqttTcpPort;
+      port = resolveConnectPort(ipAdr);
 
       if (ipAdr.isEmpty) return false;
 
@@ -204,9 +252,12 @@ class MqttService {
       client!.autoReconnect = autoReconnect;
       client!.resubscribeOnAutoReconnect = true;
       _initialized = true;
-      printDebugMsg(
-        'MQTT init ${kIsWeb ? (Uri.base.scheme == 'https' ? 'WSS' : 'WS') : 'TCP'} $ipAdr:$port',
-      );
+      final mode = !kIsWeb
+          ? 'TCP'
+          : (looksLikeIpv4(ipAdr)
+              ? (Uri.base.scheme == 'https' ? 'WSS-LAN' : 'WS-LAN')
+              : 'WSS-CF');
+      printDebugMsg('MQTT init $mode $ipAdr:$port');
       return true;
     } catch (e) {
       printDebugMsg('MQTT Init Error: $e');
@@ -257,37 +308,29 @@ class MqttService {
         }
       }
 
+      // Mosquitto only accepts the base's android/iot/base users — never a
+      // Firebase ID token. Missing cloud creds must fail clearly.
       if (user == null ||
           user.isEmpty ||
           password == null ||
           password.isEmpty) {
-        final firebaseUser = FirebaseAuth.instance.currentUser;
-        if (firebaseUser != null) {
-          user = firebaseUser.uid;
-          password = await firebaseUser.getIdToken();
-          credentialSource = 'firebase';
-        } else {
-          credentialSource = 'none';
-        }
+        lastError =
+            'No connection credentials for this base.\n'
+            'Tap “Request IP Address” first (needs the base online so it can '
+            'publish credentials), then Connect again.';
+        printDebugMsg('MQTT connect aborted: no android broker credentials');
+        return false;
       }
 
-      if (user != null &&
-          user.isNotEmpty &&
-          password != null &&
-          password.isNotEmpty) {
-        connectMessage = connectMessage.authenticateAs(user, password);
-        printDebugMsg('MQTT connecting with $credentialSource user: $user');
-      } else {
-        printDebugMsg(
-          'MQTT connecting without credentials (user not logged in)',
-        );
-      }
+      connectMessage = connectMessage.authenticateAs(user, password);
+      printDebugMsg('MQTT connecting with $credentialSource user: $user');
 
       client!.connectionMessage = connectMessage;
+      _subscribeReady = Completer<void>();
 
       printDebugMsg(
         'Connecting to MQTT broker... $ipAdr:$port '
-        '(${kIsWeb ? 'ws' : 'tcp'})',
+        '(${kIsWeb ? (Uri.base.scheme == 'https' ? 'wss' : 'ws') : 'tcp'})',
       );
       await client!.connect().timeout(
         Duration(milliseconds: client!.connectTimeoutPeriod),
@@ -314,6 +357,21 @@ class MqttService {
       lastError = 'Base connect error: $e';
     }
     return false;
+  }
+
+  Future<bool> _waitForSubscribeReady({
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    final ready = _subscribeReady;
+    if (ready == null) return isBrokerConnected;
+    if (ready.isCompleted) return true;
+    try {
+      await ready.future.timeout(timeout);
+      return true;
+    } on TimeoutException {
+      // Subscribe may already be active even if the broker ack is slow.
+      return isBrokerConnected && _subscribedTopics.isNotEmpty;
+    }
   }
 
   /// Stable app id (prefs) plus a short web session suffix so hot reload /
@@ -400,7 +458,13 @@ class MqttService {
   }
 
   void _onSuscribed(String topic) {
-    // Broker ack — avoid per-topic log spam on reconnect.
+    // Broker ack — complete wait so CONNECT_BASE is not sent too early.
+    if (topic.contains(mqttTopicToAndroid)) {
+      final ready = _subscribeReady;
+      if (ready != null && !ready.isCompleted) {
+        ready.complete();
+      }
+    }
   }
 
   void _onDisconnected() {

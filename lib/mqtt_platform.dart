@@ -7,11 +7,14 @@ import 'mqtt_platform_stub.dart'
 /// TCP MQTT for Android / desktop / Pi clients.
 const int mqttTcpPort = 1883;
 
-/// Insecure WebSocket MQTT (http:// pages only).
+/// Insecure WebSocket MQTT (http:// pages + LAN IP only).
 const int mqttWsPort = 9001;
 
-/// Secure WebSocket MQTT for https:// pages (Mosquitto WSS on the base).
+/// Secure WebSocket MQTT for https:// pages to a LAN IP (self-signed Mosquitto).
 const int mqttWssPort = 9002;
+
+/// Cloudflare Tunnel / public hostname WSS (trusted cert on 443).
+const int mqttWssCloudPort = 443;
 
 MqttClient createMqttClient(String host, String clientId) =>
     impl.createMqttClient(host, clientId);

@@ -189,9 +189,17 @@ class OperatorEditPageState extends State<OperatorEditPage> {
 
     await MqttCredentialsPreferences.syncFromFirestore(base.bluetoothName);
 
+    String? wssHost;
+    try {
+      final cloud = await ClientCloudService.load(base.bluetoothName);
+      final h = (cloud.mqttWssHost ?? '').trim();
+      if (h.isNotEmpty) wssHost = MqttService.normalizeHost(h);
+    } catch (_) {}
+
     bool isReady = await MqttService().restartService(
       ip,
       baseId: base.bluetoothName,
+      wssHost: wssHost,
     );
 
     if(isReady) {

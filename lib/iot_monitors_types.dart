@@ -303,6 +303,7 @@ class IotDistanceWheelType extends StatefulWidget {
   final Function(String) onChangedTicksPerM;
   final Function(String) onChangedMonId;
   final Function() onTapPair;
+  final Function() onTapUnpair;
   final Function() onTapSendWifi;
   final Function() onTapFind;
   final Function() onTapSyncTicksPerM;
@@ -316,6 +317,7 @@ class IotDistanceWheelType extends StatefulWidget {
     required this.onChangedTicksPerM,
     required this.onChangedMonId,
     required this.onTapPair,
+    required this.onTapUnpair,
     required this.onTapSendWifi,
     required this.onTapFind,
     required this.onTapSyncTicksPerM,
@@ -339,6 +341,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   late FocusNode _focusNodeTicksPerM;
   late FocusNode _focusNodeCalDistance;
   bool _pairButtonPressed = false;
+  bool _unpairButtonPressed = false;
   bool _wifiButtonPressed = false;
   bool _findButtonPressed = false;
   bool _syncButtonPressed = false;
@@ -764,17 +767,46 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                         ),
                       ),
                     ),
+                    if (hasSelection) ...[
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        height: 40,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                            side: const BorderSide(color: Colors.redAccent),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
+                          onPressed: _cancellingSubscription
+                              ? null
+                              : _cancelLinkedSubscription,
+                          child: _cancellingSubscription
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.redAccent,
+                                  ),
+                                )
+                              : const Text(
+                                  'Cancel',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Remove subscription',
+                    TextButton.icon(
                       onPressed: hasSelection ? _removeSubscription : null,
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white10,
+                      style: TextButton.styleFrom(
                         foregroundColor: hasSelection
                             ? Colors.redAccent
                             : Colors.white24,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                       ),
-                      icon: const Icon(Icons.link_off),
+                      icon: const Icon(Icons.link_off, size: 20),
+                      label: const Text('Unlink'),
                     ),
                   ],
                 ),
@@ -793,35 +825,6 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                       ),
                     ),
                   ),
-                if (hasSelection) ...[
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 40,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.redAccent,
-                        side: const BorderSide(color: Colors.redAccent),
-                      ),
-                      onPressed: _cancellingSubscription
-                          ? null
-                          : _cancelLinkedSubscription,
-                      child: _cancellingSubscription
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.redAccent,
-                              ),
-                            )
-                          : const Text(
-                              'Cancel subscription',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                    ),
-                  ),
-                ],
               ],
             );
           },
@@ -887,6 +890,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                           '3. Allow wheel to connect to Base\n'
                           '4. Wait until LCD says \'Click PAIR in App\'\n'
                           '5. Click \'PAIR\'\n'
+                          '6. Use \'Unpair\' to remove it from the base paired list\n'
                           'WiFi: force base to push WiFi settings over Bluetooth\n',
                       ),
                      ),
@@ -920,7 +924,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
               
                   SizedBox(height: 5),
               
-                  // ID + Scan Button
+                  // ID + Pair
                   Row(
                     children: [
                       Expanded(
@@ -939,7 +943,7 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                       ),
               
                       Padding(
-                        padding: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.only(right: 16),
                         child: animatedActionButton(
                           pressed: _pairButtonPressed,
                           onTap: () => _animateTap(
@@ -963,79 +967,6 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                                       : Colors.grey
                                 ),
                               )
-                            ],
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: animatedActionButton(
-                          pressed: _wifiButtonPressed,
-                          onTap: () => _animateTap(
-                            () {
-                              final typed = _controllerId.text.trim();
-                              if (typed.isNotEmpty) {
-                                widget.monitorData.monitorId = typed;
-                              }
-                              return widget.onTapSendWifi();
-                            },
-                            (v) => _wifiButtonPressed = v,
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.wifi,
-                                size: 30,
-                                color: settingService.isBaseStationConnected
-                                    ? Colors.lightBlueAccent
-                                    : Colors.grey,
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                "Cred",
-                                style: TextStyle(
-                                  color: settingService.isBaseStationConnected
-                                      ? Colors.white
-                                      : Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(right: 16),
-                        child: animatedActionButton(
-                          pressed: _findButtonPressed,
-                          onTap: () => _animateTap(
-                            () {
-                              // Flush ID text into the model before Find.
-                              final typed = _controllerId.text.trim();
-                              if (typed.isNotEmpty) {
-                                widget.monitorData.monitorId = typed;
-                              }
-                              return widget.onTapFind();
-                            },
-                            (v) => _findButtonPressed = v,
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.sensors,
-                                size: 30,
-                                color: settingService.isBaseStationConnected
-                                    ? Colors.lightBlueAccent
-                                    : Colors.grey,
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                "Find",
-                                style: TextStyle(
-                                  color: settingService.isBaseStationConnected
-                                      ? Colors.white
-                                      : Colors.grey,
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -1100,6 +1031,111 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                         ),
                       ),
                     ],
+                  ),
+
+                  // Unpair / Cred / Find — under Ticks per Meter
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(15, 8, 16, 0),
+                    child: Row(
+                      children: [
+                        animatedActionButton(
+                          pressed: _unpairButtonPressed,
+                          onTap: () => _animateTap(
+                            widget.onTapUnpair,
+                            (v) => _unpairButtonPressed = v,
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.link_off,
+                                size: 30,
+                                color: settingService.isBaseStationConnected
+                                    ? Colors.orangeAccent
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                "Unpair",
+                                style: TextStyle(
+                                  color: settingService.isBaseStationConnected
+                                      ? Colors.white
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        animatedActionButton(
+                          pressed: _wifiButtonPressed,
+                          onTap: () => _animateTap(
+                            () {
+                              final typed = _controllerId.text.trim();
+                              if (typed.isNotEmpty) {
+                                widget.monitorData.monitorId = typed;
+                              }
+                              return widget.onTapSendWifi();
+                            },
+                            (v) => _wifiButtonPressed = v,
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.wifi,
+                                size: 30,
+                                color: settingService.isBaseStationConnected
+                                    ? Colors.lightBlueAccent
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                "Cred",
+                                style: TextStyle(
+                                  color: settingService.isBaseStationConnected
+                                      ? Colors.white
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        animatedActionButton(
+                          pressed: _findButtonPressed,
+                          onTap: () => _animateTap(
+                            () {
+                              // Flush ID text into the model before Find.
+                              final typed = _controllerId.text.trim();
+                              if (typed.isNotEmpty) {
+                                widget.monitorData.monitorId = typed;
+                              }
+                              return widget.onTapFind();
+                            },
+                            (v) => _findButtonPressed = v,
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.sensors,
+                                size: 30,
+                                color: settingService.isBaseStationConnected
+                                    ? Colors.lightBlueAccent
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                "Find",
+                                style: TextStyle(
+                                  color: settingService.isBaseStationConnected
+                                      ? Colors.white
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
 
                   SizedBox(height: 20,)

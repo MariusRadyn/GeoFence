@@ -405,6 +405,8 @@ double dieselCostForDistanceKm(
 const settingClientIpAdr = 'IPAdress';
 const settingClientMqttUser = 'mqttUser';
 const settingClientMqttPw = 'mqttPw';
+/// Cloudflare (or other) public hostname for browser WSS — no cert click.
+const settingClientMqttWssHost = 'mqttWssHost';
 
 // MQTT Topics
 const mqttTopicFromIot = "mqtt/from/iot";
@@ -420,6 +422,7 @@ const mqttCmdConnectMonitor = "#CONNECT_MONITOR";
 const mqttCmdCalibrate = "#CALIBRATE";
 const mqttCmdSyncSettings = "#SYNC_SETTINGS";
 const mqttCmdDisconnectMonitor = "#DISCONNECT_MONITOR";
+const mqttCmdUnpairMonitor = "#UNPAIR_MONITOR";
 const mqttCmdDisconnect = "#DISCONNECT";
 const mqttCmdAck = "#ACK";
 const mqttCmdPing = "#PING";
@@ -2199,6 +2202,7 @@ class ClientCloudService {
     String? ip,
     String? mqttUser,
     String? mqttPw,
+    String? mqttWssHost,
   })> load(String bluetoothName) async {
     final docSnap = await FirebaseFirestore.instance
         .collection(collectionClients)
@@ -2206,7 +2210,7 @@ class ClientCloudService {
         .get();
 
     if (!docSnap.exists) {
-      return (ip: null, mqttUser: null, mqttPw: null);
+      return (ip: null, mqttUser: null, mqttPw: null, mqttWssHost: null);
     }
 
     final data = docSnap.data() ?? {};
@@ -2214,6 +2218,7 @@ class ClientCloudService {
       ip: data[settingClientIpAdr]?.toString(),
       mqttUser: data[settingClientMqttUser]?.toString(),
       mqttPw: data[settingClientMqttPw]?.toString(),
+      mqttWssHost: data[settingClientMqttWssHost]?.toString(),
     );
   }
 }

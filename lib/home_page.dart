@@ -98,7 +98,7 @@ class HomePageState extends State<HomePage>
     if (!mounted) return;
 
     // Close drawer and leave restricted screens so menus rebuild for the new role.
-    if (_controllerDraw.isCompleted || _controllerDraw.value > 0) {
+    if (!_controllerDraw.isDismissed) {
       _controllerDraw.reverse();
     }
     navigatorKey.currentState?.popUntil((route) => route.isFirst);
@@ -119,7 +119,7 @@ class HomePageState extends State<HomePage>
   ) {
     if (!mounted) return;
 
-    if (_controllerDraw.isCompleted || _controllerDraw.value > 0) {
+    if (!_controllerDraw.isDismissed) {
       _controllerDraw.reverse();
     }
     navigatorKey.currentState?.popUntil((route) => route.isFirst);
@@ -146,6 +146,7 @@ class HomePageState extends State<HomePage>
     orgService.unregisterRoleChangeHandler(_onRemoteRoleChanged);
     orgService.unregisterMembershipRemovedHandler(_onRemoteMembershipRemoved);
     WidgetsBinding.instance.removeObserver(this);
+    _controllerDraw.dispose();
     _userController.dispose();
     _emailController.dispose();
     _pwController.dispose();
@@ -174,10 +175,12 @@ class HomePageState extends State<HomePage>
     });
   }
   void toggleDrawer() {
-    if (_controllerDraw.isCompleted) {
-      _controllerDraw.reverse();
-    } else {
+    // isCompleted-only toggle fails mid-animation (e.g. closing): a tap would
+    // call forward() and reopen. Dismissed = closed; anything else = close.
+    if (_controllerDraw.isDismissed) {
       _controllerDraw.forward();
+    } else {
+      _controllerDraw.reverse();
     }
   }
 
@@ -293,7 +296,7 @@ class HomePageState extends State<HomePage>
   }
   void _openDrawerPage(Widget page) {
     // Close the drawer first, then push — avoids jank from animating both at once.
-    if (_controllerDraw.isCompleted || _controllerDraw.value > 0) {
+    if (!_controllerDraw.isDismissed) {
       _controllerDraw.reverse();
     }
     Future.delayed(const Duration(milliseconds: 180), () {
@@ -731,11 +734,10 @@ class HomePageState extends State<HomePage>
                                   elevation: 0,
                                   scrolledUnderElevation: 0,
                                   toolbarHeight: _isLinkedProfile(org) ? 72 : kToolbarHeight,
-                                  leading: GestureDetector(
-                                    onTap: () {
-                                      if (userLoggedIn) toggleDrawer();
-                                    },
-                                    child: Icon(Icons.menu),
+                                  leading: IconButton(
+                                    tooltip: 'Menu',
+                                    icon: const Icon(Icons.menu),
+                                    onPressed: userLoggedIn ? toggleDrawer : null,
                                   ),
                                   title: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -847,24 +849,31 @@ class HomePageState extends State<HomePage>
 
                         if (userLoggedIn)
                           AnimatedBuilder(
-                              animation: _animationDraw,
+                              animation: _controllerDraw,
                               builder: (context, child) {
-                                bool isDrawerVisible = _animationDraw.value > -drawerWidth;
-                                return Stack(
+                                // Only block hits while the drawer is open /
+                                // animating. When closed, pass taps through to
+                                // the AppBar menu (otherwise the off-screen
+                                // panel / scrim threshold steals them).
+                                final drawerOpen = _controllerDraw.value > 0;
+                                final scrimOpacity =
+                                    (0.5 * _controllerDraw.value).clamp(0.0, 0.5);
+                                return IgnorePointer(
+                                  ignoring: !drawerOpen,
+                                  child: Stack(
                                   children: [
 
                                     // =========================
                                     // Scrim (Tap to close)
                                     // =========================
-                                    if(isDrawerVisible)
+                                    if (drawerOpen)
                                       Positioned.fill(
                                         child: GestureDetector(
-                                          onTap: () => toggleDrawer(),
-                                          // Closes the drawer when background is tapped
+                                          onTap: toggleDrawer,
                                           behavior: HitTestBehavior.opaque,
                                           child: Container(
                                             color: Colors.black.withValues(
-                                                alpha: 0.5), // Dim the background slightly
+                                                alpha: scrimOpacity),
                                           ),
                                         ),
                                       ),
@@ -989,6 +998,7 @@ class HomePageState extends State<HomePage>
                                         )
                                     ),
                                   ],
+                                ),
                                 );
                               }
                           ),

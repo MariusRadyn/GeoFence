@@ -122,11 +122,22 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
   // Timer
   void _startTimeout(int sec) {
     _timeoutTimer?.cancel();
-    if(_tabController == null) return;
+    if (_tabController == null) return;
 
     _timeoutTimer = Timer(Duration(seconds: sec), () async {
-      if ( !context.read<BaseStationService>().lstBaseStations[_tabController!.index].isConnected) {
-        MyGlobalMessage.show("Connection Timeout", "Base Station not found", MyMessageType.warning);
+      if (!mounted) return;
+      final bases = context.read<BaseStationService>().lstBaseStations;
+      final idx = _tabController!.index;
+      if (idx < 0 || idx >= bases.length) return;
+      if (!bases[idx].isConnected) {
+        MyGlobalMessage.show(
+          'Connection Timeout',
+          kIsWeb
+              ? 'Base did not reply. Prefer Cloudflare Tunnel on the base '
+                  '(no cert click). Or check Wi‑Fi / IP.'
+              : 'Base Station not found',
+          MyMessageType.warning,
+        );
       }
     });
   }
@@ -136,7 +147,7 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
     if (_mqttSubscription != null) return;
 
     _mqttSubscription = MqttService().messageStream.listen((msg) async {
-      if(!mounted) return;
+      if (!mounted) return;
 
       debugPrint('MQTT RX: $msg');
 
@@ -155,13 +166,17 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
 
       // PING (Connected to Base)
       if (cmd == mqttCmdConnectBase) {
-        _timeoutTimer!.cancel();
+        _timeoutTimer?.cancel();
 
         // Pass
         var base = context.read<BaseStationService>().lstBaseStations[_tabController!.index];
         //var base = context.read<BaseStationService>().lstBaseStations.firstWhere((b) => b.bluetoothName == fromId);
-        if(fromId != base.bluetoothName){
-          MyGlobalMessage.show("Warning", "Expected Base Station: ${base.bluetoothName}\nFound: $fromId", MyMessageType.warning);
+        if (fromId != base.bluetoothName) {
+          MyGlobalMessage.show(
+            'Warning',
+            'Expected Base Station: ${base.bluetoothName}\nFound: $fromId',
+            MyMessageType.warning,
+          );
           return;
         }
 
@@ -173,9 +188,9 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
         if (!mounted) return;
 
         context.read<SettingsService>().updateFireSettingsFields({
-          settingConnectedDevice : base.baseName,
-          settingConnectedDeviceIp : base.ipAddress,
-          settingConnectedDeviceId: base.bluetoothName
+          settingConnectedDevice: base.baseName,
+          settingConnectedDeviceIp: base.ipAddress,
+          settingConnectedDeviceId: base.bluetoothName,
         });
 
         context.read<SettingsService>().setIsBaseConnected(true);
@@ -190,8 +205,10 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
           printDebugMsg('MQTT credentials saved for ${base.bluetoothName}');
         }
 
-        MyGlobalSnackBar.show("Connected: ${base.ipAddress}");
+        MyGlobalSnackBar.show('Connected: ${base.ipAddress}');
       }
+    }, onError: (e) {
+      printDebugMsg('MQTT listener error: $e');
     });
   }
   Future<bool> _mqttConnectBase(BaseStationData base) async {
@@ -204,7 +221,9 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
     );
     _getControllerIpAdr(base).text = base.ipAddress;
 
-    // Refresh MQTT credentials (and IP if cloud has one) before connecting.
+    String? wssHost;
+
+    // Refresh MQTT credentials (and IP / Cloudflare host) before connecting.
     try {
       final clientData =
           await ClientCloudService.load(base.bluetoothName);
@@ -224,12 +243,17 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
         base.ipAddress = clientData.ip!.trim();
         _getControllerIpAdr(base).text = base.ipAddress;
       }
+      final cloudHost = (clientData.mqttWssHost ?? '').trim();
+      if (cloudHost.isNotEmpty) {
+        wssHost = MqttService.normalizeHost(cloudHost);
+      }
     } catch (e) {
       printDebugMsg('MQTT client cloud load failed: $e');
-      // Fall back to cached prefs / Firebase token inside MqttService.
+      // Fall back to cached prefs inside MqttService.
     }
 
-    if (base.ipAddress.isEmpty) {
+    final canUseCloudOnly = kIsWeb && (wssHost != null && wssHost.isNotEmpty);
+    if (base.ipAddress.isEmpty && !canUseCloudOnly) {
       MyGlobalMessage.show(
         'Warning',
         'No IP address. Tap the cloud IP button first, or enter the base IP.',
@@ -250,13 +274,15 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
 
     final mqtt = MqttService();
     final isReady = await mqtt.restartService(
-      base.ipAddress,
+      base.ipAddress.isNotEmpty ? base.ipAddress : wssHost!,
       baseId: base.bluetoothName,
+      wssHost: wssHost,
     );
 
     if (isReady) {
       _mqttStartListener();
-      _startTimeout(5);
+      // Web/WSS is slower; give the base more time to ACK #CONNECT_BASE.
+      _startTimeout(kIsWeb ? 12 : 5);
 
       mqtt.tx(
         base.bluetoothName,
@@ -270,7 +296,8 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
     final detail = mqtt.lastError;
     if (detail == null ||
         (!detail.startsWith('Browser blocks') &&
-            !detail.contains('WebSocket'))) {
+            !detail.contains('WebSocket') &&
+            !detail.contains('wss://'))) {
       MyGlobalMessage.show(
         'Wifi connection FAILED',
         detail ??
@@ -513,10 +540,23 @@ class BaseStationState extends State<BaseStationPage> with TickerProviderStateMi
         user: clientData.mqttUser!,
         password: clientData.mqttPw!,
       );
+    } else if (kIsWeb) {
+      MyGlobalMessage.show(
+        'Warning',
+        'IP found, but no connection credentials in the cloud yet.\n'
+        'Make sure the base station is running and has published MQTT credentials, '
+        'then tap Request IP Address again.',
+        MyMessageType.warning,
+      );
     }
 
-    printDebugMsg('IP Address: ${clientData.ip}');
-    MyGlobalSnackBar.show('IP Address: ${clientData.ip}');
+    final wss = (clientData.mqttWssHost ?? '').trim();
+    printDebugMsg('IP Address: ${clientData.ip} WSS: $wss');
+    if (wss.isNotEmpty) {
+      MyGlobalSnackBar.show('IP: ${clientData.ip} · Web: $wss');
+    } else {
+      MyGlobalSnackBar.show('IP Address: ${clientData.ip}');
+    }
 
     if (!mounted) return;
     final settings = context.read<SettingsService>();

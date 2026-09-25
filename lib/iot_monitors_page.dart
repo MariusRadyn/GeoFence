@@ -50,6 +50,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   final int _selectedIndex = 0;
   bool scanBusy = false;
   bool _pairRequest = false;
+  bool _unpairRequest = false;
   bool _connectRequest = false;
   bool _findRequest = false;
   bool _wifiRequest = false;
@@ -62,6 +63,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     BluetoothDevice.fromId("11:11:22:33:44:55"),
   ];
   Timer? _timeout;
+  Timer? _pairDiscoverRetry;
   final Map<String, bool> _subscriptionActiveCache = {};
   DateTime? _subscriptionCacheAt;
   DateTime? _lastSubWarningAt;
@@ -177,6 +179,8 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   @override
   void dispose() {
     _mqttSubscription?.cancel();
+    _timeout?.cancel();
+    _pairDiscoverRetry?.cancel();
     _baseTabController?.removeListener(_onBaseTabChanged);
     _baseTabController?.dispose();
     for (final ui in _baseUi.values) {
@@ -196,6 +200,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       if (!mounted) return;
       final pending = _pendingMonitorCmd;
       _pendingMonitorCmd = null;
+      _pairDiscoverRetry?.cancel();
       MyGlobalMessage.show(
         'Timeout',
         pending == mqttCmdFind
@@ -210,7 +215,15 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
                     : pending == mqttCmdSyncSettings
                         ? 'No reply from wheel for Sync.\n'
                             'Check Monitor ID and that the IoT is online and communicating.'
-                        : 'No Reply From Base Station',
+                        : pending == mqttCmdUnpairMonitor
+                            ? 'No reply from base for Unpair.\n'
+                                'Check communication with the base station and try again.'
+                            : pending == mqttCmdDiscover
+                                ? 'No IoT answered Pair.\n'
+                                    '1) Press Pair on the IoT and wait for “Click PAIR in App”\n'
+                                    '2) Keep the IoT near the base (Bluetooth)\n'
+                                    '3) Then tap Pair in the app again'
+                                : 'No Reply From Base Station',
         MyMessageType.warning,
       );
     });
@@ -363,6 +376,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       // Pair - Set Device ID
       if (cmd == mqttCmdDiscover) {
         scanBusy = false;
+        _pairDiscoverRetry?.cancel();
         final ui = _uiForBase(currentBase.docId);
         if (ui.tabController == null || baseMonitors.isEmpty) return;
         final monitor = baseMonitors[ui.tabController!.index];
@@ -427,6 +441,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       if (cmd == mqttCmdDiscover ||
           (cmd == mqttCmdAck && _pendingMonitorCmd == mqttCmdDiscover)) {
         _timeout?.cancel();
+        _pairDiscoverRetry?.cancel();
         if (cmd == mqttCmdAck) _pendingMonitorCmd = null;
       }
 
@@ -471,6 +486,17 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           monitorDeviceId: monitor.monitorId,
         );
         debugPrint('IOT Disconnected');
+      }
+
+      // Unpair — base removed device from its paired list
+      if (cmd == mqttCmdUnpairMonitor ||
+          (cmd == mqttCmdAck && _pendingMonitorCmd == mqttCmdUnpairMonitor)) {
+        _timeout?.cancel();
+        _pendingMonitorCmd = null;
+        final monitor = currentMonitor();
+        await _clearPairedMonitorLocally(monitor);
+        MyGlobalSnackBar.show('Monitor unpaired from base station');
+        debugPrint('IOT Unpaired');
       }
 
       // Find Monitor (IoT beep/flash ack)
@@ -586,6 +612,14 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
           _pairMonitor();
         }
 
+        if (_unpairRequest) {
+          _unpairRequest = false;
+          final ui = _uiForBase(base.docId);
+          if (ui.tabController != null && baseMonitors.isNotEmpty) {
+            _unpairMonitorConfirmed(baseMonitors[ui.tabController!.index]);
+          }
+        }
+
         if(_connectRequest){
           _connectRequest = false;
           final ui = _uiForBase(base.docId);
@@ -655,9 +689,17 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     final host = MqttService.normalizeHost(ip);
     await MqttCredentialsPreferences.syncFromFirestore(base.bluetoothName);
 
+    String? wssHost;
+    try {
+      final cloud = await ClientCloudService.load(base.bluetoothName);
+      final h = (cloud.mqttWssHost ?? '').trim();
+      if (h.isNotEmpty) wssHost = MqttService.normalizeHost(h);
+    } catch (_) {}
+
     bool isReady = await MqttService().restartService(
       host,
       baseId: base.bluetoothName,
+      wssHost: wssHost,
     );
 
     if(isReady) {
@@ -849,18 +891,22 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   }
   Future<bool> _pairMonitor() async {
     final settingsService = context.read<SettingsService>();
-    if (settingsService.isBaseStationConnected == false) {
-      MyGlobalMessage.show(
-        "Connection",
-        "Please connect to a Base Station first",
-        MyMessageType.info,
-      );
-      return false;
-    }
-
     final monitorService = context.read<MonitorSettingsService>();
     final base = _currentBase(context.read<BaseStationService>());
     if (base == null) return false;
+
+    // Ensure MQTT is actually up (isConnected alone can be stale).
+    if (!settingsService.isBaseStationConnected ||
+        !MqttService().isBrokerConnected) {
+      _pairRequest = true;
+      final ok = await _mqttConnectBase(base);
+      if (!ok) {
+        _pairRequest = false;
+        return false;
+      }
+      return true; // CONNECT_BASE ack will re-call _pairMonitor
+    }
+
     final baseMonitors = _monitorsForBase(monitorService, base.docId);
     if (baseMonitors.isEmpty) return false;
 
@@ -872,12 +918,148 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       mqttJsonIotType: baseMonitors[safeIndex].monitorType,
     };
 
-    if(MqttService().isConnected){
-      _mqttStartListener();
-      _pendingMonitorCmd = mqttCmdDiscover;
-      _startTimeout(8);
-      MqttService().tx("", mqttCmdDiscover, payload, mqttTopicFromAndroid);
+    _mqttStartListener();
+    _pendingMonitorCmd = mqttCmdDiscover;
+    // Match base/IoT pair window (60s) — 8s was too short while IoT still
+    // finishes BT creds / WiFi / MQTT after Unpair.
+    _startTimeout(60);
+    _startPairDiscoverRetries(payload);
+
+    final sent = MqttService().tx(
+      '',
+      mqttCmdDiscover,
+      payload,
+      mqttTopicFromAndroid,
+    );
+    if (!sent) {
+      _timeout?.cancel();
+      _pairDiscoverRetry?.cancel();
+      _pendingMonitorCmd = null;
+      MyGlobalMessage.show(
+        'Pair',
+        MqttService().lastError ??
+            'Could not start Pair. Reconnect to the base and try again.',
+        MyMessageType.warning,
+      );
+      return false;
     }
+
+    MyGlobalSnackBar.show(
+      'Pairing… Put the IoT in Pair mode, wait for “Click PAIR in App”, '
+      'or keep waiting if you already did.',
+    );
+    return true;
+  }
+
+  void _startPairDiscoverRetries(Map<String, dynamic> payload) {
+    _pairDiscoverRetry?.cancel();
+    // Re-broadcast #DISCOVER every few seconds so late MQTT-up IoTs still hear it.
+    var attempts = 0;
+    _pairDiscoverRetry = Timer.periodic(const Duration(seconds: 4), (t) {
+      if (!mounted || _pendingMonitorCmd != mqttCmdDiscover) {
+        t.cancel();
+        return;
+      }
+      attempts++;
+      if (attempts > 12) {
+        t.cancel();
+        return;
+      }
+      if (!MqttService().isBrokerConnected) return;
+      MqttService().tx('', mqttCmdDiscover, payload, mqttTopicFromAndroid);
+    });
+  }
+
+  Future<void> _clearPairedMonitorLocally(MonitorSettings monitor) async {
+    final previousId = monitor.monitorId;
+    if (!mounted) return;
+    setState(() {
+      monitor.monitorId = 'none';
+      monitor.isConnectedToIot = false;
+      monitor.isConnectingToIot = false;
+    });
+    final monitorService = context.read<MonitorSettingsService>();
+    if (previousId.isNotEmpty && previousId != 'none') {
+      monitorService.setConnectedToIot(previousId, false);
+    }
+    await monitorService.save(monitor, showSavedMessage: false);
+  }
+
+  /// Ask the base to remove this IoT from its paired-devices list.
+  Future<bool> _unpairMonitor(MonitorSettings monitor) async {
+    final id = monitor.monitorId.trim();
+    if (id.isEmpty || id == 'none') {
+      MyGlobalMessage.show(
+        'Unpair',
+        'No paired monitor ID to remove. Pair a device first.',
+        MyMessageType.info,
+      );
+      return false;
+    }
+
+    await myQuestionAlertBox(
+      context: context,
+      header: 'Unpair',
+      message:
+          'Remove $id from this base station\'s paired devices list?\n\n'
+          'The Monitor ID in the app will also be cleared.',
+      onPress: () {
+        unawaited(_unpairMonitorConfirmed(monitor));
+      },
+    );
+    return true;
+  }
+
+  Future<bool> _unpairMonitorConfirmed(MonitorSettings monitor) async {
+    final id = monitor.monitorId.trim();
+    if (id.isEmpty || id == 'none') return false;
+
+    final settingService = context.read<SettingsService>();
+    if (!settingService.isBaseStationConnected ||
+        !MqttService().isBrokerConnected) {
+      _unpairRequest = true;
+      final base = _currentBase(context.read<BaseStationService>());
+      if (base == null) {
+        _unpairRequest = false;
+        return false;
+      }
+      final ok = await _mqttConnectBase(base);
+      if (!ok) {
+        _unpairRequest = false;
+        return false;
+      }
+      return true;
+    }
+
+    if (monitor.isConnectedToIot) {
+      await _disconnectIot(monitor);
+    }
+
+    final payload = {
+      mqttJsonIotType: monitor.monitorType,
+    };
+
+    _mqttStartListener();
+    _pendingMonitorCmd = mqttCmdUnpairMonitor;
+    _startTimeout(8);
+    final sent = MqttService().tx(
+      id,
+      mqttCmdUnpairMonitor,
+      payload,
+      mqttTopicFromAndroid,
+    );
+    if (!sent) {
+      _timeout?.cancel();
+      _pendingMonitorCmd = null;
+      MyGlobalMessage.show(
+        'Unpair',
+        MqttService().lastError ??
+            'Could not send Unpair. Reconnect to the base and try again.',
+        MyMessageType.warning,
+      );
+      return false;
+    }
+    MyGlobalSnackBar.show('Unpairing $id from base station…');
     return true;
   }
 
@@ -1567,6 +1749,11 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
               }
             },
 
+            // Unpair — remove from base station paired list
+            onTapUnpair: () async {
+              await _unpairMonitor(monitor);
+            },
+
             // Force base to send WiFi/MQTT creds over BLE
             onTapSendWifi: () async {
               await _sendWifiCreds(monitor);
@@ -1651,6 +1838,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     }
     setState(() {
       _pairRequest = false;
+      _unpairRequest = false;
       _connectRequest = false;
       _findRequest = false;
       _wifiRequest = false;
@@ -1826,8 +2014,22 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
                             builder: (context) => const IotListPage(),
                           ),
                         );
+                        if (!mounted) return;
                         if (selectedType == monitorTypeSonoff) {
-                          await _enableSonoffTab();
+                          await myQuestionAlertBox(
+                            context: context,
+                            header: 'Switch to SONOFF?',
+                            message:
+                                'This monitor’s current IoT settings will be lost '
+                                '(pair ID, ticks, subscription link, etc.).\n\n'
+                                'SONOFF devices are managed on a separate tab.\n\n'
+                                'Proceed?',
+                            onPress: () async {
+                              await _markMonitorForDelete(monitor);
+                              if (!mounted) return;
+                              await _enableSonoffTab();
+                            },
+                          );
                           return;
                         }
                         if (selectedType != null && selectedType is String) {

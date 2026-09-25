@@ -97,10 +97,25 @@ In Cursor: **Run and Debug** → **Reporting (Chrome)** → F5.
 gsutil cors set cors.json gs://limitless-iot-17e8f.firebasestorage.app
 ```
 
-**MQTT on web:** Browsers cannot use TCP port 1883. The base Mosquitto config exposes WebSockets on **9001**; the Flutter app uses `MqttBrowserClient` on web and `MqttServerClient` on Android. On each Pi, re-apply broker config:
+**MQTT on web:** Browsers cannot use TCP port 1883. Prefer **Cloudflare Tunnel**
+so HTTPS pages use a trusted `wss://hostname/mqtt` (no certificate click):
 
 ```bash
 cd ~/GeoFenceBase   # or your clone path
+chmod +x SetupCloudflareTunnel.sh
+./SetupCloudflareTunnel.sh --hostname geobase-farm1.mqtt.trinityglobal.co.za
+```
+
+That proxies Cloudflare → local Mosquitto WebSockets on **9001**, writes
+`~/Secure/mqtt_wss_host.txt`, and pushes `mqttWssHost` to Firestore
+`clients/{bluetoothName}`. The web app then Connects via that hostname.
+
+LAN fallback (self-signed): Mosquitto **9002** WSS — open `https://<base-ip>:9002`
+once in Chrome and accept the warning.
+
+On each Pi, also re-apply broker config when needed:
+
+```bash
 python3 MqttCredentials.py --setup
 sudo ufw allow from 192.168.0.0/16 to any port 9001
 ```
