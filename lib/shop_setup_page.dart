@@ -183,6 +183,7 @@ class _ProductList extends StatelessWidget {
                           '${money.format(product.salePrice)}'
                           '${product.discount > 0 ? ' · ${product.discount.round()}% off' : ''}'
                           '${product.subscriptionMonthly > 0 ? ' · sub ${money.format(product.subscriptionMonthly)}/mo' : ''}'
+                          '${product.iotType.isNotEmpty ? ' · ${product.iotType}' : ''}'
                           '${product.active ? '' : ' · inactive'}'
                           '${product.isReady ? '' : ' · coming soon'}'
                           '${product.stockCount > 0 ? ' · stock ${product.stockCount}' : ' · no stock'}',
@@ -237,6 +238,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
   bool _freeDelivery = true;
   bool _isReady = false;
   bool _saving = false;
+  String _iotType = '';
 
   bool get _isEditing => widget.product != null;
 
@@ -273,6 +275,16 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
       _active = p.active;
       _freeDelivery = p.freeDelivery;
       _isReady = p.isReady;
+      const shopIotTypes = {
+        '',
+        monitorTypeWheel,
+        monitorTypeVehicle,
+        monitorTypeFleet,
+        monitorTypeMachine,
+        monitorTypeTrailer,
+        monitorTypeBaseStation,
+      };
+      _iotType = shopIotTypes.contains(p.iotType) ? p.iotType : '';
     } else {
       _stockCountController.text = '0';
       _weightController.text = '1';
@@ -480,6 +492,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
         stockCount: stockCount < 0 ? 0 : stockCount,
         isReady: _isReady,
         subscriptionMonthly: subscriptionMonthly,
+        iotType: subscriptionMonthly > 0 ? _iotType : '',
         weightKg: double.tryParse(_weightController.text.trim()) ?? 1,
         lengthCm: double.tryParse(_lengthController.text.trim()) ?? 20,
         widthCm: double.tryParse(_widthController.text.trim()) ?? 15,
@@ -704,6 +717,57 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                       if (n == null || n < 0) return 'Enter 0 or more';
                       return null;
                     },
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: _iotType,
+                    dropdownColor: colorAppBar,
+                    decoration: InputDecoration(
+                      labelText: 'IoT subscription type',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      filled: true,
+                      fillColor: colorAppBar,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.white24),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.white54),
+                      ),
+                    ),
+                    style: const TextStyle(color: Colors.white),
+                    items: const [
+                      DropdownMenuItem(
+                        value: '',
+                        child: Text('None'),
+                      ),
+                      DropdownMenuItem(
+                        value: monitorTypeWheel,
+                        child: Text(monitorTypeWheel),
+                      ),
+                      DropdownMenuItem(
+                        value: monitorTypeVehicle,
+                        child: Text(monitorTypeVehicle),
+                      ),
+                      DropdownMenuItem(
+                        value: monitorTypeFleet,
+                        child: Text(monitorTypeFleet),
+                      ),
+                      DropdownMenuItem(
+                        value: monitorTypeMachine,
+                        child: Text(monitorTypeMachine),
+                      ),
+                      DropdownMenuItem(
+                        value: monitorTypeTrailer,
+                        child: Text(monitorTypeTrailer),
+                      ),
+                      DropdownMenuItem(
+                        value: monitorTypeBaseStation,
+                        child: Text(monitorTypeBaseStation),
+                      ),
+                    ],
+                    onChanged: (v) => setState(() => _iotType = v ?? ''),
                   ),
                   const SizedBox(height: 10),
                   MyTextFormField(

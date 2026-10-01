@@ -279,15 +279,13 @@ const String monitorTypeMachine = "Machine";
 const String monitorTypeWheel = "Distance Wheel";
 const String monitorTypeTrailer = "Trailer Wiring";
 const String monitorTypeSonoff = "SONOFF";
+const String monitorTypeBaseStation = "Base Station";
 // const List<String> settingMonitorTypeList = [
 //   monitorTypeVehicle,
 //   monitorTypeMobileMachine,
 //   monitorTypeStationaryMachine,
 //   monitorTypeWheel,
 //];
-
-// Debug
-const bool enableSetupShop = true;
 
 // FIREBASE ---------------------------------------------------------------------
 const fireUid = 'userId';
@@ -971,6 +969,10 @@ class MyCustomTileWithPic extends StatelessWidget {
   final VoidCallback? onTap;
   final String? headerSuffix;
   final Color? headerSuffixColor;
+  /// When false, the tile is not tappable (e.g. Coming Soon).
+  final bool enabled;
+  /// Shows a ribbon banner over the tile image.
+  final bool comingSoon;
 
   const MyCustomTileWithPic({
     this.imagePath,
@@ -981,6 +983,8 @@ class MyCustomTileWithPic extends StatelessWidget {
     this.onTap,
     this.headerSuffix,
     this.headerSuffixColor,
+    this.enabled = true,
+    this.comingSoon = false,
     super.key,
   }) : assert(
           imagePath != null || leading != null,
@@ -988,18 +992,67 @@ class MyCustomTileWithPic extends StatelessWidget {
         );
 
   Widget _buildLeading() {
-    if (leading != null) return leading!;
-    return Image.asset(
-      imagePath!,
-      width: 90,
-      height: 90,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
+    final Widget image;
+    if (leading != null) {
+      image = leading!;
+    } else {
+      image = Image.asset(
+        imagePath!,
         width: 90,
         height: 90,
-        color: colorAppBar,
-        alignment: Alignment.center,
-        child: const Icon(Icons.image_not_supported, color: Colors.white54),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          width: 90,
+          height: 90,
+          color: colorAppBar,
+          alignment: Alignment.center,
+          child: const Icon(Icons.image_not_supported, color: Colors.white54),
+        ),
+      );
+    }
+
+    if (!comingSoon) return image;
+
+    return SizedBox(
+      width: 90,
+      height: 90,
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          Positioned.fill(child: image),
+          Positioned(
+            left: -40,
+            top: 14,
+            child: Transform.rotate(
+              angle: -pi / 4,
+              child: Container(
+                width: 120,
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                decoration: BoxDecoration(
+                  color: colorOrange,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'COMING SOON',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.4,
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1008,28 +1061,10 @@ class MyCustomTileWithPic extends StatelessWidget {
   Widget build(BuildContext context) {
     UserDataService user = context.read<UserDataService>();
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 5, bottom: 5),
-      child: Center(
-        child: GestureDetector(
-          onTap: (){
-            if (onTap != null) {
-              onTap!();
-              return;
-            }
-
-            if(user.isUserLoggedIn == true){
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => widget),
-              );
-            }else{
-              MyGlobalMessage.show("Warning", "User not Logged In", MyMessageType.warning);
-            }
-          },
-          child: Container(
+    final tile = Container(
             width: MediaQuery.of(context).size.width * 0.9,
-            height: 90,
+            constraints: const BoxConstraints(minHeight: 90),
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: colorTile,
               boxShadow:[ BoxShadow(
@@ -1047,9 +1082,8 @@ class MyCustomTileWithPic extends StatelessWidget {
                 width: 0.5,
               )
             ),
-            child:
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+            child: IntrinsicHeight(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Image
@@ -1066,14 +1100,17 @@ class MyCustomTileWithPic extends StatelessWidget {
                   // Heading Text
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.only(left: 15, top: 5, right: 5,bottom: 5),
+                      padding: const EdgeInsets.only(
+                        left: 15,
+                        top: 8,
+                        right: 8,
+                        bottom: 8,
+                      ),
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          //const SizedBox(height: 5),
-
                           Text.rich(
                             TextSpan(
                               children: [
@@ -1102,29 +1139,54 @@ class MyCustomTileWithPic extends StatelessWidget {
                             softWrap: true,
                           ),
 
-                          Text(
-                            description,
-                            style: const TextStyle(
+                          if (description.trim().isNotEmpty)
+                            Text(
+                              description,
+                              style: const TextStyle(
                                 color: Colors.grey,
                                 fontSize: 12,
                                 fontWeight: FontWeight.normal,
-                                fontFamily: 'Poppins'
+                                fontFamily: 'Poppins',
+                              ),
+                              softWrap: true,
+                              textAlign: TextAlign.start,
                             ),
-                            softWrap: true,
-                            overflow: TextOverflow.visible,
-                            maxLines: 3,
-                            textAlign: TextAlign.start,
-                          ),
-
-                         // const SizedBox(height: 5),
                         ],
                       ),
                     ),
                   ),
                 ],
               ),
-          ),
-        ),
+            ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 5, bottom: 5),
+      child: Center(
+        child: (enabled && !comingSoon)
+            ? GestureDetector(
+                onTap: () {
+                  if (onTap != null) {
+                    onTap!();
+                    return;
+                  }
+
+                  if (user.isUserLoggedIn == true) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => widget),
+                    );
+                  } else {
+                    MyGlobalMessage.show(
+                      "Warning",
+                      "User not Logged In",
+                      MyMessageType.warning,
+                    );
+                  }
+                },
+                child: tile,
+              )
+            : IgnorePointer(child: tile),
       ),
     );
   }
@@ -2568,19 +2630,29 @@ class UserData{
   });
 
   factory UserData.fromMap(Map<String, dynamic> map){
+    bool asBool(dynamic v) {
+      if (v == true) return true;
+      if (v == false || v == null) return false;
+      final s = v.toString().trim().toLowerCase();
+      return s == 'true' || s == '1' || s == 'yes';
+    }
+
     return UserData(
       displayName: map['displayName'] ?? "",
       surname: map['surname'] ?? "",
       email: map['email'] ?? "",
       imageURL: map['photoURL'] ?? "",
       imageFilename: map['imageFilename'] ?? "",
-      emailValidated: map['emailValidated'] ?? false,
-      isDeveloper: map['isDeveloper'] == true,
-      termsAccepted: map['termsAccepted'] == true,
+      emailValidated: asBool(map['emailValidated']),
+      isDeveloper: UserDataService.parseDeveloperFlag(map['isDeveloper']),
+      termsAccepted: asBool(map['termsAccepted']),
       termsVersion: map['termsVersion']?.toString() ?? "",
     );
   }
   Map<String, dynamic> toMap(){
+    // Do NOT write isDeveloper from the app — it is set in Firestore console
+    // (users/{uid}/userdata/isDeveloper). Including it here used to overwrite
+    // true → false on profile save / photo update.
     return{
       'displayName': displayName,
       'surname': surname,
@@ -2588,7 +2660,6 @@ class UserData{
       'photoURL': imageURL,
       'imageFilename': imageFilename,
       'emailValidated': emailValidated,
-      'isDeveloper': isDeveloper,
       'termsAccepted': termsAccepted,
       'termsVersion': termsVersion,
     };
@@ -2626,16 +2697,106 @@ class UserDataService extends ChangeNotifier {
   bool isLoggingOut = false;
   bool firebaseError = false;
   String errorMsg = "";
+  /// Last raw Firestore value seen for diagnostics (Profile → Show user ID).
+  String lastIsDeveloperRaw = '';
 
   Future<void>? _loadInFlight;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSub;
+  String? _listeningUid;
 
   UserDataService() {
     FirebaseAuth.instance.authStateChanges().listen(_onAuthChanged);
   }
 
+  static bool parseDeveloperFlag(dynamic v) {
+    if (v == true) return true;
+    if (v == false || v == null) return false;
+    if (v is num) return v != 0;
+    final s = v.toString().trim().toLowerCase();
+    return s == 'true' || s == '1' || s == 'yes';
+  }
+
+  static dynamic _mapLookupIgnoreCase(Map map, String key) {
+    if (map.containsKey(key)) return map[key];
+    final want = key.toLowerCase();
+    for (final entry in map.entries) {
+      if ('${entry.key}'.trim().toLowerCase() == want) return entry.value;
+    }
+    return null;
+  }
+
+  void _applyUserDoc(DocumentSnapshot<Map<String, dynamic>> doc, String uid) {
+    if (!doc.exists) {
+      _userdata = null;
+      isUserLoggedIn = false;
+      lastIsDeveloperRaw = '(document missing)';
+      return;
+    }
+
+    final data = doc.data() ?? {};
+    final nestedRaw = data[fieldsUserData];
+    final nested = <String, dynamic>{};
+    if (nestedRaw is Map) {
+      nestedRaw.forEach((key, value) {
+        nested['$key'] = value;
+      });
+    }
+
+    dynamic rawFlag;
+    try {
+      rawFlag = doc.get(FieldPath([fieldsUserData, 'isDeveloper']));
+    } catch (_) {
+      rawFlag = null;
+    }
+    rawFlag ??= _mapLookupIgnoreCase(nested, 'isDeveloper');
+    rawFlag ??= _mapLookupIgnoreCase(data, 'isDeveloper');
+
+    lastIsDeveloperRaw =
+        'uid=$uid value=$rawFlag (${rawFlag.runtimeType}) '
+        'fromServer=${doc.metadata.isFromCache ? 'cache' : 'server'}';
+
+    if (rawFlag != null) {
+      nested['isDeveloper'] = rawFlag;
+    }
+
+    _userdata = UserData.fromMap(nested);
+    _userdata?.userID = uid;
+    _userdata?.isDeveloper = parseDeveloperFlag(rawFlag);
+    _userdata?.emailValidated =
+        FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+    isUserLoggedIn = true;
+
+    printDebugMsg(
+      'UserData load: isDeveloper=${_userdata?.isDeveloper} raw=$lastIsDeveloperRaw',
+    );
+  }
+
+  void _listenUserDoc(String uid) {
+    if (_listeningUid == uid && _userDocSub != null) return;
+    _userDocSub?.cancel();
+    _listeningUid = uid;
+    _userDocSub = FirebaseFirestore.instance
+        .collection(collectionUsers)
+        .doc(uid)
+        .snapshots()
+        .listen(
+      (doc) {
+        if (isLoggingOut) return;
+        _applyUserDoc(doc, uid);
+        notifyListeners();
+      },
+      onError: (e) {
+        printDebugMsg('UserData snapshot error: $e');
+      },
+    );
+  }
+
   Future<void> _onAuthChanged(User? user) async {
     if (isLoggingOut) {
       if (user == null) {
+        await _userDocSub?.cancel();
+        _userDocSub = null;
+        _listeningUid = null;
         _userdata = null;
         isUserLoggedIn = false;
         isLoading = false;
@@ -2645,6 +2806,9 @@ class UserDataService extends ChangeNotifier {
     }
 
     if (user == null) {
+      await _userDocSub?.cancel();
+      _userDocSub = null;
+      _listeningUid = null;
       _userdata = null;
       isUserLoggedIn = false;
       isLoading = false;
@@ -2705,11 +2869,20 @@ class UserDataService extends ChangeNotifier {
         return;
       }
 
-      final doc = await firestore
-          .collection(collectionUsers)
-          .doc(uid)
-          .get()
-          .timeout(const Duration(seconds: 12));
+      DocumentSnapshot<Map<String, dynamic>> doc;
+      try {
+        doc = await firestore
+            .collection(collectionUsers)
+            .doc(uid)
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 12));
+      } catch (_) {
+        doc = await firestore
+            .collection(collectionUsers)
+            .doc(uid)
+            .get()
+            .timeout(const Duration(seconds: 12));
+      }
 
       if (isLoggingOut || FirebaseAuth.instance.currentUser == null) {
         _userdata = null;
@@ -2717,17 +2890,8 @@ class UserDataService extends ChangeNotifier {
         return;
       }
 
-      if (doc.exists) {
-        _userdata = UserData.fromMap(doc.data()?[fieldsUserData] ?? {});
-        _userdata?.userID = uid;
-        _userdata?.emailValidated =
-            FirebaseAuth.instance.currentUser?.emailVerified ?? false;
-        isUserLoggedIn = true;
-      }
-      else {
-        _userdata = null;
-        isUserLoggedIn = false;
-      }
+      _applyUserDoc(doc, uid);
+      _listenUserDoc(uid);
     }
     catch(e) {
       if (isLoggingOut || FirebaseAuth.instance.currentUser == null) {
@@ -2776,21 +2940,19 @@ class UserDataService extends ChangeNotifier {
           .doc(uid);
 
       if(user.userID.isNotEmpty){
-
-        // Update
-        await doc.set(
-          {
-            fieldsUserData: user.toMap(),
-          },
-          SetOptions(merge: true),
-        );
+        // Dotted updates — do not replace the whole userdata map (that would
+        // wipe console-only fields like isDeveloper).
+        final nestedUpdates = <String, dynamic>{};
+        user.toMap().forEach((key, value) {
+          nestedUpdates['$fieldsUserData.$key'] = value;
+        });
+        await doc.update(nestedUpdates);
       }
       else{
-
         // Add New
         user.userID = doc.id;
         await doc.set(
-          user.toMap(),
+          {fieldsUserData: user.toMap()},
           SetOptions(merge: true),
         );
       }
@@ -2842,6 +3004,9 @@ class UserDataService extends ChangeNotifier {
   Future<void> logout() async {
     if (isLoggingOut) return;
     isLoggingOut = true;
+    await _userDocSub?.cancel();
+    _userDocSub = null;
+    _listeningUid = null;
     // Clear local session immediately so Home unlocks login UI and skips
     // auto profile reload while auth is still briefly present.
     _userdata = null;
@@ -4256,17 +4421,22 @@ class OperatorService extends ChangeNotifier {
       MyGlobalSnackBar.show('Delete Failed: $e');
     }
   }
-  void setNewOperatorVersion() {
+  /// Latest operatorsVer written to Firestore (for BLE sync — same stamp as cloud).
+  String? lastOperatorsVer;
+
+  String setNewOperatorVersion() {
     final uid = currentDataOwnerUid();
-    if (uid == null) return;
+    if (uid == null) return '';
 
     // Change Operator Version
-    String newVersion =  DateTime.now().toUtc().millisecondsSinceEpoch.toString();
+    final newVersion = DateTime.now().toUtc().millisecondsSinceEpoch.toString();
+    lastOperatorsVer = newVersion;
     FirebaseFirestore.instance
         .collection(collectionUsers)
         .doc(uid).set({
       operatorVersion: newVersion
     },SetOptions(merge: true));
+    return newVersion;
   }
 
   OperatorData? getOperatorById(String operatorDocId) {

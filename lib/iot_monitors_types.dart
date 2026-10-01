@@ -348,6 +348,8 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
   bool _calibrateButtonPressed = false;
   bool _connectButtonPressed = false;
   bool _cancellingSubscription = false;
+  bool _cancelSubButtonPressed = false;
+  bool _unlinkButtonPressed = false;
   
   Color colorSetupTile = colorAppBackground;
   Color colorCalibrateTile = colorAppBackground;
@@ -512,6 +514,80 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
             (data['status'] ?? '').toString() == 'shipped');
   }
 
+  static const _knownIotTypes = [
+    monitorTypeWheel,
+    monitorTypeVehicle,
+    monitorTypeFleet,
+    monitorTypeMachine,
+    monitorTypeTrailer,
+    monitorTypeBaseStation,
+  ];
+
+  double _asMonthly(dynamic v) {
+    if (v is num) return v.toDouble();
+    return double.tryParse('$v') ?? 0;
+  }
+
+  /// True when this shop order subscription is for [monitorType].
+  bool _subscriptionMatchesMonitorType(
+    Map<String, dynamic> data,
+    String? monitorType,
+  ) {
+    final want = (monitorType ?? '').trim().toLowerCase();
+    if (want.isEmpty) return true;
+
+    final orderType =
+        '${data['iotType'] ?? data['monitorType'] ?? ''}'.trim().toLowerCase();
+    if (orderType.isNotEmpty) return orderType == want;
+
+    final items = (data['items'] is List) ? (data['items'] as List) : const [];
+    var matched = false;
+    var sawOtherTyped = false;
+
+    for (final raw in items) {
+      if (raw is! Map) continue;
+      final map = Map<String, dynamic>.from(raw);
+      final monthly = _asMonthly(map['subscriptionMonthly']);
+      // Prefer subscription line items; if none exist, inspect all lines.
+      final onlySubs = items.any(
+        (e) => e is Map && _asMonthly(e['subscriptionMonthly']) > 0,
+      );
+      if (onlySubs && monthly <= 0) continue;
+
+      final itemType =
+          '${map['iotType'] ?? map['monitorType'] ?? ''}'.trim().toLowerCase();
+      if (itemType.isNotEmpty) {
+        if (itemType == want) {
+          matched = true;
+        } else {
+          sawOtherTyped = true;
+        }
+        continue;
+      }
+
+      final name = '${map['name'] ?? ''}'.toLowerCase();
+      final category = '${map['category'] ?? ''}'.toLowerCase();
+      if (name.contains(want) || category.contains(want)) {
+        matched = true;
+        continue;
+      }
+
+      for (final known in _knownIotTypes) {
+        final k = known.toLowerCase();
+        if (k == want) continue;
+        if (name.contains(k) || category.contains(k)) {
+          sawOtherTyped = true;
+          break;
+        }
+      }
+    }
+
+    if (matched) return true;
+    if (sawOtherTyped) return false;
+    // Untyped legacy subscription — only allow on Distance Wheel monitors.
+    return want == monitorTypeWheel.toLowerCase();
+  }
+
   String _subscriptionLabel(Map<String, dynamic> data, String orderId) {
     final money = NumberFormat.currency(locale: 'en_ZA', symbol: 'R');
     final monthly = (data['subscriptionMonthly'] is num)
@@ -527,8 +603,21 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
     final shortId =
         orderId.length > 8 ? '${orderId.substring(0, 8)}…' : orderId;
     final amount = monthly > 0 ? '${money.format(monthly)}/mo' : 'Subscription';
-    if (names.isEmpty) return '$amount · $shortId';
-    return '$amount · $names';
+    final iotType = '${data['iotType'] ?? data['monitorType'] ?? ''}'.trim();
+    String typeHint = iotType;
+    if (typeHint.isEmpty && items.isNotEmpty) {
+      for (final e in items) {
+        if (e is! Map) continue;
+        final t = '${e['iotType'] ?? e['monitorType'] ?? ''}'.trim();
+        if (t.isNotEmpty) {
+          typeHint = t;
+          break;
+        }
+      }
+    }
+    final prefix = typeHint.isNotEmpty ? '$typeHint · ' : '';
+    if (names.isEmpty) return '$prefix$amount · $shortId';
+    return '$prefix$amount · $names';
   }
 
   Set<String> _tiedSubscriptionOrderIds(MonitorSettingsService monitors) {
@@ -663,9 +752,13 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
             final tokens = <String, String>{};
 
             if (snap.hasData) {
+              final monitorType = widget.monitorData.monitorType;
               for (final doc in snap.data!.docs) {
                 final data = doc.data();
                 if (!_isActiveSubscription(data)) continue;
+                if (!_subscriptionMatchesMonitorType(data, monitorType)) {
+                  continue;
+                }
                 final orderId = (data['orderId'] ?? doc.id).toString().trim();
                 if (orderId.isEmpty) continue;
                 final token =
@@ -722,109 +815,145 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                   style: TextStyle(color: Colors.white70, fontSize: 12),
                 ),
                 const SizedBox(height: 6),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: colorSetupTile,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white24),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            isExpanded: true,
-                            dropdownColor: colorAppBar,
-                            value: hasSelection ? selectedId : null,
-                            hint: Text(
-                              snap.connectionState == ConnectionState.waiting
-                                  ? 'Loading subscriptions…'
-                                  : options.isEmpty
-                                      ? 'No available subscriptions'
-                                      : 'Select subscription',
-                              style: const TextStyle(
-                                color: Colors.white54,
-                                fontSize: 13,
-                              ),
-                            ),
-                            icon: const Icon(
-                              Icons.arrow_drop_down,
-                              color: Colors.white70,
-                            ),
-                            items: options,
-                            onChanged: options.isEmpty
-                                ? null
-                                : (value) async {
-                                    if (value == null) return;
-                                    await _assignSubscription(
-                                      orderId: value,
-                                      token: tokens[value] ?? '',
-                                    );
-                                  },
-                          ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: colorSetupTile,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      dropdownColor: colorAppBar,
+                      value: hasSelection ? selectedId : null,
+                      hint: Text(
+                        snap.connectionState == ConnectionState.waiting
+                            ? 'Loading subscriptions…'
+                            : options.isEmpty
+                                ? 'No matching ${widget.monitorData.monitorType ?? 'IoT'} subscriptions'
+                                : 'Select subscription',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 13,
                         ),
                       ),
+                      icon: const Icon(
+                        Icons.arrow_drop_down,
+                        color: Colors.white70,
+                      ),
+                      items: options,
+                      onChanged: options.isEmpty
+                          ? null
+                          : (value) async {
+                              if (value == null) return;
+                              // Re-check type from latest snapshot when available.
+                              if (snap.hasData) {
+                                QueryDocumentSnapshot<Map<String, dynamic>>?
+                                    match;
+                                for (final doc in snap.data!.docs) {
+                                  final id =
+                                      (doc.data()['orderId'] ?? doc.id)
+                                          .toString()
+                                          .trim();
+                                  if (id == value) {
+                                    match = doc;
+                                    break;
+                                  }
+                                }
+                                if (match != null &&
+                                    !_subscriptionMatchesMonitorType(
+                                      match.data(),
+                                      widget.monitorData.monitorType,
+                                    )) {
+                                  MyGlobalMessage.show(
+                                    'Subscription',
+                                    'That subscription is for a different IoT type.',
+                                    MyMessageType.warning,
+                                  );
+                                  return;
+                                }
+                              }
+                              await _assignSubscription(
+                                orderId: value,
+                                token: tokens[value] ?? '',
+                              );
+                            },
                     ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
                     if (hasSelection) ...[
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        height: 40,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                            side: const BorderSide(color: Colors.redAccent),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                          ),
-                          onPressed: _cancellingSubscription
-                              ? null
-                              : _cancelLinkedSubscription,
-                          child: _cancellingSubscription
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                      animatedActionButton(
+                        pressed: _cancelSubButtonPressed ||
+                            _cancellingSubscription,
+                        onTap: () {
+                          if (_cancellingSubscription) return;
+                          _animateTap(
+                            _cancelLinkedSubscription,
+                            (v) => _cancelSubButtonPressed = v,
+                          );
+                        },
+                        child: Column(
+                          children: [
+                            _cancellingSubscription
+                                ? const SizedBox(
+                                    width: 30,
+                                    height: 30,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.redAccent,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.cancel,
+                                    size: 30,
                                     color: Colors.redAccent,
                                   ),
-                                )
-                              : const Text(
-                                  'Cancel',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Cancel',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ],
                         ),
                       ),
+                      const SizedBox(width: 20),
                     ],
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: hasSelection ? _removeSubscription : null,
-                      style: TextButton.styleFrom(
-                        foregroundColor: hasSelection
-                            ? Colors.redAccent
-                            : Colors.white24,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                    animatedActionButton(
+                      pressed: _unlinkButtonPressed,
+                      onTap: () {
+                        if (!hasSelection) return;
+                        _animateTap(
+                          _removeSubscription,
+                          (v) => _unlinkButtonPressed = v,
+                        );
+                      },
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.link_off,
+                            size: 30,
+                            color: hasSelection
+                                ? Colors.orangeAccent
+                                : Colors.grey,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Unlink',
+                            style: TextStyle(
+                              color: hasSelection
+                                  ? Colors.white
+                                  : Colors.grey,
+                            ),
+                          ),
+                        ],
                       ),
-                      icon: const Icon(Icons.link_off, size: 20),
-                      label: const Text('Unlink'),
                     ),
                   ],
                 ),
-                if (hasSelection &&
-                    widget.monitorData.subscriptionToken.trim().isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Token: ${widget.monitorData.subscriptionToken}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ),
               ],
             );
           },
@@ -1036,105 +1165,122 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                   // Unpair / Cred / Find — under Ticks per Meter
                   Padding(
                     padding: const EdgeInsets.fromLTRB(15, 8, 16, 0),
-                    child: Row(
-                      children: [
-                        animatedActionButton(
-                          pressed: _unpairButtonPressed,
-                          onTap: () => _animateTap(
-                            widget.onTapUnpair,
-                            (v) => _unpairButtonPressed = v,
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.link_off,
-                                size: 30,
-                                color: settingService.isBaseStationConnected
-                                    ? Colors.orangeAccent
-                                    : Colors.grey,
+                    child: Builder(
+                      builder: (context) {
+                        final pairedId =
+                            widget.monitorData.monitorId.trim();
+                        final isPaired = pairedId.isNotEmpty &&
+                            pairedId.toLowerCase() != 'none';
+                        final baseOk =
+                            settingService.isBaseStationConnected;
+                        final unpairFindEnabled = baseOk && isPaired;
+
+                        return Row(
+                          children: [
+                            animatedActionButton(
+                              pressed: _unpairButtonPressed,
+                              onTap: unpairFindEnabled
+                                  ? () => _animateTap(
+                                        widget.onTapUnpair,
+                                        (v) => _unpairButtonPressed = v,
+                                      )
+                                  : () {},
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.link_off,
+                                    size: 30,
+                                    color: unpairFindEnabled
+                                        ? Colors.orangeAccent
+                                        : Colors.grey,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    "Unpair",
+                                    style: TextStyle(
+                                      color: unpairFindEnabled
+                                          ? Colors.white
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 10),
-                              Text(
-                                "Unpair",
-                                style: TextStyle(
-                                  color: settingService.isBaseStationConnected
-                                      ? Colors.white
-                                      : Colors.grey,
-                                ),
+                            ),
+                            const SizedBox(width: 20),
+                            animatedActionButton(
+                              pressed: _wifiButtonPressed,
+                              onTap: () => _animateTap(
+                                () {
+                                  final typed = _controllerId.text.trim();
+                                  if (typed.isNotEmpty) {
+                                    widget.monitorData.monitorId = typed;
+                                  }
+                                  return widget.onTapSendWifi();
+                                },
+                                (v) => _wifiButtonPressed = v,
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                        animatedActionButton(
-                          pressed: _wifiButtonPressed,
-                          onTap: () => _animateTap(
-                            () {
-                              final typed = _controllerId.text.trim();
-                              if (typed.isNotEmpty) {
-                                widget.monitorData.monitorId = typed;
-                              }
-                              return widget.onTapSendWifi();
-                            },
-                            (v) => _wifiButtonPressed = v,
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.wifi,
-                                size: 30,
-                                color: settingService.isBaseStationConnected
-                                    ? Colors.lightBlueAccent
-                                    : Colors.grey,
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.wifi,
+                                    size: 30,
+                                    color: baseOk
+                                        ? Colors.lightBlueAccent
+                                        : Colors.grey,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    "Cred",
+                                    style: TextStyle(
+                                      color: baseOk
+                                          ? Colors.white
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 10),
-                              Text(
-                                "Cred",
-                                style: TextStyle(
-                                  color: settingService.isBaseStationConnected
-                                      ? Colors.white
-                                      : Colors.grey,
-                                ),
+                            ),
+                            const SizedBox(width: 20),
+                            animatedActionButton(
+                              pressed: _findButtonPressed,
+                              onTap: unpairFindEnabled
+                                  ? () => _animateTap(
+                                        () {
+                                          final typed =
+                                              _controllerId.text.trim();
+                                          if (typed.isNotEmpty) {
+                                            widget.monitorData.monitorId =
+                                                typed;
+                                          }
+                                          return widget.onTapFind();
+                                        },
+                                        (v) => _findButtonPressed = v,
+                                      )
+                                  : () {},
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.sensors,
+                                    size: 30,
+                                    color: unpairFindEnabled
+                                        ? Colors.lightBlueAccent
+                                        : Colors.grey,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    "Find",
+                                    style: TextStyle(
+                                      color: unpairFindEnabled
+                                          ? Colors.white
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                        animatedActionButton(
-                          pressed: _findButtonPressed,
-                          onTap: () => _animateTap(
-                            () {
-                              // Flush ID text into the model before Find.
-                              final typed = _controllerId.text.trim();
-                              if (typed.isNotEmpty) {
-                                widget.monitorData.monitorId = typed;
-                              }
-                              return widget.onTapFind();
-                            },
-                            (v) => _findButtonPressed = v,
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.sensors,
-                                size: 30,
-                                color: settingService.isBaseStationConnected
-                                    ? Colors.lightBlueAccent
-                                    : Colors.grey,
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                "Find",
-                                style: TextStyle(
-                                  color: settingService.isBaseStationConnected
-                                      ? Colors.white
-                                      : Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
 

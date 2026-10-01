@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geofence/account_deletion_service.dart';
 import 'package:geofence/network_avatar.dart';
 import 'package:geofence/utils.dart';
@@ -42,6 +43,96 @@ class ProfilePageState extends State<ProfilePage> {
         MyMessageType.warning,
       );
     }
+  }
+
+  void _showUserDocId(BuildContext context, String userDocId) {
+    final id = userDocId.trim();
+    if (id.isEmpty) {
+      MyGlobalMessage.show(
+        'User ID',
+        'Firestore user document ID is not available yet.',
+        MyMessageType.warning,
+      );
+      return;
+    }
+
+    final userService = context.read<UserDataService>();
+    final isDev = userService.userdata?.isDeveloper == true;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: colorAppTitle,
+          title: const MyText(
+            text: 'Firestore user ID',
+            color: Colors.white,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SelectableText(
+                id,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              const SizedBox(height: 12),
+              MyText(
+                text: isDev
+                    ? 'isDeveloper: true'
+                    : 'isDeveloper: false (Setup Shop hidden)',
+                color: isDev ? Colors.lightGreenAccent : Colors.orangeAccent,
+                fontsize: 13,
+              ),
+              if (userService.lastIsDeveloperRaw.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                SelectableText(
+                  userService.lastIsDeveloperRaw,
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await userService.load();
+                if (!dialogContext.mounted) return;
+                Navigator.pop(dialogContext);
+                if (!context.mounted) return;
+                _showUserDocId(context, userService.userdata?.userID ?? id);
+              },
+              child: const MyText(text: 'Reload', color: Colors.white70),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const MyText(text: 'Close', color: Colors.white70),
+            ),
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: id));
+                if (!dialogContext.mounted) return;
+                Navigator.pop(dialogContext);
+                MyGlobalMessage.show(
+                  'Copied',
+                  'User document ID copied to clipboard.',
+                  MyMessageType.info,
+                );
+              },
+              child: const MyText(text: 'Copy', color: colorIceBlue),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showDeleteDataDialog(BuildContext context) {
@@ -576,6 +667,28 @@ class ProfilePageState extends State<ProfilePage> {
                           labelText: "Email",
                           isPasswordField: false,
                           isReadOnly: true,
+                        ),
+
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const MyText(
+                            text: 'Show user ID',
+                            color: Colors.white,
+                            fontsize: 16,
+                          ),
+                          subtitle: const MyText(
+                            text: 'View your user document ID',
+                            color: Colors.white54,
+                            fontsize: 12,
+                          ),
+                          trailing: const Icon(
+                            Icons.badge_outlined,
+                            color: Colors.white70,
+                          ),
+                          onTap: () => _showUserDocId(
+                            context,
+                            user.userdata!.userID,
+                          ),
                         ),
 
                         ListTile(

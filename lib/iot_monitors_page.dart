@@ -1426,7 +1426,6 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
     }
 
     const implementedTypes = {
-      monitorTypeVehicle,
       monitorTypeWheel,
     };
     if (!implementedTypes.contains(selectedType)) {

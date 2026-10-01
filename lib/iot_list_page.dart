@@ -53,51 +53,37 @@ class IotListPageState extends State<IotListPage> {
             description:
                 'Track vehicle movement. Set geofence perimeter. Get full report for diesel rebate',
             widget: widget,
-            onTap: () {
-              Navigator.pop(context, monitorTypeVehicle);
-            },
+            comingSoon: true,
           ),
 
           // Fleet tracking
           MyCustomTileWithPic(
             imagePath: iconFleet,
             header: 'Fleet Tracker',
-            headerSuffix: '(Coming Soon)',
-            headerSuffixColor: colorOrange,
             description:
                 'Track entire fleet. Monitor breakdowns, speed limits alerts, logistics, driver statistics.',
             widget: widget,
-            onTap: () {
-              Navigator.pop(context, monitorTypeFleet);
-            },
+            comingSoon: true,
           ),
 
           // Machine
           MyCustomTileWithPic(
             imagePath: iconMachine,
             header: 'Machine Monitor',
-            headerSuffix: '(Coming Soon)',
-            headerSuffixColor: colorOrange,
             description:
                 'Monitor machine running hours. Set geofence perimeter. Get full report for diesel rebate',
             widget: widget,
-            onTap: () {
-              Navigator.pop(context, monitorTypeMachine);
-            },
+            comingSoon: true,
           ),
 
           // Trailer plug wiring
           MyCustomTileWithPic(
             imagePath: iconTrailer,
             header: 'Trailer Plug Wiring',
-            headerSuffix: '(Coming Soon)',
-            headerSuffixColor: colorOrange,
             description:
                 'Test trailer plug wiring according to SABS 1327/1981 standard. Auto create a legal sign off certificate.',
             widget: widget,
-            onTap: () {
-              Navigator.pop(context, monitorTypeTrailer);
-            },
+            comingSoon: true,
           ),
         ],
       ),

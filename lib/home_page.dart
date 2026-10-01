@@ -198,11 +198,12 @@ class HomePageState extends State<HomePage>
     return '${m.displayName} · ${orgRoleLabel(m.role)}';
   }
 
-  List<Widget> _buildHomeTiles(OrgService org) {
+  List<Widget> _buildHomeTiles(UserDataService user, OrgService org) {
     final tiles = <Widget>[];
     final canEditFarm = !org.hasOrg || org.canEditFarm;
     final canBilling = !org.hasOrg || org.canManageBilling;
     final isEmployee = org.hasOrg && org.membership?.isEmployee == true;
+    final userIsDeveloper = user.userdata?.isDeveloper == true;
 
     void addTile(Widget tile) {
       if (tiles.isNotEmpty) tiles.add(const SizedBox(height: 10));
@@ -292,6 +293,17 @@ class HomePageState extends State<HomePage>
       );
     }
 
+    if (userIsDeveloper) {
+      addTile(
+        const MyCustomTileWithPic(
+          imagePath: iconShop,
+          header: 'Setup Shop',
+          description: 'Add and edit shop catalog products',
+          widget: ShopSetupPage(),
+        ),
+      );
+    }
+
     return tiles;
   }
   void _openDrawerPage(Widget page) {
@@ -348,13 +360,13 @@ class HomePageState extends State<HomePage>
     final showIotSection = AppConfig.showBaseStations ||
         AppConfig.showIotMonitors ||
         AppConfig.showIotDataReport;
-    final showShopSection = AppConfig.showShop && canBilling;
-    final showGeneralSection = true;
     final userIsDeveloper = user.userdata?.isDeveloper == true;
-    final showSetupShop = (enableSetupShop || userIsDeveloper) && canBilling;
+    final showSetupShop = userIsDeveloper;
+    final showShopSection =
+        (AppConfig.showShop && canBilling) || showSetupShop;
+    final showGeneralSection = true;
     final showSetupSection = (AppConfig.showSettings && canEditFarm) ||
         (AppConfig.showOperators && canEditFarm) ||
-        showSetupShop ||
         org.hasOrg;
 
     if (showIotSection) {
@@ -384,21 +396,30 @@ class HomePageState extends State<HomePage>
 
     if (showShopSection) {
       items.add(heading('Shop', first: !showIotSection));
-      items.add(drawerTile(
-        icon: Icons.storefront_outlined,
-        title: 'Online Shop',
-        onTap: () => open(const ShopPage()),
-      ));
-      items.add(drawerTile(
-        icon: Icons.receipt_long_outlined,
-        title: 'Order History',
-        onTap: () => open(const OrderHistoryPage()),
-      ));
-      items.add(drawerTile(
-        icon: Icons.subscriptions_outlined,
-        title: 'Subscriptions',
-        onTap: () => open(const SubscriptionsPage()),
-      ));
+      if (AppConfig.showShop && canBilling) {
+        items.add(drawerTile(
+          icon: Icons.storefront_outlined,
+          title: 'Online Shop',
+          onTap: () => open(const ShopPage()),
+        ));
+        items.add(drawerTile(
+          icon: Icons.receipt_long_outlined,
+          title: 'Order History',
+          onTap: () => open(const OrderHistoryPage()),
+        ));
+        items.add(drawerTile(
+          icon: Icons.subscriptions_outlined,
+          title: 'Subscriptions',
+          onTap: () => open(const SubscriptionsPage()),
+        ));
+      }
+      if (showSetupShop) {
+        items.add(drawerTile(
+          icon: Icons.store_mall_directory_outlined,
+          title: 'Setup Shop',
+          onTap: () => open(const ShopSetupPage()),
+        ));
+      }
     }
 
     if (showTrackingSection) {
@@ -473,15 +494,8 @@ class HomePageState extends State<HomePage>
       if (org.hasOrg) {
         items.add(drawerTile(
           icon: Icons.business_outlined,
-          title: 'Link Profile',
+          title: 'Profiles',
           onTap: () => open(const OrganisationsPage()),
-        ));
-      }
-      if (showSetupShop) {
-        items.add(drawerTile(
-          icon: Icons.store_mall_directory_outlined,
-          title: 'Setup Shop',
-          onTap: () => open(const ShopSetupPage()),
         ));
       }
     }
@@ -836,7 +850,7 @@ class HomePageState extends State<HomePage>
                                       children: [
                                         const SizedBox(height: 20),
 
-                                        ..._buildHomeTiles(org),
+                                        ..._buildHomeTiles(user, org),
 
                                         const SizedBox(height: 15),
                                       ],

@@ -386,6 +386,8 @@ class _ShopCheckoutPageState extends State<ShopCheckoutPage> {
               'heightCm': i.product.heightCm,
               'freeDelivery': i.product.freeDelivery,
               'subscriptionMonthly': i.product.subscriptionMonthly,
+              'category': i.product.category,
+              'iotType': i.product.iotType,
             },
           )
           .toList();

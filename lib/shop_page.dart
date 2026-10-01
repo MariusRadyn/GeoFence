@@ -41,6 +41,9 @@ class ShopProduct {
   final bool isReady;
   /// Optional monthly subscription amount in ZAR (0 = none).
   final double subscriptionMonthly;
+  /// IoT monitor type this subscription unlocks (e.g. [monitorTypeWheel]).
+  /// Empty = not tied to a specific IoT type.
+  final String iotType;
   final double weightKg;
   final double lengthCm;
   final double widthCm;
@@ -64,6 +67,7 @@ class ShopProduct {
     this.stockCount = 0,
     this.isReady = true,
     this.subscriptionMonthly = 0,
+    this.iotType = '',
     this.weightKg = 1,
     this.lengthCm = 20,
     this.widthCm = 15,
@@ -129,6 +133,7 @@ class ShopProduct {
       stockCount: asInt(map['stockCount']),
       isReady: map['isReady'] != false,
       subscriptionMonthly: asDouble(map['subscriptionMonthly']),
+      iotType: '${map['iotType'] ?? map['monitorType'] ?? ''}'.trim(),
       weightKg: asDouble(map['weightKg'], 1),
       lengthCm: asDouble(map['lengthCm'], 20),
       widthCm: asDouble(map['widthCm'], 15),
@@ -152,6 +157,7 @@ class ShopProduct {
         'stockCount': stockCount,
         'isReady': isReady,
         'subscriptionMonthly': subscriptionMonthly,
+        'iotType': iotType,
         'weightKg': weightKg,
         'lengthCm': lengthCm,
         'widthCm': widthCm,
@@ -175,6 +181,7 @@ class ShopProduct {
     int? stockCount,
     bool? isReady,
     double? subscriptionMonthly,
+    String? iotType,
     double? weightKg,
     double? lengthCm,
     double? widthCm,
@@ -199,6 +206,7 @@ class ShopProduct {
       isReady: isReady ?? this.isReady,
       subscriptionMonthly:
           subscriptionMonthly ?? this.subscriptionMonthly,
+      iotType: iotType ?? this.iotType,
       weightKg: weightKg ?? this.weightKg,
       lengthCm: lengthCm ?? this.lengthCm,
       widthCm: widthCm ?? this.widthCm,

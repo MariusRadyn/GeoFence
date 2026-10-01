@@ -1121,7 +1121,16 @@ function isoDate(value) {
 
 async function assertShopAdmin(uid) {
   const snap = await db().collection("users").doc(uid).get();
-  if (!snap.exists || snap.data().isDeveloper !== true) {
+  const data = snap.exists ? snap.data() || {} : {};
+  const nested = data.userdata && typeof data.userdata === "object"
+    ? data.userdata
+    : {};
+  const isDev =
+    data.isDeveloper === true ||
+    nested.isDeveloper === true ||
+    String(data.isDeveloper).toLowerCase() === "true" ||
+    String(nested.isDeveloper).toLowerCase() === "true";
+  if (!snap.exists || !isDev) {
     throw new functions.https.HttpsError(
       "permission-denied",
       "Only the shop admin can export all paid orders.",

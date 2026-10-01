@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:geofence/app_flavor.dart';
+import 'package:geofence/iot_ble_operator_sync.dart';
 import 'package:geofence/network_avatar.dart';
 import 'package:geofence/operator_edit_page.dart';
 import 'package:geofence/utils.dart';
@@ -17,6 +20,8 @@ class OperatorsPageState extends State<OperatorsPage>
     with SingleTickerProviderStateMixin {
   OperatorData? selectedOperator;
   late final TabController _tabController;
+  bool _syncPressed = false;
+  bool _syncBusy = false;
 
   @override
   void initState() {
@@ -33,6 +38,89 @@ class OperatorsPageState extends State<OperatorsPage>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _animateTap(
+    Future<void> Function() action,
+    void Function(bool) setPressed,
+  ) async {
+    setPressed(true);
+    if (mounted) setState(() {});
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    setPressed(false);
+    if (mounted) setState(() {});
+    await action();
+  }
+
+  Future<BluetoothDevice?> _pickIotDevice(List<BluetoothDevice> devices) {
+    return IotBleOperatorSync.showDevicePicker(context, devices);
+  }
+
+  Future<void> _syncTagsViaBluetooth() async {
+    if (_syncBusy) return;
+    if (kIsWeb || !AppConfig.enableBluetooth) {
+      MyGlobalSnackBar.show('Bluetooth sync is not available on this platform');
+      return;
+    }
+
+    final operators = context.read<OperatorService>().lstOperators;
+    final readyCount =
+        IotBleOperatorSync.buildOperatorsPayload(operators).length;
+    if (readyCount == 0) {
+      MyGlobalSnackBar.show('No tags with valid Tag IDs to sync');
+      return;
+    }
+
+    setState(() => _syncBusy = true);
+    IotBleOperatorSync.showBusyDialog(
+      context,
+      message: 'Scanning for wheels…',
+    );
+
+    try {
+      final devices = await IotBleOperatorSync.scanForIotDevices();
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // close scanning dialog
+
+      if (devices.isEmpty) {
+        MyGlobalSnackBar.show('No IoT wheels found nearby (iOT_*)');
+        return;
+      }
+
+      final device = await _pickIotDevice(devices);
+      if (device == null) return;
+
+      if (!mounted) return;
+      IotBleOperatorSync.showBusyDialog(
+        context,
+        title: 'Bluetooth',
+        message: 'Syncing to ${IotBleOperatorSync.deviceLabel(device)}…',
+      );
+
+      final opsService = context.read<OperatorService>();
+      // Keep BLE stamp == cloud so WiFi NEW_DATA doesn't pull/rebroadcast.
+      final ver = opsService.setNewOperatorVersion();
+      final count = await IotBleOperatorSync.pushOperators(
+        device: device,
+        operators: operators,
+        operatorsVer: ver.isNotEmpty ? ver : opsService.lastOperatorsVer,
+        onStatus: (s) => printDebugMsg(s),
+      );
+      await IotBleOperatorSync.rememberDevice(device);
+
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      MyGlobalSnackBar.show(
+        'Synced $count tag(s) to ${IotBleOperatorSync.deviceLabel(device)}',
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      MyGlobalSnackBar.show('BLE Sync failed: $e');
+    } finally {
+      if (mounted) setState(() => _syncBusy = false);
+    }
   }
 
   Widget getAvatar(String photoUrl, {double size = 48}) {
@@ -229,6 +317,40 @@ class OperatorsPageState extends State<OperatorsPage>
             backgroundColor: colorAppBar,
             foregroundColor: Colors.white,
             title: myAppbarTitle('Tags'),
+            actions: [
+              if (AppConfig.enableBluetooth)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: animatedActionButton(
+                    pressed: _syncPressed,
+                    onTap: _syncBusy
+                        ? () {}
+                        : () => _animateTap(
+                              _syncTagsViaBluetooth,
+                              (v) => _syncPressed = v,
+                            ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.sync,
+                          size: 26,
+                          color: _syncBusy
+                              ? Colors.grey
+                              : Colors.lightBlueAccent,
+                        ),
+                        Text(
+                          'Sync',
+                          style: TextStyle(
+                            color: _syncBusy ? Colors.grey : Colors.white,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
             bottom: TabBar(
               controller: _tabController,
               indicatorColor: colorOrange,

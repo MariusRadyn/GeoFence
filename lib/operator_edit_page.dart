@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:geofence/app_flavor.dart';
+import 'package:geofence/iot_ble_operator_sync.dart';
 import 'package:geofence/mqtt_service.dart';
 import 'package:geofence/edit_profile_pic_page.dart';
 import 'package:geofence/network_avatar.dart';
@@ -30,6 +33,7 @@ class OperatorEditPageState extends State<OperatorEditPage> {
 
   bool tagRequested = false;
   bool listenerStarted = false;
+  bool _bleReadBusy = false;
   Timer? _timeout;
   bool _dialogScheduled = false; // prevents multiple registrations
   bool _dialogShown = false;     // prevents multiple dialogs
@@ -227,15 +231,40 @@ class OperatorEditPageState extends State<OperatorEditPage> {
 // Methods
   void _handleFocusChange(FocusNode node, String field) {
     if (!node.hasFocus) {
+      final prevName = oldName;
+      final prevSurname = oldSurname;
       setState(() {
         if (field == 'name')  widget.operatorData!.name = _controllerName!.text;
         if (field == 'surname')  widget.operatorData!.surname = _controllerSurname!.text;
         if (field == 'rate')  widget.operatorData!.rate = double.parse(_controllerRate!.text);
-
-        if(oldName == widget.operatorData!.name && oldSurname == widget.operatorData!.surname) return;
-        context.read<OperatorService>().save(widget.operatorData!);
       });
+
+      final nameChanged = field == 'name' || field == 'surname';
+      if (nameChanged &&
+          prevName == widget.operatorData!.name &&
+          prevSurname == widget.operatorData!.surname) {
+        return;
+      }
+      if (!nameChanged && field == 'rate') {
+        context.read<OperatorService>().save(widget.operatorData!);
+        return;
+      }
+      if (!nameChanged) return;
+
+      unawaited(_saveNameAndAutoSync());
     }
+  }
+
+  Future<void> _saveNameAndAutoSync() async {
+    await context.read<OperatorService>().save(widget.operatorData!);
+    if (!mounted) return;
+    oldName = widget.operatorData!.name;
+    oldSurname = widget.operatorData!.surname;
+    final ops = context.read<OperatorService>();
+    IotBleOperatorSync.scheduleAutoSync(
+      ops.lstOperators,
+      operatorsVer: ops.lastOperatorsVer,
+    );
   }
   Future<void> _requestTag() async{
     tagRequested = true;
@@ -251,6 +280,97 @@ class OperatorEditPageState extends State<OperatorEditPage> {
       );
     }
   }
+
+  Future<BluetoothDevice?> _pickIotDevice(List<BluetoothDevice> devices) {
+    return IotBleOperatorSync.showDevicePicker(context, devices);
+  }
+
+  Future<bool> _requestTagViaBluetooth() async {
+    if (_bleReadBusy) return false;
+    if (kIsWeb || !AppConfig.enableBluetooth) return false;
+
+    setState(() => _bleReadBusy = true);
+    IotBleOperatorSync.showBusyDialog(
+      context,
+      message: 'Scanning for wheels…',
+    );
+
+    try {
+      final devices = await IotBleOperatorSync.scanForIotDevices();
+      if (!mounted) return false;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (devices.isEmpty) {
+        return false; // caller may fall back to MQTT
+      }
+
+      final device = await _pickIotDevice(devices);
+      if (device == null) return true; // user cancelled — don't MQTT
+
+      if (!mounted) return true;
+      IotBleOperatorSync.showBusyDialog(
+        context,
+        title: 'Bluetooth',
+        message:
+            'Present tag on ${IotBleOperatorSync.deviceLabel(device)}…',
+      );
+
+      final tagId = await IotBleOperatorSync.readTag(
+        device: device,
+        onStatus: printDebugMsg,
+      );
+      await IotBleOperatorSync.rememberDevice(device);
+
+      if (!mounted) return true;
+      Navigator.of(context, rootNavigator: true).pop();
+      await _processTag(tagId);
+      return true;
+    } catch (e) {
+      if (mounted) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (_) {}
+      }
+      MyGlobalSnackBar.show('BLE tag read failed: $e');
+      return true; // attempted BLE — don't also spam MQTT unless user retries
+    } finally {
+      if (mounted) setState(() => _bleReadBusy = false);
+    }
+  }
+
+  Future<void> _onReadTagPressed() async {
+    tagRequested = true;
+
+    // Prefer direct BLE to the wheel (no base / WiFi needed)
+    if (!kIsWeb && AppConfig.enableBluetooth) {
+      final handled = await _requestTagViaBluetooth();
+      if (handled) {
+        tagRequested = false;
+        return;
+      }
+      // No wheels nearby — fall back to MQTT if base is up
+      if (!mounted) return;
+      final baseUp =
+          context.read<SettingsService>().isBaseStationConnected == true;
+      if (baseUp) {
+        await _requestTag();
+        return;
+      }
+      MyGlobalSnackBar.show(
+        'No IoT wheels found nearby. Turn on a wheel or connect a base station.',
+      );
+      tagRequested = false;
+      return;
+    }
+
+    // Web / no BLE — MQTT via base
+    if (context.read<SettingsService>().isBaseStationConnected) {
+      await _requestTag();
+    } else {
+      await _mqttConnectBase();
+    }
+  }
+
   Future<void> _processTag(String tagId) async {
     // Check Tag duplication
     final uid = currentDataOwnerUid();
@@ -473,7 +593,7 @@ return Consumer<BaseStationService>(
                           setState(() {
                             widget.operatorData!.name = value;
                           });
-                          context.read<OperatorService>().save(widget.operatorData!);
+                          unawaited(_saveNameAndAutoSync());
                         },
                       ),
                     ),
@@ -491,7 +611,7 @@ return Consumer<BaseStationService>(
                           setState(() {
                             widget.operatorData!.surname = value;
                           });
-                          context.read<OperatorService>().save(widget.operatorData!);
+                          unawaited(_saveNameAndAutoSync());
                         },
                       ),
                     ),
@@ -563,22 +683,28 @@ return Consumer<BaseStationService>(
 
                           SizedBox(width: 15),
 
-                          // Connect Button
+                          // Read Tag (BLE preferred, MQTT fallback)
                           InkWell(
-                              onTap: () async {
-                                tagRequested = true;
-                                context.read<SettingsService>().isBaseStationConnected
-                                    ? _requestTag()
-                                    : await _mqttConnectBase();
-                              },
+                              onTap: _bleReadBusy
+                                  ? null
+                                  : () async {
+                                      await _onReadTagPressed();
+                                    },
                               child: Column(
                                 children: [
                                   Icon(
-                                    Icons.online_prediction_sharp,
+                                    AppConfig.enableBluetooth
+                                        ? Icons.bluetooth_searching
+                                        : Icons.online_prediction_sharp,
                                     size: 30,
-                                    color: context.read<SettingsService>().isBaseStationConnected
-                                        ? Colors.blue
-                                        : Colors.grey,
+                                    color: _bleReadBusy
+                                        ? Colors.grey
+                                        : (AppConfig.enableBluetooth ||
+                                                context
+                                                    .read<SettingsService>()
+                                                    .isBaseStationConnected)
+                                            ? Colors.lightBlueAccent
+                                            : Colors.grey,
                                   ),
                                   SizedBox(width: 10),
                                   Text("Read",

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Build flavor selected with:
 /// `--dart-define=APP_FLAVOR=full` or `APP_FLAVOR=reporting`
@@ -16,13 +16,6 @@ class AppConfig {
   static const String _flavorRaw = String.fromEnvironment(
     'APP_FLAVOR',
     defaultValue: '',
-  );
-
-  /// Release builds can unlock Setup Shop with:
-  /// `--dart-define=ENABLE_SHOP_SETUP=true`
-  static const bool _shopSetupDefine = bool.fromEnvironment(
-    'ENABLE_SHOP_SETUP',
-    defaultValue: false,
   );
 
   static final AppFlavor flavor = _resolve();
@@ -69,12 +62,8 @@ class AppConfig {
   static bool get showWages => true;
   static bool get showShop => true;
 
-  /// Developer-only shop catalog admin (debug builds or dart-define).
-  static bool get showShopSetup => kDebugMode || _shopSetupDefine;
-
-  /// Also allow users flagged `isDeveloper: true` in Firestore.
-  static bool canSetupShop({bool userIsDeveloper = false}) =>
-      showShopSetup || userIsDeveloper;
+  /// Setup Shop — only when Firestore `isDeveloper: true`.
+  static bool canSetupShop({bool userIsDeveloper = false}) => userIsDeveloper;
 
   // ---- Web Features ----
   static bool get addTrackingHistory => isReporting;
