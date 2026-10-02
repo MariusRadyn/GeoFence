@@ -797,12 +797,35 @@ class IotBleOperatorSync {
       }
 
       Completer<String>? waiting;
+      bool Function(String ack)? waitingAccept;
+
+      bool _isBaseStatusNotify(String text) {
+        final t = text.trim();
+        if (t.isEmpty) return true;
+        // Base/cred chatter — never treat as cal/tag/ops acks
+        if (t == 'PAIRING' ||
+            t == 'IDLE' ||
+            t == 'WIFI_OK' ||
+            t.startsWith('PAIRING') ||
+            t.startsWith('wificred:')) {
+          return true;
+        }
+        return false;
+      }
 
       void handleNotify(List<int> value) {
         final text = utf8.decode(value, allowMalformed: true).trim();
         if (text.isEmpty) return;
         printDebugMsg('IoT BLE notify: $text');
+        if (_isBaseStatusNotify(text)) {
+          printDebugMsg('Ignoring status notify during calibrate: $text');
+          return;
+        }
         if (waiting != null && !waiting!.isCompleted) {
+          if (waitingAccept != null && !waitingAccept!(text)) {
+            printDebugMsg('Ignoring non-matching cal notify: $text');
+            return;
+          }
           waiting!.complete(text);
         }
       }
@@ -812,14 +835,23 @@ class IotBleOperatorSync {
       await Future<void>.delayed(const Duration(milliseconds: 200));
       device.cancelWhenDisconnected(notifySub);
 
-      Future<String> writeAndWait(String cmd, {String debugLabel = 'cmd'}) async {
+      Future<String> writeAndWait(
+        String cmd, {
+        String debugLabel = 'cmd',
+        bool Function(String ack)? accept,
+      }) async {
+        waitingAccept = accept;
         waiting = Completer<String>();
         await char!.write(utf8.encode(cmd), withoutResponse: false);
-        return waiting!.future.timeout(
-          _ackTimeout,
-          onTimeout: () =>
-              throw TimeoutException('No BLE ack for $debugLabel'),
-        );
+        try {
+          return await waiting!.future.timeout(
+            _ackTimeout,
+            onTimeout: () =>
+                throw TimeoutException('No BLE ack for $debugLabel'),
+          );
+        } finally {
+          waitingAccept = null;
+        }
       }
 
       final distText = calibrationDistance == calibrationDistance.roundToDouble()
@@ -831,6 +863,7 @@ class IotBleOperatorSync {
       final calAck = await writeAndWait(
         'cal:req>$distText',
         debugLabel: 'cal:req',
+        accept: (a) => a.startsWith('CAL_OK>') || a.startsWith('CAL_ERR>'),
       );
       if (calAck.startsWith('CAL_ERR>')) {
         final err = calAck.substring('CAL_ERR>'.length).trim();
@@ -884,6 +917,7 @@ class IotBleOperatorSync {
           final setAck = await writeAndWait(
             'set:tpm>$tpmText',
             debugLabel: 'set:tpm',
+            accept: (a) => a.startsWith('SET_OK>') || a.startsWith('SET_ERR>'),
           );
           if (setAck.startsWith('SET_ERR>')) {
             throw StateError(setAck.substring('SET_ERR>'.length));
@@ -900,6 +934,8 @@ class IotBleOperatorSync {
             final setAck = await writeAndWait(
               'set:tpm>$tpmText',
               debugLabel: 'set:tpm-retry',
+              accept: (a) =>
+                  a.startsWith('SET_OK>') || a.startsWith('SET_ERR>'),
             );
             if (setAck.startsWith('SET_OK>')) {
               syncedTpm = true;
