@@ -720,7 +720,7 @@ class _ShopProductEditPageState extends State<ShopProductEditPage> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: _iotType,
+                    initialValue: _iotType,
                     dropdownColor: colorAppBar,
                     decoration: InputDecoration(
                       labelText: 'IoT subscription type',

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geofence/app_flavor.dart';
+import 'package:geofence/iot_ble_operator_sync.dart';
 import 'package:geofence/iot_list_page.dart';
 import 'package:geofence/iot_monitors_types.dart';
 import 'package:geofence/network_avatar.dart';
@@ -760,8 +761,9 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
   Future<void> _applyCalibrationResult(
     String baseDocId,
     MonitorSettings monitor,
-    int ticks,
-  ) async {
+    int ticks, {
+    bool? syncedToWheelOverride,
+  }) async {
     final calDist = monitor.calibrationDistance;
     if (calDist <= 0) {
       MyGlobalMessage.show(
@@ -800,7 +802,7 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       ticks: ticks,
       monitorDeviceId: monitor.monitorId,
     );
-    final syncedToWheel =
+    final syncedToWheel = syncedToWheelOverride ??
         _pushMonitorSettingsToIot(monitor, monitor.monitorId);
     final ticksPerMText = newTicksPerM == newTicksPerM.roundToDouble()
         ? '${newTicksPerM.toInt()}'
@@ -818,6 +820,129 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
       successBody,
       MyMessageType.success,
     );
+  }
+
+  /// Calibrate over Bluetooth when base / MQTT is unavailable (out of WiFi).
+  Future<bool> _calibrateIotOverBle(MonitorSettings monitor) async {
+    if (!await _ensureActiveWheelSubscription(monitor)) return false;
+
+    if (kIsWeb || !AppConfig.enableBluetooth) {
+      MyGlobalMessage.show(
+        'Calibration',
+        'Bluetooth is not available. Connect to a Base Station to calibrate.',
+        MyMessageType.info,
+      );
+      return false;
+    }
+
+    if (monitor.calibrationDistance <= 0) {
+      MyGlobalMessage.show(
+        'Calibration',
+        'Enter the measured distance in meters, then press Calibrate.',
+        MyMessageType.info,
+      );
+      return false;
+    }
+
+    if (monitor.monitorId.isEmpty || monitor.monitorId == 'none') {
+      MyGlobalMessage.show(
+        'Monitor Not Found',
+        'No monitor ID found. Please PAIR first.',
+        MyMessageType.info,
+      );
+      return false;
+    }
+
+    final base = _currentBase(context.read<BaseStationService>());
+    if (base == null) return false;
+
+    var busyOpen = false;
+    void dismissBusy() {
+      if (!busyOpen || !mounted) return;
+      busyOpen = false;
+      // Must use pop() — maybePop is blocked by PopScope(canPop: false).
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    IotBleOperatorSync.showBusyDialog(
+      context,
+      title: 'Calibrate',
+      message: 'Scanning for wheel…',
+    );
+    busyOpen = true;
+
+    try {
+      final devices = await IotBleOperatorSync.scanForIotDevices();
+      if (!mounted) return false;
+      dismissBusy();
+
+      if (devices.isEmpty) {
+        MyGlobalMessage.show(
+          'Calibration',
+          'No wheel found over Bluetooth.\n'
+              'Stay near ${monitor.monitorId}, turn Bluetooth on, and try again.',
+          MyMessageType.warning,
+        );
+        return false;
+      }
+
+      // Only the wheel paired to this tab — never pick another nearby IoT.
+      final device = IotBleOperatorSync.deviceForMonitorId(
+        devices,
+        monitor.monitorId,
+      );
+      if (device == null) {
+        final nearby = devices
+            .map(IotBleOperatorSync.deviceLabel)
+            .take(3)
+            .join(', ');
+        MyGlobalMessage.show(
+          'Calibration',
+          'Paired wheel "${monitor.monitorId}" was not found over Bluetooth.\n'
+              'Nearby: $nearby\n'
+              'Stay next to that wheel and try again.',
+          MyMessageType.warning,
+        );
+        return false;
+      }
+
+      IotBleOperatorSync.showBusyDialog(
+        context,
+        title: 'Calibrate',
+        message:
+            'Contacting ${IotBleOperatorSync.deviceLabel(device)}…',
+      );
+      busyOpen = true;
+
+      final result = await IotBleOperatorSync.calibrate(
+        device: device,
+        calibrationDistance: monitor.calibrationDistance.toDouble(),
+        onStatus: printDebugMsg,
+      );
+
+      if (!mounted) return false;
+      dismissBusy();
+
+      await IotBleOperatorSync.rememberDevice(device);
+      await _applyCalibrationResult(
+        base.docId,
+        monitor,
+        result.ticks,
+        syncedToWheelOverride: result.syncedTpm,
+      );
+      return true;
+    } catch (e) {
+      dismissBusy();
+      MyGlobalMessage.show(
+        'Calibration',
+        e.toString().replaceFirst('StateError: ', '').replaceFirst(
+              'TimeoutException: ',
+              '',
+            ),
+        MyMessageType.warning,
+      );
+      return false;
+    }
   }
 
   Future<bool> _calibrateIot(MonitorSettings monitor) async {
@@ -1768,18 +1893,23 @@ class IotMonitorsPageState extends State<IotMonitorsPage> with TickerProviderSta
               await _syncTicksPerMToIot(monitor);
             },
 
-            // Calibrate Monitor
+            // Calibrate Monitor (MQTT when on base, else Bluetooth in the field)
             onTapCalibrate: () async {
-              if (!context.read<SettingsService>().isBaseStationConnected ||
-                  !MqttService().isBrokerConnected) {
-                _calibrateRequest = true;
-                if (!await _mqttConnectBase(base)) {
-                  _calibrateRequest = false;
-                }
+              final mqttOk =
+                  context.read<SettingsService>().isBaseStationConnected &&
+                      MqttService().isBrokerConnected;
+              if (mqttOk) {
+                await _calibrateIot(monitor);
                 return;
               }
-
-              await _calibrateIot(monitor);
+              if (!kIsWeb && AppConfig.enableBluetooth) {
+                await _calibrateIotOverBle(monitor);
+                return;
+              }
+              _calibrateRequest = true;
+              if (!await _mqttConnectBase(base)) {
+                _calibrateRequest = false;
+              }
             },
 
             // Connect Monitor

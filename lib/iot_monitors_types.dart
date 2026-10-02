@@ -1341,13 +1341,12 @@ class IotDistanceWheelTypeState extends State<IotDistanceWheelType> {
                           text:
                             '1. Enter the calibration distance\n'
                             '2. Pre measure this exact distance\n'
-                            '3. On the wheel, press \'START\' 5 times\n'
+                            '3. On the the wheel, press \'START\' 5 times\n'
                             '4. Check LCD if the wheel enters \'CALIBRATION\' mode\n'
                             '5. On the wheel, press \'START\'\n'
                             '6. Move the wheel the exact distance\n'
                             '7. On the wheel, press \'STOP\'\n'
-                            '8. Take wheel back into WIFI range\n'
-                            '9. In the App press \'CALIBRATE\'\n'    
+                            '8. In the App press \'CALIBRATE\'\n'    
                         ),     
                       ],
                     ),

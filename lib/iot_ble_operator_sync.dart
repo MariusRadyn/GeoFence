@@ -219,8 +219,11 @@ class IotBleOperatorSync {
   /// more than one wheel is nearby.
   static Future<BluetoothDevice?> showDevicePicker(
     BuildContext context,
-    List<BluetoothDevice> devices,
-  ) async {
+    List<BluetoothDevice> devices, {
+    String hint =
+        'The selected IoT will beep twice and flash its blue LED. '
+        'Present the tag on that wheel.',
+  }) async {
     if (devices.isEmpty) return null;
     if (devices.length == 1) return devices.first;
 
@@ -249,10 +252,9 @@ class IotBleOperatorSync {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.blue, width: 1.5),
                   ),
-                  child: const Text(
-                    'The selected IoT will beep twice and flash its blue LED. '
-                    'Present the tag on that wheel.',
-                    style: TextStyle(
+                  child: Text(
+                    hint,
+                    style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
                       fontFamily: 'Poppins',
@@ -311,6 +313,36 @@ class IotBleOperatorSync {
         );
       },
     );
+  }
+
+  /// Prefer a device whose advertised name matches [preferredName] (monitor id).
+  /// If [strict] is true, only an exact name match is returned (no single-device fallback).
+  static BluetoothDevice? preferDevice(
+    List<BluetoothDevice> devices, {
+    String? preferredName,
+    bool strict = false,
+  }) {
+    final want = (preferredName ?? '').trim().toLowerCase();
+    if (want.isNotEmpty) {
+      for (final d in devices) {
+        if (deviceLabel(d).toLowerCase() == want) return d;
+      }
+      if (!strict) {
+        for (final d in devices) {
+          if (deviceLabel(d).toLowerCase().contains(want)) return d;
+        }
+      }
+    }
+    if (strict) return null;
+    return devices.length == 1 ? devices.first : null;
+  }
+
+  /// Exact advertised-name match for a paired monitor id (`iOT_…`).
+  static BluetoothDevice? deviceForMonitorId(
+    List<BluetoothDevice> devices,
+    String monitorId,
+  ) {
+    return preferDevice(devices, preferredName: monitorId, strict: true);
   }
 
   static Future<void> rememberDevice(BluetoothDevice device) async {
@@ -695,6 +727,192 @@ class IotBleOperatorSync {
           await char.write(utf8.encode('tag:cancel'), withoutResponse: true);
         } catch (_) {}
       }
+    } finally {
+      await notifySub?.cancel();
+      try {
+        if (connectedHere && device.isConnected) {
+          await device.disconnect();
+        }
+      } catch (_) {}
+    }
+  }
+
+  /// Field calibrate over BLE (no WiFi / base).
+  /// Prefers one-shot `cal:req><meters>` → `CAL_OK><ticks>><tpm>`.
+  /// Falls back to `cal:req` + `set:tpm>` for older firmware.
+  static Future<({int ticks, double ticksPerM, bool syncedTpm})> calibrate({
+    required BluetoothDevice device,
+    required double calibrationDistance,
+    void Function(String status)? onStatus,
+  }) async {
+    if (calibrationDistance <= 0) {
+      throw StateError('Enter the measured distance before calibrating');
+    }
+    if (!await _ensureBleReady()) {
+      throw StateError('Bluetooth not ready');
+    }
+
+    onStatus?.call('Connecting to ${deviceLabel(device)}…');
+
+    var connectedHere = false;
+    StreamSubscription<List<int>>? notifySub;
+    try {
+      if (!device.isConnected) {
+        await device.connect(
+          license: License.nonprofit,
+          timeout: const Duration(seconds: 15),
+          autoConnect: false,
+        );
+        connectedHere = true;
+      }
+
+      try {
+        await device.requestMtu(_preferredMtu);
+      } catch (e) {
+        printDebugMsg('MTU request failed (continuing): $e');
+      }
+
+      onStatus?.call('Discovering services…');
+      final services = await device.discoverServices();
+      BluetoothService? service;
+      for (final s in services) {
+        if (_uuidMatches(s.uuid, bluetoothServiceUuid)) {
+          service = s;
+          break;
+        }
+      }
+      if (service == null) {
+        throw StateError('IoT BLE service not found on device');
+      }
+
+      BluetoothCharacteristic? char;
+      for (final c in service.characteristics) {
+        if (_uuidMatches(c.uuid, bluetoothCharUuid)) {
+          char = c;
+          break;
+        }
+      }
+      if (char == null) {
+        throw StateError('IoT BLE characteristic not found');
+      }
+
+      Completer<String>? waiting;
+
+      void handleNotify(List<int> value) {
+        final text = utf8.decode(value, allowMalformed: true).trim();
+        if (text.isEmpty) return;
+        printDebugMsg('IoT BLE notify: $text');
+        if (waiting != null && !waiting!.isCompleted) {
+          waiting!.complete(text);
+        }
+      }
+
+      notifySub = char.onValueReceived.listen(handleNotify);
+      await char.setNotifyValue(true);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      device.cancelWhenDisconnected(notifySub);
+
+      Future<String> writeAndWait(String cmd, {String debugLabel = 'cmd'}) async {
+        waiting = Completer<String>();
+        await char!.write(utf8.encode(cmd), withoutResponse: false);
+        return waiting!.future.timeout(
+          _ackTimeout,
+          onTimeout: () =>
+              throw TimeoutException('No BLE ack for $debugLabel'),
+        );
+      }
+
+      final distText = calibrationDistance == calibrationDistance.roundToDouble()
+          ? '${calibrationDistance.toInt()}'
+          : calibrationDistance.toStringAsFixed(3);
+
+      onStatus?.call('Reading calibration ticks…');
+      // One-shot: wheel applies ticks/m when meters are included.
+      final calAck = await writeAndWait(
+        'cal:req>$distText',
+        debugLabel: 'cal:req',
+      );
+      if (calAck.startsWith('CAL_ERR>')) {
+        final err = calAck.substring('CAL_ERR>'.length).trim();
+        if (err == 'no_ticks') {
+          throw StateError(
+            'Wheel reported zero ticks. Finish calibration on the wheel '
+            '(START → roll → STOP, until "Calibrate END"), then try again.',
+          );
+        }
+        if (err == 'bad_tpm') {
+          throw StateError(
+            'Could not compute ticks/m from this run '
+            '(distance: $distText m). Check the calibration distance. The tick count vs calibration distance is to low',
+          );
+        }
+        throw StateError(err.isEmpty ? 'Calibration failed' : err);
+      }
+      if (!calAck.startsWith('CAL_OK>')) {
+        throw StateError('Unexpected calibrate reply: $calAck');
+      }
+
+      final payload = calAck.substring('CAL_OK>'.length).trim();
+      final parts = payload.split('>');
+      final ticks = int.tryParse(parts.first.trim()) ?? 0;
+      if (ticks <= 0) {
+        throw StateError(
+          'Wheel reported zero ticks. Finish calibration on the wheel, then try again.',
+        );
+      }
+
+      var ticksPerM = ticks / calibrationDistance;
+      var syncedTpm = false;
+
+      // New firmware: CAL_OK><ticks>><tpm>
+      if (parts.length >= 2) {
+        final parsed = double.tryParse(parts[1].trim());
+        if (parsed != null && parsed > 0) {
+          ticksPerM = parsed;
+          syncedTpm = true;
+        }
+      }
+
+      // Older firmware (CAL_OK><ticks> only): push ticks/m separately.
+      if (!syncedTpm) {
+        final tpmText = ticksPerM == ticksPerM.roundToDouble()
+            ? '${ticksPerM.toInt()}'
+            : ticksPerM.toStringAsFixed(4);
+        onStatus?.call('Pushing ticks/m ($tpmText)…');
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        try {
+          final setAck = await writeAndWait(
+            'set:tpm>$tpmText',
+            debugLabel: 'set:tpm',
+          );
+          if (setAck.startsWith('SET_ERR>')) {
+            throw StateError(setAck.substring('SET_ERR>'.length));
+          }
+          if (!setAck.startsWith('SET_OK>')) {
+            throw StateError('Unexpected set:tpm reply: $setAck');
+          }
+          syncedTpm = true;
+        } catch (e) {
+          printDebugMsg('BLE set:tpm failed: $e');
+          // One retry — notify can drop right after CAL_OK UI/buzzer.
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          try {
+            final setAck = await writeAndWait(
+              'set:tpm>$tpmText',
+              debugLabel: 'set:tpm-retry',
+            );
+            if (setAck.startsWith('SET_OK>')) {
+              syncedTpm = true;
+            } else {
+              printDebugMsg('BLE set:tpm retry unexpected: $setAck');
+            }
+          } catch (e2) {
+            printDebugMsg('BLE set:tpm retry failed: $e2');
+          }
+        }
+      }
+
+      return (ticks: ticks, ticksPerM: ticksPerM, syncedTpm: syncedTpm);
     } finally {
       await notifySub?.cancel();
       try {
